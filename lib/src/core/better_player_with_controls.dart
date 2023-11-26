@@ -29,16 +29,23 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
 
   final StreamController<bool> playerVisibilityStreamController =
       StreamController();
+  final StreamController<bool> playerOrientationStreamController =
+      StreamController();
 
   bool _initialized = false;
+  bool _isFull = false;
 
   StreamSubscription? _controllerEventSubscription;
+  StreamSubscription? _videoOrientationSubscription;
 
   @override
   void initState() {
     playerVisibilityStreamController.add(true);
     _controllerEventSubscription =
         widget.controller!.controllerEventStream.listen(_onControllerChanged);
+    playerOrientationStreamController.add(true);
+    _videoOrientationSubscription =
+        widget.controller!.controllerEventStream.listen(_onFullScreenChanged);
     super.initState();
   }
 
@@ -46,8 +53,11 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
   void didUpdateWidget(BetterPlayerWithControls oldWidget) {
     if (oldWidget.controller != widget.controller) {
       _controllerEventSubscription?.cancel();
-      _controllerEventSubscription =
+      _videoOrientationSubscription?.cancel();
+      _videoOrientationSubscription =
           widget.controller!.controllerEventStream.listen(_onControllerChanged);
+      _controllerEventSubscription =
+          widget.controller!.controllerEventStream.listen(_onFullScreenChanged);
     }
     super.didUpdateWidget(oldWidget);
   }
@@ -55,7 +65,9 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
   @override
   void dispose() {
     playerVisibilityStreamController.close();
+    playerOrientationStreamController.close();
     _controllerEventSubscription?.cancel();
+    _videoOrientationSubscription?.cancel();
     super.dispose();
   }
 
@@ -63,6 +75,14 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     setState(() {
       if (!_initialized) {
         _initialized = true;
+      }
+    });
+  }
+
+  void _onFullScreenChanged(BetterPlayerControllerEvent event) {
+    setState(() {
+      if (!_isFull) {
+        _isFull = true;
       }
     });
   }
@@ -144,6 +164,7 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
             betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
             subtitles: betterPlayerController.subtitlesLines,
             playerVisibilityStream: playerVisibilityStreamController.stream,
+            playerOrientationStream: playerOrientationStreamController.stream,
           ),
           if (!placeholderOnTop) _buildPlaceholder(betterPlayerController),
           _buildControls(context, betterPlayerController),
@@ -190,6 +211,7 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     return BetterPlayerMaterialControls(
       onControlsVisibilityChanged: onControlsVisibilityChanged,
       controlsConfiguration: controlsConfiguration,
+      onFullScreenChanged: onFullScreenChanged,
     );
   }
 
@@ -202,6 +224,10 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
 
   void onControlsVisibilityChanged(bool state) {
     playerVisibilityStreamController.add(state);
+  }
+
+  void onFullScreenChanged(bool state) {
+    playerOrientationStreamController.add(state);
   }
 }
 

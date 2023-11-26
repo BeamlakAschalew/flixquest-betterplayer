@@ -17,12 +17,16 @@ class BetterPlayerMaterialControls extends StatefulWidget {
   ///Callback used to send information if player bar is hidden or not
   final Function(bool visbility) onControlsVisibilityChanged;
 
+  ///Callback used to send information if player is in full screen or not
+  final Function(bool isFullscreen) onFullScreenChanged;
+
   ///Controls config
   final BetterPlayerControlsConfiguration controlsConfiguration;
 
   const BetterPlayerMaterialControls({
     Key? key,
     required this.onControlsVisibilityChanged,
+    required this.onFullScreenChanged,
     required this.controlsConfiguration,
   }) : super(key: key);
 
@@ -254,7 +258,10 @@ class _BetterPlayerMaterialControlsState
           onTap: () async {
             if (_betterPlayerController!.isVideoInitialized()!) {
               _betterPlayerController!.isFullScreen
-                  ? _betterPlayerController!.exitFullScreen()
+                  ? {
+                      _betterPlayerController!.exitFullScreen(),
+                      _onFullScreenExit(false)
+                    }
                   : {
                       await _controlsConfiguration.onFullScreenChange?.call() ??
                           () {},
@@ -630,8 +637,8 @@ class _BetterPlayerMaterialControlsState
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Icon(
               (_latestValue != null && _latestValue!.volume > 0)
-                  ? _controlsConfiguration.muteIcon
-                  : _controlsConfiguration.unMuteIcon,
+                  ? _controlsConfiguration.unMuteIcon
+                  : _controlsConfiguration.muteIcon,
               color: _controlsConfiguration.iconsColor,
               size: _betterPlayerController!.isFullScreen ? 30 : 20,
             ),
@@ -747,6 +754,9 @@ class _BetterPlayerMaterialControlsState
   void _onExpandCollapse() {
     changePlayerControlsNotVisible(true);
     _betterPlayerController!.toggleFullScreen();
+    _betterPlayerController!.isFullScreen
+        ? _onFullScreenExit(true)
+        : _onFullScreenExit(false);
     _showAfterExpandCollapseTimer =
         Timer(_controlsConfiguration.controlsHideTime, () {
       setState(() {
@@ -874,6 +884,10 @@ class _BetterPlayerMaterialControlsState
   void _onPlayerHide() {
     _betterPlayerController!.toggleControlsVisibility(!controlsNotVisible);
     widget.onControlsVisibilityChanged(!controlsNotVisible);
+  }
+
+  void _onFullScreenExit(bool isFullscreen) {
+    widget.onFullScreenChanged(isFullscreen);
   }
 
   Widget? _buildLoadingWidget() {

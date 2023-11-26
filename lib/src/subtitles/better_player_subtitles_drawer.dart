@@ -9,6 +9,7 @@ class BetterPlayerSubtitlesDrawer extends StatefulWidget {
   final BetterPlayerController betterPlayerController;
   final BetterPlayerSubtitlesConfiguration? betterPlayerSubtitlesConfiguration;
   final Stream<bool> playerVisibilityStream;
+  final Stream<bool> playerOrientationStream;
 
   const BetterPlayerSubtitlesDrawer({
     Key? key,
@@ -16,6 +17,7 @@ class BetterPlayerSubtitlesDrawer extends StatefulWidget {
     required this.betterPlayerController,
     this.betterPlayerSubtitlesConfiguration,
     required this.playerVisibilityStream,
+    required this.playerOrientationStream,
   }) : super(key: key);
 
   @override
@@ -34,9 +36,11 @@ class _BetterPlayerSubtitlesDrawerState
   VideoPlayerValue? _latestValue;
   BetterPlayerSubtitlesConfiguration? _configuration;
   bool _playerVisible = false;
+  bool _playerFullScreen = false;
 
   ///Stream used to detect if play controls are visible or not
   late StreamSubscription _visibilityStreamSubscription;
+  late StreamSubscription _playerOrientationSubscription;
 
   @override
   void initState() {
@@ -44,6 +48,31 @@ class _BetterPlayerSubtitlesDrawerState
         widget.playerVisibilityStream.listen((state) {
       setState(() {
         _playerVisible = state;
+      });
+    });
+
+    _playerOrientationSubscription =
+        widget.playerOrientationStream.listen((event) {
+      setState(() {
+        _playerFullScreen = event;
+        print(_playerFullScreen);
+        _outerTextStyle = TextStyle(
+            fontSize: _playerFullScreen
+                ? _configuration!.fontSize
+                : _configuration!.fontSize * 0.3,
+            fontFamily: _configuration!.fontFamily,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = _configuration!.outlineSize
+              ..color = _configuration!.outlineColor);
+
+        _innerTextStyle = TextStyle(
+          fontFamily: _configuration!.fontFamily,
+          color: _configuration!.fontColor,
+          fontSize: _playerFullScreen
+              ? _configuration!.fontSize
+              : _configuration!.fontSize * 0.3,
+        );
       });
     });
 
@@ -56,19 +85,6 @@ class _BetterPlayerSubtitlesDrawerState
     widget.betterPlayerController.videoPlayerController!
         .addListener(_updateState);
 
-    _outerTextStyle = TextStyle(
-        fontSize: _configuration!.fontSize,
-        fontFamily: _configuration!.fontFamily,
-        foreground: Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = _configuration!.outlineSize
-          ..color = _configuration!.outlineColor);
-
-    _innerTextStyle = TextStyle(
-        fontFamily: _configuration!.fontFamily,
-        color: _configuration!.fontColor,
-        fontSize: _configuration!.fontSize);
-
     super.initState();
   }
 
@@ -77,6 +93,7 @@ class _BetterPlayerSubtitlesDrawerState
     widget.betterPlayerController.videoPlayerController!
         .removeListener(_updateState);
     _visibilityStreamSubscription.cancel();
+    _playerOrientationSubscription.cancel();
     super.dispose();
   }
 
@@ -104,7 +121,7 @@ class _BetterPlayerSubtitlesDrawerState
       child: Padding(
         padding: EdgeInsets.only(
             bottom: _playerVisible
-                ? _configuration!.bottomPadding + 30
+                ? _configuration!.bottomPadding
                 : _configuration!.bottomPadding,
             left: _configuration!.leftPadding,
             right: _configuration!.rightPadding),
