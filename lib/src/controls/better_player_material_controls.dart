@@ -628,6 +628,7 @@ class _BetterPlayerMaterialControlsState
           _betterPlayerController!.setVolume(0.0);
         }
       },
+      //TODO: this is a git test remove later
       child: AnimatedOpacity(
         opacity: controlsNotVisible ? 0.0 : 1.0,
         duration: _controlsConfiguration.controlsHideTime,
