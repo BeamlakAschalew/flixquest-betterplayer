@@ -295,13 +295,17 @@ class _BetterPlayerMaterialControlsState
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        betterPlayerControlsConfiguration.watchingText ??
-                            'YOU\'RE WATCHING',
-                        style: TextStyle(
-                            color: _controlsConfiguration.iconsColor,
-                            fontWeight: FontWeight.bold),
+                      Visibility(
+                        visible: _betterPlayerController!.isFullScreen,
+                        child: Text(
+                          betterPlayerControlsConfiguration.watchingText ??
+                              'YOU\'RE WATCHING',
+                          style: TextStyle(
+                              color: _controlsConfiguration.iconsColor,
+                              fontWeight: FontWeight.bold),
+                        ),
                       ),
                       Expanded(
                         child: Marquee(
@@ -400,9 +404,10 @@ class _BetterPlayerMaterialControlsState
       duration: _controlsConfiguration.controlsHideTime,
       onEnd: _onPlayerHide,
       child: Container(
+        // tweak this to change the height of the progress bar together with the bottom part
         height: _betterPlayerController!.isFullScreen
-            ? _controlsConfiguration.controlBarHeight + 60.0
-            : _controlsConfiguration.controlBarHeight + 20.0,
+            ? _controlsConfiguration.controlBarHeight + 35.0
+            : _controlsConfiguration.controlBarHeight,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
@@ -413,7 +418,8 @@ class _BetterPlayerMaterialControlsState
                   ? _buildProgressBar()
                   : const SizedBox(),
             Expanded(
-              flex: 75,
+              // playing with the flex also helps to increase/decrease the height between the progress bar and this component
+              flex: 70,
               child: Row(
                 children: [
                   if (_controlsConfiguration.enablePlayPause)
