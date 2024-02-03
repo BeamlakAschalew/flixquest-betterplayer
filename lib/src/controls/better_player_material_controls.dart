@@ -263,10 +263,16 @@ class _BetterPlayerMaterialControlsState
                       _onFullScreenExit(false)
                     }
                   : {
-                      await _controlsConfiguration.onFullScreenChange?.call() ??
-                          () {},
-                      Navigator.pop(context)
+                      Navigator.pop(context,
+                          _controlsConfiguration.onFullScreenChange ?? () {})
                     };
+            } else {
+              _betterPlayerController!.isFullScreen
+                  ? {
+                      _betterPlayerController!.exitFullScreen(),
+                      _onFullScreenExit(false)
+                    }
+                  : Navigator.pop(context);
             }
           },
           child: Padding(
