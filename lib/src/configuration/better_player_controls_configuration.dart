@@ -164,6 +164,9 @@ class BetterPlayerControlsConfiguration {
   ///Name of video source
   final String name;
 
+  ///You're watching text
+  final String? watchingText;
+
   ///Database function
   final Function? onFullScreenChange;
 
@@ -220,7 +223,8 @@ class BetterPlayerControlsConfiguration {
       this.overflowModalColor = Colors.white,
       this.overflowModalTextColor = Colors.black,
       this.name = "",
-      this.onFullScreenChange});
+      this.onFullScreenChange,
+      this.watchingText});
 
   factory BetterPlayerControlsConfiguration.white() {
     return const BetterPlayerControlsConfiguration(

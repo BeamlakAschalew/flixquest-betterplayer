@@ -277,9 +277,9 @@ class _BetterPlayerMaterialControlsState
           },
           child: Padding(
             padding: EdgeInsets.only(
-                left: _betterPlayerController!.isFullScreen ? 30.0 : 8,
-                top: _betterPlayerController!.isFullScreen ? 15.0 : 8,
-                bottom: 8,
+                left: _betterPlayerController!.isFullScreen ? 8.0 : 4,
+                top: _betterPlayerController!.isFullScreen ? 5.0 : 8,
+                bottom: 5,
                 right: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -293,14 +293,29 @@ class _BetterPlayerMaterialControlsState
                   width: 10,
                 ),
                 Expanded(
-                    child: Marquee(
-                  text: betterPlayerControlsConfiguration.name,
-                  style: TextStyle(
-                    color: _controlsConfiguration.iconsColor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        betterPlayerControlsConfiguration.watchingText ??
+                            'YOU\'RE WATCHING',
+                        style: TextStyle(
+                            color: _controlsConfiguration.iconsColor,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Expanded(
+                        child: Marquee(
+                          text: betterPlayerControlsConfiguration.name,
+                          style: TextStyle(
+                            color: _controlsConfiguration.iconsColor,
+                          ),
+                          velocity: 50,
+                          blankSpace: 30,
+                        ),
+                      ),
+                    ],
                   ),
-                  velocity: 50,
-                  blankSpace: 30,
-                )),
+                ),
                 /*
                 Text(
                     betterPlayerControlsConfiguration.name,
