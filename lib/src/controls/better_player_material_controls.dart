@@ -311,7 +311,7 @@ class _BetterPlayerMaterialControlsState
                         child: Marquee(
                           text: betterPlayerControlsConfiguration.name,
                           style: TextStyle(
-                            color: _controlsConfiguration.iconsColor,
+                            color: Colors.white,
                           ),
                           velocity: 50,
                           blankSpace: 30,
@@ -406,7 +406,7 @@ class _BetterPlayerMaterialControlsState
       child: Container(
         // tweak this to change the height of the progress bar together with the bottom part
         height: _betterPlayerController!.isFullScreen
-            ? _controlsConfiguration.controlBarHeight + 35.0
+            ? _controlsConfiguration.controlBarHeight + 45.0
             : _controlsConfiguration.controlBarHeight,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -718,29 +718,44 @@ class _BetterPlayerMaterialControlsState
     final duration = _latestValue != null && _latestValue!.duration != null
         ? _latestValue!.duration!
         : Duration.zero;
+    final remaining = duration - position;
+    String formattedTotalDuration = BetterPlayerUtils.formatDuration(duration);
+    String formattedRemainingDuration =
+        BetterPlayerUtils.formatDuration(remaining);
+
+    bool showTotalDuration = true;
 
     return Padding(
       padding: _controlsConfiguration.enablePlayPause
           ? const EdgeInsets.only(right: 24)
           : const EdgeInsets.symmetric(horizontal: 22),
-      child: RichText(
-        text: TextSpan(
-            text: BetterPlayerUtils.formatDuration(position),
-            style: TextStyle(
-              fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-              color: _controlsConfiguration.textColor,
-              decoration: TextDecoration.none,
-            ),
-            children: <TextSpan>[
-              TextSpan(
-                text: ' / ${BetterPlayerUtils.formatDuration(duration)}',
-                style: TextStyle(
-                  fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-                  color: _controlsConfiguration.textColor,
-                  decoration: TextDecoration.none,
-                ),
-              )
-            ]),
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            showTotalDuration = !showTotalDuration;
+          });
+        },
+        child: RichText(
+          text: TextSpan(
+              text: BetterPlayerUtils.formatDuration(position),
+              style: TextStyle(
+                fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
+                color: _controlsConfiguration.textColor,
+                decoration: TextDecoration.none,
+              ),
+              children: <TextSpan>[
+                TextSpan(
+                  text:
+                      ' / ${showTotalDuration ? formattedTotalDuration : formattedRemainingDuration}',
+                  style: TextStyle(
+                    fontSize:
+                        _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
+                    color: _controlsConfiguration.textColor,
+                    decoration: TextDecoration.none,
+                  ),
+                )
+              ]),
+        ),
       ),
     );
   }
