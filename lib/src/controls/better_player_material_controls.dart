@@ -721,41 +721,30 @@ class _BetterPlayerMaterialControlsState
     final remaining = duration - position;
     String formattedTotalDuration = BetterPlayerUtils.formatDuration(duration);
     String formattedRemainingDuration =
-        BetterPlayerUtils.formatDuration(remaining);
-
-    bool showTotalDuration = true;
-
+        "-" + BetterPlayerUtils.formatDuration(remaining);
     return Padding(
       padding: _controlsConfiguration.enablePlayPause
           ? const EdgeInsets.only(right: 24)
           : const EdgeInsets.symmetric(horizontal: 22),
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            showTotalDuration = !showTotalDuration;
-          });
-        },
-        child: RichText(
-          text: TextSpan(
-              text: BetterPlayerUtils.formatDuration(position),
-              style: TextStyle(
-                fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-                color: _controlsConfiguration.textColor,
-                decoration: TextDecoration.none,
-              ),
-              children: <TextSpan>[
-                TextSpan(
-                  text:
-                      ' / ${showTotalDuration ? formattedTotalDuration : formattedRemainingDuration}',
-                  style: TextStyle(
-                    fontSize:
-                        _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-                    color: _controlsConfiguration.textColor,
-                    decoration: TextDecoration.none,
-                  ),
-                )
-              ]),
-        ),
+      child: RichText(
+        text: TextSpan(
+            text: BetterPlayerUtils.formatDuration(position),
+            style: TextStyle(
+              fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
+              color: _controlsConfiguration.textColor,
+              decoration: TextDecoration.none,
+            ),
+            children: <TextSpan>[
+              TextSpan(
+                text:
+                    ' / ${_betterPlayerController!.betterPlayerControlsConfiguration.playerTimeMode == 1 ? formattedTotalDuration : formattedRemainingDuration}',
+                style: TextStyle(
+                  fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
+                  color: _controlsConfiguration.textColor,
+                  decoration: TextDecoration.none,
+                ),
+              )
+            ]),
       ),
     );
   }

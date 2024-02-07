@@ -170,6 +170,9 @@ class BetterPlayerControlsConfiguration {
   ///Database function
   final Function? onFullScreenChange;
 
+  /// Player timer mode
+  final int? playerTimeMode;
+
   const BetterPlayerControlsConfiguration(
       {this.controlBarColor = Colors.black87,
       this.textColor = Colors.white,
@@ -224,7 +227,8 @@ class BetterPlayerControlsConfiguration {
       this.overflowModalTextColor = Colors.black,
       this.name = "",
       this.onFullScreenChange,
-      this.watchingText});
+      this.watchingText,
+      this.playerTimeMode});
 
   factory BetterPlayerControlsConfiguration.white() {
     return const BetterPlayerControlsConfiguration(
