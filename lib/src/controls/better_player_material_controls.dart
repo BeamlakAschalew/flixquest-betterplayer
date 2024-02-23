@@ -278,8 +278,8 @@ class _BetterPlayerMaterialControlsState
           child: Padding(
             padding: EdgeInsets.only(
                 left: _betterPlayerController!.isFullScreen ? 8.0 : 4,
-                top: _betterPlayerController!.isFullScreen ? 5.0 : 8,
-                bottom: 5,
+                top: _betterPlayerController!.isFullScreen ? 4.0 : 8,
+                bottom: 4,
                 right: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -312,6 +312,7 @@ class _BetterPlayerMaterialControlsState
                           text: betterPlayerControlsConfiguration.name,
                           style: TextStyle(
                             color: Colors.white,
+                            fontSize: 13.5
                           ),
                           velocity: 50,
                           blankSpace: 30,
