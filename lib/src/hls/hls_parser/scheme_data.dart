@@ -1,6 +1,6 @@
-import 'dart:typed_data';
+// ignore_for_file: non_nullable_equals_parameter, sdk_version_since
 
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 class SchemeData {
   SchemeData({
@@ -49,7 +49,7 @@ class SchemeData {
   }
 
   @override
-  int get hashCode => hashValues(
+  int get hashCode => Object.hash(
       /*uuid, */
       licenseServerUrl,
       mimeType,

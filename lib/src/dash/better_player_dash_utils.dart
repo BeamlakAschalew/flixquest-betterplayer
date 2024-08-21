@@ -86,7 +86,7 @@ class BetterPlayerDashUtils {
     final String? language = node.getAttribute('lang');
     final String? mimeType = node.getAttribute('mimeType');
     String? url =
-        node.getElement('Representation')?.getElement('BaseURL')?.text;
+        node.getElement('Representation')?.getElement('BaseURL')?.value;
     if (url?.contains("http") == false) {
       final Uri masterPlaylistUri = Uri.parse(masterPlaylistUrl);
       final pathSegments = <String>[...masterPlaylistUri.pathSegments];

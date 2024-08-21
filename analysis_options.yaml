@@ -1,6 +1,8 @@
 #include: package:lint/analysis_options_package.yaml
 
 analyzer:
+  errors:
+    non_nullable_equals_parameter: ignore
   strong-mode:
     implicit-dynamic: false
 
@@ -15,8 +17,6 @@ linter:
     prefer_constructors_over_static_methods: false
     sort_unnamed_constructors_first: false
     sized_box_for_whitespace: false
-    invalid_dependency: false
     sort_pub_dependencies: false
     avoid_unnecessary_containers: false
     use_setters_to_change_properties: false
-

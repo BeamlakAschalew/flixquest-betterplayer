@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+// ignore_for_file: sdk_version_since, non_nullable_equals_parameter
 
 class VariantInfo {
   VariantInfo({
@@ -41,6 +41,6 @@ class VariantInfo {
   }
 
   @override
-  int get hashCode => hashValues(
+  int get hashCode => Object.hash(
       bitrate, videoGroupId, audioGroupId, subtitleGroupId, captionGroupId);
 }
