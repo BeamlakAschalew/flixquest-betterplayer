@@ -194,10 +194,11 @@ internal class BetterPlayer(
         }
         val mediaSource = buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
         if (overriddenDuration != 0L) {
-            val clippingMediaSource = ClippingMediaSource.Builder(mediaSource)
-                .setStartPositionMs(0)
-                .setEndPositionMs(overriddenDuration * 1000)
-                .build()
+            val clippingMediaSource = ClippingMediaSource(
+                mediaSource,
+                0,
+                overriddenDuration * 1000
+            )
             exoPlayer?.setMediaSource(clippingMediaSource)
         } else {
             exoPlayer?.setMediaSource(mediaSource)

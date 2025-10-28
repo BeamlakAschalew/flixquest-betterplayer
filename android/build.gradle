@@ -2,12 +2,12 @@ group 'uz.shs.better_player_plus'
 version '1.0-SNAPSHOT'
 
 buildscript {
-    ext.media3Version = "1.4.1"
-    ext.lifecycleVersion = "2.8.7"
-    ext.annotationVersion = "1.8.2"
-    ext.workVersion = "2.9.1"
-    ext.coreVersion = "1.13.1"
-    ext.gradleVersion = "8.7.2"
+    ext.media3Version = "1.8.0"
+    ext.lifecycleVersion = "2.9.4"
+    ext.annotationVersion = "1.9.1"
+    ext.workVersion = "2.10.5"
+    ext.coreVersion = "1.15.0"
+    ext.gradleVersion = "8.7.3"
     ext.kotlinVersion = "1.9.25"
 
     repositories {
@@ -16,7 +16,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.2'
+        classpath 'com.android.tools.build:gradle:8.7.3'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
     }
 }
@@ -55,7 +55,7 @@ android {
     dependencies {
         implementation "androidx.media:media:1.7.1"
         
-        // Media3 dependencies (for uz.shs.better_player_plus package)
+        // Media3 (new ExoPlayer) dependencies
         implementation "androidx.media3:media3-ui:$media3Version"
         implementation "androidx.media3:media3-session:$media3Version"
         implementation "androidx.media3:media3-exoplayer:$media3Version"
@@ -63,14 +63,6 @@ android {
         implementation "androidx.media3:media3-exoplayer-dash:$media3Version"
         implementation "androidx.media3:media3-datasource-cronet:$media3Version"
         implementation "androidx.media3:media3-exoplayer-smoothstreaming:$media3Version"
-        
-        // Old ExoPlayer2 dependencies (for com.jhomlala.better_player package)
-        implementation "com.google.android.exoplayer:exoplayer-core:2.18.7"
-        implementation "com.google.android.exoplayer:exoplayer-hls:2.18.7"
-        implementation "com.google.android.exoplayer:exoplayer-dash:2.18.7"
-        implementation "com.google.android.exoplayer:exoplayer-smoothstreaming:2.18.7"
-        implementation "com.google.android.exoplayer:exoplayer-ui:2.18.7"
-        implementation "com.google.android.exoplayer:extension-mediasession:2.18.7"
         
         implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion"
         implementation "androidx.lifecycle:lifecycle-common:$lifecycleVersion"
