@@ -1,11 +1,9 @@
-import 'package:better_player/better_player.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 
 class BetterPlayerMockController extends BetterPlayerController {
   BetterPlayerMockController(
-    BetterPlayerConfiguration betterPlayerConfiguration, {
-    BetterPlayerPlaylistConfiguration betterPlayerPlaylistConfiguration =
+    super.betterPlayerConfiguration, {
+    BetterPlayerPlaylistConfiguration super.betterPlayerPlaylistConfiguration =
         const BetterPlayerPlaylistConfiguration(),
-  }) : super(betterPlayerConfiguration,
-            betterPlayerPlaylistConfiguration:
-                betterPlayerPlaylistConfiguration);
+  });
 }

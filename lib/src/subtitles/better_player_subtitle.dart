@@ -1,23 +1,6 @@
-import 'package:better_player/src/core/better_player_utils.dart';
+import 'package:better_player_plus/src/core/better_player_utils.dart';
 
 class BetterPlayerSubtitle {
-  static const String timerSeparator = ' --> ';
-  final int? index;
-  final Duration? start;
-  final Duration? end;
-  final List<String>? texts;
-
-  ///VTT OR SRT
-  final String? type;
-
-  BetterPlayerSubtitle._({
-    this.index,
-    this.start,
-    this.end,
-    this.texts,
-    this.type,
-  });
-
   factory BetterPlayerSubtitle(String value, bool isWebVTT) {
     try {
       final scanner = value.split('\n');
@@ -28,11 +11,18 @@ class BetterPlayerSubtitle {
         return _handle3LinesAndMoreSubtitles(scanner, isWebVTT);
       }
       return BetterPlayerSubtitle._();
-    } catch (exception) {
-      BetterPlayerUtils.log("Failed to parse subtitle line: $value");
+    } on Exception catch (_) {
+      BetterPlayerUtils.log('Failed to parse subtitle line: $value');
       return BetterPlayerSubtitle._();
     }
   }
+
+  BetterPlayerSubtitle._({this.index, this.start, this.end, this.texts});
+  static const String timerSeparator = ' --> ';
+  final int? index;
+  final Duration? start;
+  final Duration? end;
+  final List<String>? texts;
 
   static BetterPlayerSubtitle _handle2LinesSubtitles(List<String> scanner) {
     try {
@@ -41,16 +31,14 @@ class BetterPlayerSubtitle {
       final end = _stringToDuration(timeSplit[1]);
       final texts = scanner.sublist(1, scanner.length);
 
-      return BetterPlayerSubtitle._(
-          index: -1, start: start, end: end, texts: texts);
-    } catch (exception) {
-      BetterPlayerUtils.log("Failed to parse subtitle line: $scanner");
+      return BetterPlayerSubtitle._(index: -1, start: start, end: end, texts: texts);
+    } on Exception catch (_) {
+      BetterPlayerUtils.log('Failed to parse subtitle line: $scanner');
       return BetterPlayerSubtitle._();
     }
   }
 
-  static BetterPlayerSubtitle _handle3LinesAndMoreSubtitles(
-      List<String> scanner, bool isWebVTT) {
+  static BetterPlayerSubtitle _handle3LinesAndMoreSubtitles(List<String> scanner, bool isWebVTT) {
     try {
       int? index = -1;
       List<String> timeSplit = [];
@@ -67,17 +55,16 @@ class BetterPlayerSubtitle {
       final start = _stringToDuration(timeSplit[0]);
       final end = _stringToDuration(timeSplit[1]);
       final texts = scanner.sublist(firstLineOfText, scanner.length);
-      return BetterPlayerSubtitle._(
-          index: index, start: start, end: end, texts: texts);
-    } catch (exception) {
-      BetterPlayerUtils.log("Failed to parse subtitle line: $scanner");
+      return BetterPlayerSubtitle._(index: index, start: start, end: end, texts: texts);
+    } on Exception catch (_) {
+      BetterPlayerUtils.log('Failed to parse subtitle line: $scanner');
       return BetterPlayerSubtitle._();
     }
   }
 
   static Duration _stringToDuration(String value) {
     try {
-      final valueSplit = value.split(" ");
+      final valueSplit = value.split(' ');
       String componentValue;
 
       if (valueSplit.length > 1) {
@@ -89,7 +76,7 @@ class BetterPlayerSubtitle {
       final component = componentValue.split(':');
       // Interpret a missing hour component to mean 00 hours
       if (component.length == 2) {
-        component.insert(0, "00");
+        component.insert(0, '00');
       } else if (component.length != 3) {
         return const Duration();
       }
@@ -101,19 +88,18 @@ class BetterPlayerSubtitle {
       }
 
       final result = Duration(
-          hours: int.tryParse(component[0])!,
-          minutes: int.tryParse(component[1])!,
-          seconds: int.tryParse(secsAndMillsSplit[0])!,
-          milliseconds: int.tryParse(secsAndMillsSplit[1])!);
+        hours: int.tryParse(component[0])!,
+        minutes: int.tryParse(component[1])!,
+        seconds: int.tryParse(secsAndMillsSplit[0])!,
+        milliseconds: int.tryParse(secsAndMillsSplit[1])!,
+      );
       return result;
-    } catch (exception) {
-      BetterPlayerUtils.log("Failed to process value: $value");
+    } on Exception catch (_) {
+      BetterPlayerUtils.log('Failed to process value: $value');
       return const Duration();
     }
   }
 
   @override
-  String toString() {
-    return 'BetterPlayerSubtitle{index: $index, start: $start, end: $end, texts: $texts, type: $type}';
-  }
+  String toString() => 'BetterPlayerSubtitle{index: $index, start: $start, end: $end, texts: $texts}';
 }

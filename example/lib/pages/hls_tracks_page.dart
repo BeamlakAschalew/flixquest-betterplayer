@@ -1,10 +1,12 @@
-import 'package:better_player/better_player.dart';
 import 'package:better_player_example/constants.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 
 class HlsTracksPage extends StatefulWidget {
+  const HlsTracksPage({super.key});
+
   @override
-  _HlsTracksPageState createState() => _HlsTracksPageState();
+  State<HlsTracksPage> createState() => _HlsTracksPageState();
 }
 
 class _HlsTracksPageState extends State<HlsTracksPage> {
@@ -12,15 +14,13 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
 
   @override
   void initState() {
-    BetterPlayerConfiguration betterPlayerConfiguration =
-        BetterPlayerConfiguration(
+    const BetterPlayerConfiguration betterPlayerConfiguration = BetterPlayerConfiguration(
       aspectRatio: 16 / 9,
       fit: BoxFit.contain,
     );
-    BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+    final BetterPlayerDataSource dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
       Constants.hlsTestStreamUrl,
-      useAsmsSubtitles: true,
     );
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);
     _betterPlayerController.setupDataSource(dataSource);
@@ -28,28 +28,24 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("HLS tracks"),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Player with HLS stream which loads tracks from HLS."
-              " You can choose tracks by using overflow menu (3 dots in right corner).",
-              style: TextStyle(fontSize: 16),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('HLS tracks')),
+    body: Column(
+      children: [
+        const SizedBox(height: 8),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Player with HLS stream which loads tracks from HLS.'
+            ' You can choose tracks by using overflow menu (3 dots in right corner).',
+            style: TextStyle(fontSize: 16),
           ),
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: BetterPlayer(controller: _betterPlayerController),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: BetterPlayer(controller: _betterPlayerController),
+        ),
+      ],
+    ),
+  );
 }

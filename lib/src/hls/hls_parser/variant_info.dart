@@ -1,13 +1,5 @@
-// ignore_for_file: sdk_version_since, non_nullable_equals_parameter
-
 class VariantInfo {
-  VariantInfo({
-    this.bitrate,
-    this.videoGroupId,
-    this.audioGroupId,
-    this.subtitleGroupId,
-    this.captionGroupId,
-  });
+  VariantInfo({this.bitrate, this.videoGroupId, this.audioGroupId, this.subtitleGroupId, this.captionGroupId});
 
   /// The bitrate as declared by the EXT-X-STREAM-INF tag. */
   final int? bitrate;
@@ -29,7 +21,7 @@ class VariantInfo {
   final String? captionGroupId;
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     if (other is VariantInfo) {
       return other.bitrate == bitrate &&
           other.videoGroupId == videoGroupId &&
@@ -41,6 +33,5 @@ class VariantInfo {
   }
 
   @override
-  int get hashCode => Object.hash(
-      bitrate, videoGroupId, audioGroupId, subtitleGroupId, captionGroupId);
+  int get hashCode => Object.hash(bitrate, videoGroupId, audioGroupId, subtitleGroupId, captionGroupId);
 }

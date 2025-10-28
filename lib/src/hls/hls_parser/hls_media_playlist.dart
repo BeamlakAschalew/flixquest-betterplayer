@@ -1,6 +1,6 @@
-import 'package:better_player/src/hls/hls_parser/drm_init_data.dart';
-import 'package:better_player/src/hls/hls_parser/playlist.dart';
-import 'package:better_player/src/hls/hls_parser/segment.dart';
+import 'package:better_player_plus/src/hls/hls_parser/drm_init_data.dart';
+import 'package:better_player_plus/src/hls/hls_parser/playlist.dart';
+import 'package:better_player_plus/src/hls/hls_parser/segment.dart';
 
 class HlsMediaPlaylist extends HlsPlaylist {
   HlsMediaPlaylist._({
@@ -17,14 +17,10 @@ class HlsMediaPlaylist extends HlsPlaylist {
     required this.protectionSchemes,
     required this.segments,
     required this.durationUs,
-    required String baseUri,
-    required List<String> tags,
-    required bool hasIndependentSegments,
-  }) : super(
-          baseUri: baseUri,
-          tags: tags,
-          hasIndependentSegments: hasIndependentSegments,
-        );
+    required String super.baseUri,
+    required super.tags,
+    required super.hasIndependentSegments,
+  });
 
   factory HlsMediaPlaylist.create({
     required int playlistType,

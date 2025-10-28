@@ -1,4 +1,4 @@
-import 'package:better_player/src/hls/hls_parser/format.dart';
+import 'package:better_player_plus/src/hls/hls_parser/format.dart';
 
 class Variant {
   Variant({
@@ -30,11 +30,11 @@ class Variant {
 
   /// Returns a copy of this instance with the given {@link Format}.
   Variant copyWithFormat(Format format) => Variant(
-        url: url,
-        format: format,
-        videoGroupId: videoGroupId,
-        audioGroupId: audioGroupId,
-        subtitleGroupId: subtitleGroupId,
-        captionGroupId: captionGroupId,
-      );
+    url: url,
+    format: format,
+    videoGroupId: videoGroupId,
+    audioGroupId: audioGroupId,
+    subtitleGroupId: subtitleGroupId,
+    captionGroupId: captionGroupId,
+  );
 }

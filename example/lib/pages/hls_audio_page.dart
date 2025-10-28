@@ -1,10 +1,12 @@
-import 'package:better_player/better_player.dart';
 import 'package:better_player_example/constants.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 
 class HlsAudioPage extends StatefulWidget {
+  const HlsAudioPage({super.key});
+
   @override
-  _HlsAudioPageState createState() => _HlsAudioPageState();
+  State<HlsAudioPage> createState() => _HlsAudioPageState();
 }
 
 class _HlsAudioPageState extends State<HlsAudioPage> {
@@ -12,12 +14,11 @@ class _HlsAudioPageState extends State<HlsAudioPage> {
 
   @override
   void initState() {
-    BetterPlayerConfiguration betterPlayerConfiguration =
-        BetterPlayerConfiguration(
+    const BetterPlayerConfiguration betterPlayerConfiguration = BetterPlayerConfiguration(
       aspectRatio: 16 / 9,
       fit: BoxFit.contain,
     );
-    BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+    final BetterPlayerDataSource dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
       Constants.elephantDreamStreamUrl,
     );
@@ -27,29 +28,25 @@ class _HlsAudioPageState extends State<HlsAudioPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("HLS Audio"),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Click on overflow menu (3 dots) and select Audio. You can choose "
-              "audio track from HLS stream. Better Player will setup audio"
-              " automatically for you.",
-              style: TextStyle(fontSize: 16),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('HLS Audio')),
+    body: Column(
+      children: [
+        const SizedBox(height: 8),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Click on overflow menu (3 dots) and select Audio. You can choose '
+            'audio track from HLS stream. Better Player will setup audio'
+            ' automatically for you.',
+            style: TextStyle(fontSize: 16),
           ),
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: BetterPlayer(controller: _betterPlayerController),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: BetterPlayer(controller: _betterPlayerController),
+        ),
+      ],
+    ),
+  );
 }

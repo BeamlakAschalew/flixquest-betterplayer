@@ -1,4 +1,4 @@
-import 'package:better_player/better_player.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +6,43 @@ import 'package:flutter/services.dart';
 ///Master configuration which contains children that configure specific part
 ///of player.
 class BetterPlayerConfiguration {
+  const BetterPlayerConfiguration({
+    this.aspectRatio,
+    this.autoPlay = false,
+    this.startAt,
+    this.looping = false,
+    this.fullScreenByDefault = false,
+    this.placeholder,
+    this.showPlaceholderUntilPlay = false,
+    this.placeholderOnTop = true,
+    this.overlay,
+    this.errorBuilder,
+    this.allowedScreenSleep = true,
+    this.fullScreenAspectRatio,
+    this.deviceOrientationsOnFullScreen = const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+    this.systemOverlaysAfterFullScreen = SystemUiOverlay.values,
+    this.deviceOrientationsAfterFullScreen = const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ],
+    this.routePageBuilder,
+    this.eventListener,
+    this.subtitlesConfiguration = const BetterPlayerSubtitlesConfiguration(),
+    this.controlsConfiguration = const BetterPlayerControlsConfiguration(),
+    this.fit = BoxFit.fill,
+    this.rotation = 0,
+    this.playerVisibilityChangedBehavior,
+    this.translations,
+    this.autoDetectFullscreenDeviceOrientation = false,
+    this.autoDetectFullscreenAspectRatio = false,
+    this.handleLifecycle = true,
+    this.autoDispose = true,
+    this.expandToFill = true,
+    this.useRootNavigator = false,
+  });
+
   /// Play the video as soon as it's displayed
   final bool autoPlay;
 
@@ -17,8 +54,7 @@ class BetterPlayerConfiguration {
 
   /// When the video playback runs  into an error, you can build a custom
   /// error message.
-  final Widget Function(BuildContext context, String? errorMessage)?
-      errorBuilder;
+  final Widget Function(BuildContext context, String? errorMessage)? errorBuilder;
 
   /// The Aspect Ratio of the Video. Important to get the correct size of the
   /// video!
@@ -118,46 +154,6 @@ class BetterPlayerConfiguration {
   ///Default value is false.
   final bool useRootNavigator;
 
-  const BetterPlayerConfiguration({
-    this.aspectRatio,
-    this.autoPlay = false,
-    this.startAt,
-    this.looping = false,
-    this.fullScreenByDefault = false,
-    this.placeholder,
-    this.showPlaceholderUntilPlay = false,
-    this.placeholderOnTop = true,
-    this.overlay,
-    this.errorBuilder,
-    this.allowedScreenSleep = true,
-    this.fullScreenAspectRatio,
-    this.deviceOrientationsOnFullScreen = const [
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ],
-    this.systemOverlaysAfterFullScreen = SystemUiOverlay.values,
-    this.deviceOrientationsAfterFullScreen = const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ],
-    this.routePageBuilder,
-    this.eventListener,
-    this.subtitlesConfiguration = const BetterPlayerSubtitlesConfiguration(),
-    this.controlsConfiguration = const BetterPlayerControlsConfiguration(),
-    this.fit = BoxFit.fill,
-    this.rotation = 0,
-    this.playerVisibilityChangedBehavior,
-    this.translations,
-    this.autoDetectFullscreenDeviceOrientation = false,
-    this.autoDetectFullscreenAspectRatio = false,
-    this.handleLifecycle = true,
-    this.autoDispose = true,
-    this.expandToFill = true,
-    this.useRootNavigator = false,
-  });
-
   BetterPlayerConfiguration copyWith({
     double? aspectRatio,
     bool? autoPlay,
@@ -188,46 +184,35 @@ class BetterPlayerConfiguration {
     bool? autoDispose,
     bool? expandToFill,
     bool? useRootNavigator,
-  }) {
-    return BetterPlayerConfiguration(
-      aspectRatio: aspectRatio ?? this.aspectRatio,
-      autoPlay: autoPlay ?? this.autoPlay,
-      startAt: startAt ?? this.startAt,
-      looping: looping ?? this.looping,
-      fullScreenByDefault: fullScreenByDefault ?? this.fullScreenByDefault,
-      placeholder: placeholder ?? this.placeholder,
-      showPlaceholderUntilPlay:
-          showPlaceholderUntilPlay ?? this.showPlaceholderUntilPlay,
-      placeholderOnTop: placeholderOnTop ?? this.placeholderOnTop,
-      overlay: overlay ?? this.overlay,
-      errorBuilder: errorBuilder ?? this.errorBuilder,
-      allowedScreenSleep: allowedScreenSleep ?? this.allowedScreenSleep,
-      fullScreenAspectRatio:
-          fullScreenAspectRatio ?? this.fullScreenAspectRatio,
-      deviceOrientationsOnFullScreen:
-          deviceOrientationsOnFullScreen ?? this.deviceOrientationsOnFullScreen,
-      systemOverlaysAfterFullScreen:
-          systemOverlaysAfterFullScreen ?? this.systemOverlaysAfterFullScreen,
-      deviceOrientationsAfterFullScreen: deviceOrientationsAfterFullScreen ??
-          this.deviceOrientationsAfterFullScreen,
-      routePageBuilder: routePageBuilder ?? this.routePageBuilder,
-      eventListener: eventListener ?? this.eventListener,
-      subtitlesConfiguration:
-          subtitlesConfiguration ?? this.subtitlesConfiguration,
-      controlsConfiguration:
-          controlsConfiguration ?? this.controlsConfiguration,
-      fit: fit ?? this.fit,
-      rotation: rotation ?? this.rotation,
-      playerVisibilityChangedBehavior: playerVisibilityChangedBehavior ??
-          this.playerVisibilityChangedBehavior,
-      translations: translations ?? this.translations,
-      autoDetectFullscreenDeviceOrientation:
-          autoDetectFullscreenDeviceOrientation ??
-              this.autoDetectFullscreenDeviceOrientation,
-      handleLifecycle: handleLifecycle ?? this.handleLifecycle,
-      autoDispose: autoDispose ?? this.autoDispose,
-      expandToFill: expandToFill ?? this.expandToFill,
-      useRootNavigator: useRootNavigator ?? this.useRootNavigator,
-    );
-  }
+  }) => BetterPlayerConfiguration(
+    aspectRatio: aspectRatio ?? this.aspectRatio,
+    autoPlay: autoPlay ?? this.autoPlay,
+    startAt: startAt ?? this.startAt,
+    looping: looping ?? this.looping,
+    fullScreenByDefault: fullScreenByDefault ?? this.fullScreenByDefault,
+    placeholder: placeholder ?? this.placeholder,
+    showPlaceholderUntilPlay: showPlaceholderUntilPlay ?? this.showPlaceholderUntilPlay,
+    placeholderOnTop: placeholderOnTop ?? this.placeholderOnTop,
+    overlay: overlay ?? this.overlay,
+    errorBuilder: errorBuilder ?? this.errorBuilder,
+    allowedScreenSleep: allowedScreenSleep ?? this.allowedScreenSleep,
+    fullScreenAspectRatio: fullScreenAspectRatio ?? this.fullScreenAspectRatio,
+    deviceOrientationsOnFullScreen: deviceOrientationsOnFullScreen ?? this.deviceOrientationsOnFullScreen,
+    systemOverlaysAfterFullScreen: systemOverlaysAfterFullScreen ?? this.systemOverlaysAfterFullScreen,
+    deviceOrientationsAfterFullScreen: deviceOrientationsAfterFullScreen ?? this.deviceOrientationsAfterFullScreen,
+    routePageBuilder: routePageBuilder ?? this.routePageBuilder,
+    eventListener: eventListener ?? this.eventListener,
+    subtitlesConfiguration: subtitlesConfiguration ?? this.subtitlesConfiguration,
+    controlsConfiguration: controlsConfiguration ?? this.controlsConfiguration,
+    fit: fit ?? this.fit,
+    rotation: rotation ?? this.rotation,
+    playerVisibilityChangedBehavior: playerVisibilityChangedBehavior ?? this.playerVisibilityChangedBehavior,
+    translations: translations ?? this.translations,
+    autoDetectFullscreenDeviceOrientation:
+        autoDetectFullscreenDeviceOrientation ?? this.autoDetectFullscreenDeviceOrientation,
+    handleLifecycle: handleLifecycle ?? this.handleLifecycle,
+    autoDispose: autoDispose ?? this.autoDispose,
+    expandToFill: expandToFill ?? this.expandToFill,
+    useRootNavigator: useRootNavigator ?? this.useRootNavigator,
+  );
 }

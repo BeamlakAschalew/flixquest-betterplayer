@@ -1,9 +1,22 @@
-import 'package:better_player/better_player.dart';
-import 'package:better_player/src/core/better_player_utils.dart';
+import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:flutter/material.dart';
 
 ///Special version of Better Player which is used to play video in list view.
 class BetterPlayerListVideoPlayer extends StatefulWidget {
+  const BetterPlayerListVideoPlayer(
+    this.dataSource, {
+    this.configuration = const BetterPlayerConfiguration(),
+    this.playFraction = 0.6,
+    this.autoPlay = true,
+    this.autoPause = true,
+    this.betterPlayerListVideoPlayerController,
+    super.key,
+  }) : assert(
+         playFraction >= 0.0 && playFraction <= 1.0,
+         "Play fraction can't be null and must be between 0.0 and 1.0",
+       );
+
   ///Video to show
   final BetterPlayerDataSource dataSource;
 
@@ -21,28 +34,13 @@ class BetterPlayerListVideoPlayer extends StatefulWidget {
   ///Flag to determine if video should be auto paused
   final bool autoPause;
 
-  final BetterPlayerListVideoPlayerController?
-      betterPlayerListVideoPlayerController;
-
-  const BetterPlayerListVideoPlayer(
-    this.dataSource, {
-    this.configuration = const BetterPlayerConfiguration(),
-    this.playFraction = 0.6,
-    this.autoPlay = true,
-    this.autoPause = true,
-    this.betterPlayerListVideoPlayerController,
-    Key? key,
-  })  : assert(playFraction >= 0.0 && playFraction <= 1.0,
-            "Play fraction can't be null and must be between 0.0 and 1.0"),
-        super(key: key);
+  final BetterPlayerListVideoPlayerController? betterPlayerListVideoPlayerController;
 
   @override
-  _BetterPlayerListVideoPlayerState createState() =>
-      _BetterPlayerListVideoPlayerState();
+  State<BetterPlayerListVideoPlayer> createState() => _BetterPlayerListVideoPlayerState();
 }
 
-class _BetterPlayerListVideoPlayerState
-    extends State<BetterPlayerListVideoPlayer>
+class _BetterPlayerListVideoPlayerState extends State<BetterPlayerListVideoPlayer>
     with AutomaticKeepAliveClientMixin<BetterPlayerListVideoPlayer> {
   BetterPlayerController? _betterPlayerController;
   bool _isDisposing = false;
@@ -51,17 +49,13 @@ class _BetterPlayerListVideoPlayerState
   void initState() {
     super.initState();
     _betterPlayerController = BetterPlayerController(
-      widget.configuration.copyWith(
-        playerVisibilityChangedBehavior: onVisibilityChanged,
-      ),
+      widget.configuration.copyWith(playerVisibilityChangedBehavior: onVisibilityChanged),
       betterPlayerDataSource: widget.dataSource,
-      betterPlayerPlaylistConfiguration:
-          const BetterPlayerPlaylistConfiguration(),
+      betterPlayerPlaylistConfiguration: const BetterPlayerPlaylistConfiguration(),
     );
 
     if (widget.betterPlayerListVideoPlayerController != null) {
-      widget.betterPlayerListVideoPlayerController!
-          .setBetterPlayerController(_betterPlayerController);
+      widget.betterPlayerListVideoPlayerController!.setBetterPlayerController(_betterPlayerController);
     }
   }
 
@@ -76,16 +70,12 @@ class _BetterPlayerListVideoPlayerState
   Widget build(BuildContext context) {
     super.build(context);
     return AspectRatio(
-      aspectRatio: _betterPlayerController!.getAspectRatio() ??
-          BetterPlayerUtils.calculateAspectRatio(context),
-      child: BetterPlayer(
-        key: Key("${_getUniqueKey()}_player"),
-        controller: _betterPlayerController!,
-      ),
+      aspectRatio: _betterPlayerController!.getAspectRatio() ?? BetterPlayerUtils.calculateAspectRatio(context),
+      child: BetterPlayer(key: Key('${_getUniqueKey()}_player'), controller: _betterPlayerController!),
     );
   }
 
-  void onVisibilityChanged(double visibleFraction) async {
+  Future<void> onVisibilityChanged(double visibleFraction) async {
     final bool? isPlaying = _betterPlayerController!.isPlaying();
     final bool? initialized = _betterPlayerController!.isVideoInitialized();
     if (visibleFraction >= widget.playFraction) {

@@ -7,20 +7,18 @@ import 'package:better_player_example/pages/reusable_video_list/reusable_video_l
 import 'package:flutter/material.dart';
 
 class ReusableVideoListPage extends StatefulWidget {
+  const ReusableVideoListPage({super.key});
+
   @override
-  _ReusableVideoListPageState createState() => _ReusableVideoListPageState();
+  State<ReusableVideoListPage> createState() => _ReusableVideoListPageState();
 }
 
 class _ReusableVideoListPageState extends State<ReusableVideoListPage> {
-  ReusableVideoListController videoListController =
-      ReusableVideoListController();
-  final _random = new Random();
-  final List<String> _videos = [
-    Constants.forBiggerBlazesUrl,
-    Constants.forBiggerJoyridesVideoUrl,
-  ];
+  ReusableVideoListController videoListController = ReusableVideoListController();
+  final _random = Random();
+  final List<String> _videos = [Constants.forBiggerBlazesUrl, Constants.forBiggerJoyridesVideoUrl];
   List<VideoListData> dataList = [];
-  var value = 0;
+  int value = 0;
   final ScrollController _scrollController = ScrollController();
   int lastMilli = DateTime.now().millisecondsSinceEpoch;
   bool _canBuildVideo = true;
@@ -33,8 +31,8 @@ class _ReusableVideoListPageState extends State<ReusableVideoListPage> {
 
   void _setupData() {
     for (int index = 0; index < 10; index++) {
-      var randomVideoUrl = _videos[_random.nextInt(_videos.length)];
-      dataList.add(VideoListData("Video $index", randomVideoUrl));
+      final randomVideoUrl = _videos[_random.nextInt(_videos.length)];
+      dataList.add(VideoListData('Video $index', randomVideoUrl));
     }
   }
 
@@ -45,12 +43,12 @@ class _ReusableVideoListPageState extends State<ReusableVideoListPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Reusable video list")),
-      body: Container(
-        color: Colors.grey,
-        child: Column(children: [
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Reusable video list')),
+    body: ColoredBox(
+      color: Colors.grey,
+      child: Column(
+        children: [
           Expanded(
             child: NotificationListener<ScrollNotification>(
               onNotification: (notification) {
@@ -77,7 +75,7 @@ class _ReusableVideoListPageState extends State<ReusableVideoListPage> {
                 itemCount: dataList.length,
                 controller: _scrollController,
                 itemBuilder: (context, index) {
-                  VideoListData videoListData = dataList[index];
+                  final VideoListData videoListData = dataList[index];
                   return ReusableVideoListWidget(
                     videoListData: videoListData,
                     videoListController: videoListController,
@@ -86,13 +84,11 @@ class _ReusableVideoListPageState extends State<ReusableVideoListPage> {
                 },
               ),
             ),
-          )
-        ]),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 
-  bool _checkCanBuildVideo() {
-    return _canBuildVideo;
-  }
+  bool _checkCanBuildVideo() => _canBuildVideo;
 }

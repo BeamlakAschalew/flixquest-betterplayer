@@ -1,21 +1,20 @@
-import 'package:better_player/better_player.dart';
-import 'package:better_player/src/core/better_player_utils.dart';
+import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/core/better_player_utils.dart';
 
 // Flutter imports:
 import 'package:flutter/material.dart';
 
 ///Special version of Better Player used to play videos in playlist.
 class BetterPlayerPlaylist extends StatefulWidget {
-  final List<BetterPlayerDataSource> betterPlayerDataSourceList;
-  final BetterPlayerConfiguration betterPlayerConfiguration;
-  final BetterPlayerPlaylistConfiguration betterPlayerPlaylistConfiguration;
-
   const BetterPlayerPlaylist({
-    Key? key,
+    super.key,
     required this.betterPlayerDataSourceList,
     required this.betterPlayerConfiguration,
     required this.betterPlayerPlaylistConfiguration,
-  }) : super(key: key);
+  });
+  final List<BetterPlayerDataSource> betterPlayerDataSourceList;
+  final BetterPlayerConfiguration betterPlayerConfiguration;
+  final BetterPlayerPlaylistConfiguration betterPlayerPlaylistConfiguration;
 
   @override
   BetterPlayerPlaylistState createState() => BetterPlayerPlaylistState();
@@ -25,33 +24,26 @@ class BetterPlayerPlaylist extends StatefulWidget {
 class BetterPlayerPlaylistState extends State<BetterPlayerPlaylist> {
   BetterPlayerPlaylistController? _betterPlayerPlaylistController;
 
-  BetterPlayerController? get _betterPlayerController =>
-      _betterPlayerPlaylistController!.betterPlayerController;
+  BetterPlayerController? get _betterPlayerController => _betterPlayerPlaylistController!.betterPlayerController;
 
   ///Get BetterPlayerPlaylistController
-  BetterPlayerPlaylistController? get betterPlayerPlaylistController =>
-      _betterPlayerPlaylistController;
+  BetterPlayerPlaylistController? get betterPlayerPlaylistController => _betterPlayerPlaylistController;
 
   @override
   void initState() {
     _betterPlayerPlaylistController = BetterPlayerPlaylistController(
-        widget.betterPlayerDataSourceList,
-        betterPlayerConfiguration: widget.betterPlayerConfiguration,
-        betterPlayerPlaylistConfiguration:
-            widget.betterPlayerPlaylistConfiguration);
+      widget.betterPlayerDataSourceList,
+      betterPlayerConfiguration: widget.betterPlayerConfiguration,
+      betterPlayerPlaylistConfiguration: widget.betterPlayerPlaylistConfiguration,
+    );
     super.initState();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: _betterPlayerController!.getAspectRatio() ??
-          BetterPlayerUtils.calculateAspectRatio(context),
-      child: BetterPlayer(
-        controller: _betterPlayerController!,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AspectRatio(
+    aspectRatio: _betterPlayerController!.getAspectRatio() ?? BetterPlayerUtils.calculateAspectRatio(context),
+    child: BetterPlayer(controller: _betterPlayerController!),
+  );
 
   @override
   void dispose() {

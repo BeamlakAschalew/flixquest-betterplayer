@@ -1,10 +1,12 @@
-import 'package:better_player/better_player.dart';
 import 'package:better_player_example/constants.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 
 class RotationAndFitPage extends StatefulWidget {
+  const RotationAndFitPage({super.key});
+
   @override
-  _RotationAndFitPageState createState() => _RotationAndFitPageState();
+  State<RotationAndFitPage> createState() => _RotationAndFitPageState();
 }
 
 class _RotationAndFitPageState extends State<RotationAndFitPage> {
@@ -12,41 +14,28 @@ class _RotationAndFitPageState extends State<RotationAndFitPage> {
 
   @override
   void initState() {
-    BetterPlayerConfiguration betterPlayerConfiguration =
-        BetterPlayerConfiguration(
-      aspectRatio: 1.0,
-      fit: BoxFit.fill,
-      rotation: 90,
+    const BetterPlayerConfiguration betterPlayerConfiguration = BetterPlayerConfiguration(aspectRatio: 1, rotation: 90);
+    final BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+      BetterPlayerDataSourceType.network,
+      Constants.forBiggerBlazesUrl,
     );
-    BetterPlayerDataSource dataSource = BetterPlayerDataSource(
-        BetterPlayerDataSourceType.network, Constants.forBiggerBlazesUrl);
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);
     _betterPlayerController.setupDataSource(dataSource);
     super.initState();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Rotation and fit"),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Player with different rotation and fit.",
-              style: TextStyle(fontSize: 16),
-            ),
-          ),
-          AspectRatio(
-            aspectRatio: 1.0,
-            child: BetterPlayer(controller: _betterPlayerController),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Rotation and fit')),
+    body: Column(
+      children: [
+        const SizedBox(height: 8),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text('Player with different rotation and fit.', style: TextStyle(fontSize: 16)),
+        ),
+        AspectRatio(aspectRatio: 1, child: BetterPlayer(controller: _betterPlayerController)),
+      ],
+    ),
+  );
 }

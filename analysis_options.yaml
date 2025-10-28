@@ -1,8 +1,9 @@
-#include: package:lint/analysis_options_package.yaml
+include: package:flutter_lints/flutter.yaml
+
+formatter:
+  page_width: 120
 
 analyzer:
-  errors:
-    non_nullable_equals_parameter: ignore
   strong-mode:
     implicit-dynamic: false
 
@@ -20,3 +21,4 @@ linter:
     sort_pub_dependencies: false
     avoid_unnecessary_containers: false
     use_setters_to_change_properties: false
+

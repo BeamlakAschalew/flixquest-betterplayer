@@ -1,41 +1,35 @@
-name: better_player
-description: Advanced video player based on video_player and Chewie. It's solves many typical use cases and it's easy to run.
-version: 0.0.82
-# Disabled because of warning from analyzer
-# authors:
-#  - Jakub Homlala <jhomlala@gmail.com>
-homepage: https://github.com/jhomlala/betterplayer
-documentation: https://jhomlala.github.io/betterplayer/
+name: better_player_plus
+version: 1.1.2
+homepage: https://github.com/SunnatilloShavkatov/betterplayer.git
+documentation: https://github.com/SunnatilloShavkatov/betterplayer.git
+description: "Advanced video player based on video_player and Chewie. It's solves many typical use cases and it's easy to run."
 
 environment:
-  sdk: ">=2.15.0 <3.22.3"
-  flutter: ">=2.2.3"
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.4
-  wakelock_plus: ^1.2.8
-  meta: ^1.7.0
-  flutter_widget_from_html_core: ^0.8.5+1
-  visibility_detector: ^0.2.2
-  path_provider: ^2.0.9
-  collection: ^1.15.0
-  xml: ^6.0.1
-  marquee: ^2.2.3
-
-dev_dependencies:
-  lint: ^1.8.1
-  flutter_test:
-    sdk: flutter
   flutter_localizations:
     sdk: flutter
+  collection: ^1.19.1
+  wakelock_plus: ^1.4.0
+  path_provider: ^2.1.5
+  visibility_detector: ^0.4.0+2
+  flutter_widget_from_html_core: ^0.17.0
+  marquee: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
 
 flutter:
   plugin:
     platforms:
       android:
-        package: com.jhomlala.better_player
+        package: uz.shs.better_player_plus
         pluginClass: BetterPlayerPlugin
       ios:
         pluginClass: BetterPlayerPlugin

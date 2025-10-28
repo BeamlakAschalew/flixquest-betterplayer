@@ -1,4 +1,4 @@
-import 'package:better_player/better_player.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 
 ///Controller of Better Player List Video Player.
 class BetterPlayerListVideoPlayerController {
@@ -21,8 +21,7 @@ class BetterPlayerListVideoPlayerController {
   }
 
   // ignore: use_setters_to_change_properties
-  void setBetterPlayerController(
-      BetterPlayerController? betterPlayerController) {
+  void setBetterPlayerController(BetterPlayerController? betterPlayerController) {
     _betterPlayerController = betterPlayerController;
   }
 

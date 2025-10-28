@@ -1,5 +1,20 @@
+import 'package:flutter/foundation.dart';
+
 /// Represents HLS / DASH track which can be played within player
+@immutable
 class BetterPlayerAsmsTrack {
+  const BetterPlayerAsmsTrack(
+    this.id,
+    this.width,
+    this.height,
+    this.bitrate,
+    this.frameRate,
+    this.codecs,
+    this.mimeType,
+  );
+
+  factory BetterPlayerAsmsTrack.defaultTrack() => const BetterPlayerAsmsTrack('', 0, 0, 0, 0, '', '');
+
   ///Id of the track
   final String? id;
 
@@ -21,32 +36,16 @@ class BetterPlayerAsmsTrack {
   ///mimeType of the video track
   final String? mimeType;
 
-  BetterPlayerAsmsTrack(
-    this.id,
-    this.width,
-    this.height,
-    this.bitrate,
-    this.frameRate,
-    this.codecs,
-    this.mimeType,
-  );
-
-  factory BetterPlayerAsmsTrack.defaultTrack() {
-    return BetterPlayerAsmsTrack('', 0, 0, 0, 0, '', '');
-  }
+  @override
+  bool operator ==(Object other) =>
+      other is BetterPlayerAsmsTrack &&
+      width == other.width &&
+      height == other.height &&
+      bitrate == other.bitrate &&
+      frameRate == other.frameRate &&
+      codecs == other.codecs &&
+      mimeType == other.mimeType;
 
   @override
-  // ignore: unnecessary_overrides
-  int get hashCode => super.hashCode;
-
-  @override
-  bool operator ==(dynamic other) {
-    return other is BetterPlayerAsmsTrack &&
-        width == other.width &&
-        height == other.height &&
-        bitrate == other.bitrate &&
-        frameRate == other.frameRate &&
-        codecs == other.codecs &&
-        mimeType == other.mimeType;
-  }
+  int get hashCode => Object.hash(id, width, height, bitrate, frameRate, codecs, mimeType);
 }

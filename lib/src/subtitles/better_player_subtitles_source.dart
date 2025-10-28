@@ -1,10 +1,22 @@
-import 'package:better_player/src/asms/better_player_asms_subtitle_segment.dart';
+import 'package:better_player_plus/src/asms/better_player_asms_subtitle_segment.dart';
 
-import 'better_player_subtitles_source_type.dart';
+import 'package:better_player_plus/src/subtitles/better_player_subtitles_source_type.dart';
 
 ///Representation of subtitles source. Used to define subtitles in Better
 /// Player.
 class BetterPlayerSubtitlesSource {
+  BetterPlayerSubtitlesSource({
+    this.type,
+    this.name = 'Default subtitles',
+    this.urls,
+    this.content,
+    this.selectedByDefault,
+    this.headers,
+    this.asmsIsSegmented,
+    this.asmsSegmentsTime,
+    this.asmsSegments,
+  });
+
   ///Source type
   final BetterPlayerSubtitlesSourceType? type;
 
@@ -36,35 +48,22 @@ class BetterPlayerSubtitlesSource {
   ///configured manually.
   final List<BetterPlayerAsmsSubtitleSegment>? asmsSegments;
 
-  BetterPlayerSubtitlesSource({
-    this.type,
-    this.name = "Default subtitles",
-    this.urls,
-    this.content,
-    this.selectedByDefault,
-    this.headers,
-    this.asmsIsSegmented,
-    this.asmsSegmentsTime,
-    this.asmsSegments,
-  });
-
   ///Creates list with only one subtitles
   static List<BetterPlayerSubtitlesSource> single({
     BetterPlayerSubtitlesSourceType? type,
-    String name = "Default subtitles",
+    String name = 'Default subtitles',
     String? url,
     String? content,
     bool? selectedByDefault,
     Map<String, String>? headers,
-  }) =>
-      [
-        BetterPlayerSubtitlesSource(
-          type: type,
-          name: name,
-          urls: [url],
-          content: content,
-          selectedByDefault: selectedByDefault,
-          headers: headers,
-        )
-      ];
+  }) => [
+    BetterPlayerSubtitlesSource(
+      type: type,
+      name: name,
+      urls: [url],
+      content: content,
+      selectedByDefault: selectedByDefault,
+      headers: headers,
+    ),
+  ];
 }

@@ -1,0 +1,11 @@
+include: package:flutter_lints/flutter.yaml
+
+formatter:
+  page_width: 120
+
+analyzer:
+  errors:
+    unawaited_futures: ignore
+    cascade_invocations: ignore
+    flutter_style_todos: ignore
+    discarded_futures: ignore
