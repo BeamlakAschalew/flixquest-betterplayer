@@ -1,7 +1,5 @@
-// ignore_for_file: cascade_invocations
-
 import 'dart:async';
-import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/better_player.dart';
 import 'package:better_player_plus/src/video_player/video_player.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +13,9 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
     this.onDragStart,
     this.onDragUpdate,
     this.onTapDown,
-    super.key,
-  }) : colors = colors ?? BetterPlayerProgressColors();
+    Key? key,
+  }) : colors = colors ?? BetterPlayerProgressColors(),
+       super(key: key);
 
   final VideoPlayerController? controller;
   final BetterPlayerController? betterPlayerController;
@@ -27,15 +26,15 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
   final Function()? onTapDown;
 
   @override
-  State<BetterPlayerMaterialVideoProgressBar> createState() => _VideoProgressBarState();
+  _VideoProgressBarState createState() {
+    return _VideoProgressBarState();
+  }
 }
 
 class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar> {
   _VideoProgressBarState() {
     listener = () {
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     };
   }
 
@@ -150,7 +149,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
     }
   }
 
-  Future<void> seekToRelativePosition(Offset globalPosition) async {
+  void seekToRelativePosition(Offset globalPosition) async {
     final RenderObject? renderObject = context.findRenderObject();
     if (renderObject != null) {
       final box = renderObject as RenderBox;
@@ -186,7 +185,9 @@ class _ProgressBarPainter extends CustomPainter {
   BetterPlayerController _betterPlayerController;
 
   @override
-  bool shouldRepaint(CustomPainter painter) => true;
+  bool shouldRepaint(CustomPainter painter) {
+    return true;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -194,8 +195,8 @@ class _ProgressBarPainter extends CustomPainter {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromPoints(Offset(0, size.height / 2), Offset(size.width, size.height / 2 + height)),
-        const Radius.circular(4),
+        Rect.fromPoints(Offset(0.0, size.height / 2), Offset(size.width, size.height / 2 + height)),
+        const Radius.circular(4.0),
       ),
       colors.backgroundPaint,
     );
@@ -219,15 +220,15 @@ class _ProgressBarPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromPoints(Offset(start, size.height / 2), Offset(end, size.height / 2 + height)),
-          const Radius.circular(4),
+          const Radius.circular(4.0),
         ),
         colors.bufferedPaint,
       );
     }
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromPoints(Offset(0, size.height / 2), Offset(playedPart, size.height / 2 + height)),
-        const Radius.circular(4),
+        Rect.fromPoints(Offset(0.0, size.height / 2), Offset(playedPart, size.height / 2 + height)),
+        const Radius.circular(4.0),
       ),
       colors.playedPaint,
     );
