@@ -136,6 +136,7 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
             betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
             subtitles: betterPlayerController.subtitlesLines,
             playerVisibilityStream: playerVisibilityStreamController.stream,
+            isFullScreen: betterPlayerController.isFullScreen,
           ),
           if (!placeholderOnTop) _buildPlaceholder(betterPlayerController),
           _buildControls(context, betterPlayerController),
