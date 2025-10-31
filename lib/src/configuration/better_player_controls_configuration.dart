@@ -65,6 +65,8 @@ class BetterPlayerControlsConfiguration {
     this.enableThumbnailPreview = true,
     this.onEpisodeListTap,
     this.enableEpisodeSelection = false,
+    this.onMovieRecommendationsTap,
+    this.enableMovieRecommendations = false,
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -267,4 +269,10 @@ class BetterPlayerControlsConfiguration {
 
   ///Enable episode selection button
   final bool enableEpisodeSelection;
+
+  ///Callback for movie recommendations selection
+  final Function()? onMovieRecommendationsTap;
+
+  ///Enable movie recommendations button
+  final bool enableMovieRecommendations;
 }

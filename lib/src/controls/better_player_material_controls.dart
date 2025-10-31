@@ -373,6 +373,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                     _buildEpisodeSelectionButton()
                   else
                     const SizedBox(),
+                  if (_controlsConfiguration.enableMovieRecommendations)
+                    _buildMovieRecommendationsButton()
+                  else
+                    const SizedBox(),
                   if (_controlsConfiguration.enableFullscreen) _buildExpandButton() else const SizedBox(),
                 ],
               ),
@@ -434,6 +438,34 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             child: Center(
               child: Icon(
                 Icons.list_rounded,
+                color: _controlsConfiguration.iconsColor,
+                size: _betterPlayerController!.isFullScreen ? 30 : 20,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMovieRecommendationsButton() {
+    return Padding(
+      padding: EdgeInsets.only(right: 8.0),
+      child: BetterPlayerMaterialClickableWidget(
+        onTap: () {
+          if (_controlsConfiguration.onMovieRecommendationsTap != null) {
+            _controlsConfiguration.onMovieRecommendationsTap!();
+          }
+        },
+        child: AnimatedOpacity(
+          opacity: controlsNotVisible ? 0.0 : 1.0,
+          duration: _controlsConfiguration.controlsHideTime,
+          child: Container(
+            height: _controlsConfiguration.controlBarHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Center(
+              child: Icon(
+                Icons.movie_filter_rounded,
                 color: _controlsConfiguration.iconsColor,
                 size: _betterPlayerController!.isFullScreen ? 30 : 20,
               ),
