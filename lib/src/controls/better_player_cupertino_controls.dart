@@ -504,6 +504,7 @@ class _BetterPlayerCupertinoControlsState extends BetterPlayerControlsState<Bett
           bufferedColor: _controlsConfiguration.progressBarBufferedColor,
           backgroundColor: _controlsConfiguration.progressBarBackgroundColor,
         ),
+        showThumbnailPreview: _controlsConfiguration.enableThumbnailPreview,
       ),
     ),
   );

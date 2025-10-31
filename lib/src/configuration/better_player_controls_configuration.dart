@@ -62,6 +62,7 @@ class BetterPlayerControlsConfiguration {
     this.onFullScreenChange,
     this.watchingText,
     this.playerTimeMode,
+    this.enableThumbnailPreview = true,
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -255,4 +256,7 @@ class BetterPlayerControlsConfiguration {
 
   /// Player timer mode
   final int? playerTimeMode;
+
+  ///Flag used to enable/disable thumbnail preview when seeking
+  final bool enableThumbnailPreview;
 }

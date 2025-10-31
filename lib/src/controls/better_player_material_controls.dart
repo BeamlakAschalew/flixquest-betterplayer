@@ -802,6 +802,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             bufferedColor: _controlsConfiguration.progressBarBufferedColor,
             backgroundColor: _controlsConfiguration.progressBarBackgroundColor,
           ),
+          showThumbnailPreview: _controlsConfiguration.enableThumbnailPreview,
         ),
       ),
     );
