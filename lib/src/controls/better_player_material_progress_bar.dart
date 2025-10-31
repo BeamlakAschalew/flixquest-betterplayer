@@ -332,8 +332,8 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
       leftPosition = screenWidth - previewWidth - previewPadding;
     }
 
-    // Position above the progress bar
-    const double bottomPosition = 60.0;
+    // Position above the progress bar - closer in non-fullscreen mode
+    final double bottomPosition = isFullScreen ? 60.0 : 35.0;
 
     return Positioned(
       left: leftPosition,

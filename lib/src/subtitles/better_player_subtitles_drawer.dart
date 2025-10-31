@@ -100,7 +100,7 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
     // Calculate bottom padding
     final double bottomPadding = isInPipMode
         ? _configuration!.bottomPadding +
-              30 // Extra padding in PIP mode for native controls
+              15 // Extra padding in PIP mode for native controls
         : _playerVisible && widget.isFullScreen
         ? _configuration!.bottomPadding + 70
         : _playerVisible && !widget.isFullScreen
