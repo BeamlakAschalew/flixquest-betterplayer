@@ -94,8 +94,14 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
     final List<String> subtitles = subtitle?.texts ?? [];
     final List<Widget> textWidgets = subtitles.map(_buildSubtitleTextWidget).toList();
 
-    // Calculate bottom padding: add extra padding only in fullscreen when player controls are visible
-    final double bottomPadding = _playerVisible && widget.isFullScreen
+    // Check if player is in PIP mode
+    final bool isInPipMode = _latestValue?.isPip ?? false;
+
+    // Calculate bottom padding
+    final double bottomPadding = isInPipMode
+        ? _configuration!.bottomPadding +
+              30 // Extra padding in PIP mode for native controls
+        : _playerVisible && widget.isFullScreen
         ? _configuration!.bottomPadding + 70
         : _playerVisible && !widget.isFullScreen
         ? _configuration!.bottomPadding + 25

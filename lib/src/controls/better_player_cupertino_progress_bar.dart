@@ -315,8 +315,11 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
 
     // Calculate horizontal position, ensuring it stays within screen bounds
     final double screenWidth = MediaQuery.of(context).size.width;
-    const double previewWidth = 160.0; // Increased from 120
-    const double previewHeight = 90.0; // Increased from 80
+    final bool isFullScreen = betterPlayerController?.isFullScreen ?? false;
+
+    // Use smaller thumbnails in non-fullscreen mode
+    final double previewWidth = isFullScreen ? 160.0 : 120.0;
+    final double previewHeight = isFullScreen ? 90.0 : 67.5;
     const double previewPadding = 10.0;
 
     double leftPosition = localPosition.dx - (previewWidth / 2);
