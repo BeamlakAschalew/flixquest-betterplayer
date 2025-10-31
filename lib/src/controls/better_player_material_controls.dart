@@ -369,6 +369,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                     _controlsConfiguration.enableProgressText ? Expanded(child: _buildPosition()) : const SizedBox(),
                   const Spacer(),
                   if (_controlsConfiguration.enableMute) _buildMuteButton(_controller) else const SizedBox(),
+                  if (_controlsConfiguration.enableEpisodeSelection)
+                    _buildEpisodeSelectionButton()
+                  else
+                    const SizedBox(),
                   if (_controlsConfiguration.enableFullscreen) _buildExpandButton() else const SizedBox(),
                 ],
               ),
@@ -402,6 +406,34 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                 _betterPlayerController!.isFullScreen
                     ? _controlsConfiguration.fullscreenDisableIcon
                     : _controlsConfiguration.fullscreenEnableIcon,
+                color: _controlsConfiguration.iconsColor,
+                size: _betterPlayerController!.isFullScreen ? 30 : 20,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEpisodeSelectionButton() {
+    return Padding(
+      padding: EdgeInsets.only(right: 8.0),
+      child: BetterPlayerMaterialClickableWidget(
+        onTap: () {
+          if (_controlsConfiguration.onEpisodeListTap != null) {
+            _controlsConfiguration.onEpisodeListTap!();
+          }
+        },
+        child: AnimatedOpacity(
+          opacity: controlsNotVisible ? 0.0 : 1.0,
+          duration: _controlsConfiguration.controlsHideTime,
+          child: Container(
+            height: _controlsConfiguration.controlBarHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Center(
+              child: Icon(
+                Icons.list_rounded,
                 color: _controlsConfiguration.iconsColor,
                 size: _betterPlayerController!.isFullScreen ? 30 : 20,
               ),

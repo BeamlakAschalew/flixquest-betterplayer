@@ -63,6 +63,8 @@ class BetterPlayerControlsConfiguration {
     this.watchingText,
     this.playerTimeMode,
     this.enableThumbnailPreview = true,
+    this.onEpisodeListTap,
+    this.enableEpisodeSelection = false,
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -259,4 +261,10 @@ class BetterPlayerControlsConfiguration {
 
   ///Flag used to enable/disable thumbnail preview when seeking
   final bool enableThumbnailPreview;
+
+  ///Callback for episode selection (for TV shows)
+  final Function()? onEpisodeListTap;
+
+  ///Enable episode selection button
+  final bool enableEpisodeSelection;
 }
