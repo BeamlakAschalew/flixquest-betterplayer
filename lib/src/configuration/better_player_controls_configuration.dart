@@ -67,6 +67,7 @@ class BetterPlayerControlsConfiguration {
     this.enableEpisodeSelection = false,
     this.onMovieRecommendationsTap,
     this.enableMovieRecommendations = false,
+    this.enableNextEpisodeButton = true,
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -275,4 +276,7 @@ class BetterPlayerControlsConfiguration {
 
   ///Enable movie recommendations button
   final bool enableMovieRecommendations;
+
+  ///Enable next episode button (floating button at 85% progress for TV shows)
+  final bool enableNextEpisodeButton;
 }
