@@ -454,7 +454,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           child: BetterPlayerMaterialClickableWidget(
             onTap: onClicked,
             child: Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               child: Stack(children: [icon!]),
             ),
           ),
@@ -467,7 +467,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     return _buildHitAreaClickableButton(
       icon: Icon(
         _controlsConfiguration.skipBackIcon,
-        size: _betterPlayerController!.isFullScreen ? 48 : 30,
+        size: _betterPlayerController!.isFullScreen ? 46 : 30,
         color: _controlsConfiguration.iconsColor,
       ),
       onClicked: skipBack,
@@ -478,7 +478,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     return _buildHitAreaClickableButton(
       icon: Icon(
         _controlsConfiguration.skipForwardIcon,
-        size: _betterPlayerController!.isFullScreen ? 48 : 30,
+        size: _betterPlayerController!.isFullScreen ? 46 : 30,
         color: _controlsConfiguration.iconsColor,
       ),
       onClicked: skipForward,
@@ -628,25 +628,12 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       padding: _controlsConfiguration.enablePlayPause
           ? const EdgeInsets.only(right: 24)
           : const EdgeInsets.symmetric(horizontal: 22),
-      child: RichText(
-        text: TextSpan(
-          text: BetterPlayerUtils.formatDuration(position),
-          style: TextStyle(
-            fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-            color: _controlsConfiguration.textColor,
-            decoration: TextDecoration.none,
-          ),
-          children: <TextSpan>[
-            TextSpan(
-              text:
-                  ' / ${_betterPlayerController!.betterPlayerControlsConfiguration.playerTimeMode == 1 ? formattedTotalDuration : formattedRemainingDuration}',
-              style: TextStyle(
-                fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
-                color: _controlsConfiguration.textColor,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ],
+      child: Text(
+        '${BetterPlayerUtils.formatDuration(position)} / ${_betterPlayerController!.betterPlayerControlsConfiguration.playerTimeMode == 1 ? formattedTotalDuration : formattedRemainingDuration}',
+        style: TextStyle(
+          fontSize: _betterPlayerController!.isFullScreen ? 20.0 : 10.0,
+          color: _controlsConfiguration.textColor,
+          decoration: TextDecoration.none,
         ),
       ),
     );

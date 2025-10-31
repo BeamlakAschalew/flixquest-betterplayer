@@ -315,8 +315,8 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
 
     // Calculate horizontal position, ensuring it stays within screen bounds
     final double screenWidth = MediaQuery.of(context).size.width;
-    const double previewWidth = 120.0;
-    const double previewHeight = 80.0;
+    const double previewWidth = 160.0; // Increased from 120
+    const double previewHeight = 90.0; // Increased from 80
     const double previewPadding = 10.0;
 
     double leftPosition = localPosition.dx - (previewWidth / 2);
@@ -439,7 +439,6 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
     final bool isBuffered = _isBuffered();
 
     return Container(
-      width: width,
       decoration: BoxDecoration(
         color: Colors.black87,
         borderRadius: BorderRadius.circular(8.0),
@@ -450,54 +449,47 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Video frame preview
-          Container(
+          SizedBox(
             width: width,
             height: height,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6.0)),
-            ),
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(6.0)),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Video frame
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: controller.value.size?.width ?? 1.0,
-                      height: controller.value.size?.height ?? 1.0,
-                      child: VideoPlayer(controller),
+              child: Container(
+                color: Colors.black,
+                child: Stack(
+                  children: [
+                    // Video frame - use contain to show full frame without cropping
+                    Center(
+                      child: AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller)),
                     ),
-                  ),
-                  // Loading overlay for unbuffered content
-                  if (!isBuffered)
-                    Container(
-                      color: CupertinoColors.black.withOpacity(0.7),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CupertinoActivityIndicator(color: CupertinoColors.white.withOpacity(0.8)),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Loading...',
-                              style: TextStyle(
-                                color: CupertinoColors.white.withOpacity(0.8),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
+                    // Loading overlay for unbuffered content
+                    if (!isBuffered)
+                      Container(
+                        color: CupertinoColors.black.withOpacity(0.7),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CupertinoActivityIndicator(color: CupertinoColors.white.withOpacity(0.8)),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 4),
+                              Text(
+                                'Loading...',
+                                style: TextStyle(
+                                  color: CupertinoColors.white.withOpacity(0.8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
