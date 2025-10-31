@@ -55,6 +55,8 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
   bool _showThumbnailPreview = false;
   Offset? _dragPosition;
   Duration? _previewPosition;
+  Timer? _previewLoadTimer;
+  Duration? _lastPreviewLoadPosition;
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
   void deactivate() {
     controller!.removeListener(listener);
     _cancelUpdateBlockTimer();
+    _cancelPreviewLoadTimer();
     super.deactivate();
   }
 
@@ -93,6 +96,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
                 _showThumbnailPreview = true;
                 _dragPosition = details.globalPosition;
                 _updatePreviewPosition(details.globalPosition);
+                _schedulePreviewLoad();
               });
             }
 
@@ -111,6 +115,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
               setState(() {
                 _dragPosition = details.globalPosition;
                 _updatePreviewPosition(details.globalPosition);
+                _schedulePreviewLoad();
               });
             }
 
@@ -134,6 +139,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
                 _showThumbnailPreview = false;
                 _dragPosition = null;
                 _previewPosition = null;
+                _cancelPreviewLoadTimer();
               });
             }
 
@@ -224,6 +230,79 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
         _previewPosition = position;
       }
     }
+  }
+
+  /// Check if a position is in the buffered range
+  bool _isPositionBuffered(Duration position) {
+    if (controller == null || !controller!.value.initialized) {
+      return false;
+    }
+
+    for (final DurationRange range in controller!.value.buffered) {
+      if (position >= range.start && position <= range.end) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Schedule progressive loading for unbuffered positions
+  void _schedulePreviewLoad() {
+    // Cancel any existing timer
+    _cancelPreviewLoadTimer();
+
+    if (_previewPosition == null) return;
+
+    // If position is already buffered, no need to load
+    if (_isPositionBuffered(_previewPosition!)) {
+      return;
+    }
+
+    // If we already tried to load this position recently, don't retry immediately
+    if (_lastPreviewLoadPosition != null &&
+        (_previewPosition! - _lastPreviewLoadPosition!).abs() < const Duration(seconds: 2)) {
+      return;
+    }
+
+    // Schedule loading after user hovers for 800ms on unbuffered region
+    _previewLoadTimer = Timer(const Duration(milliseconds: 800), () {
+      if (_previewPosition != null && !_isPositionBuffered(_previewPosition!)) {
+        _loadPreviewFrame(_previewPosition!);
+      }
+    });
+  }
+
+  /// Load a preview frame by temporarily seeking to that position
+  Future<void> _loadPreviewFrame(Duration position) async {
+    if (controller == null || !controller!.value.initialized) {
+      return;
+    }
+
+    _lastPreviewLoadPosition = position;
+
+    try {
+      // Store current position
+      final currentPosition = controller!.value.position;
+
+      // Briefly seek to the preview position to trigger buffering
+      await controller!.seekTo(position);
+
+      // Wait a moment for the frame to load
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Seek back to original position (or close to it)
+      // This allows the frame to stay in buffer while user is still hovering
+      if (_showThumbnailPreview && mounted) {
+        await controller!.seekTo(currentPosition);
+      }
+    } catch (e) {
+      // Ignore errors during preview loading
+    }
+  }
+
+  void _cancelPreviewLoadTimer() {
+    _previewLoadTimer?.cancel();
+    _previewLoadTimer = null;
   }
 
   Widget _buildThumbnailPreview(BuildContext context) {
@@ -351,8 +430,20 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
     return '${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 
+  /// Check if position is buffered
+  bool _isBuffered() {
+    for (final DurationRange range in controller.value.buffered) {
+      if (position >= range.start && position <= range.end) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isBuffered = _isBuffered();
+
     return Container(
       width: width,
       decoration: BoxDecoration(
@@ -374,13 +465,48 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(6.0)),
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: controller.value.size?.width ?? 1.0,
-                  height: controller.value.size?.height ?? 1.0,
-                  child: VideoPlayer(controller),
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Video frame
+                  FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: controller.value.size?.width ?? 1.0,
+                      height: controller.value.size?.height ?? 1.0,
+                      child: VideoPlayer(controller),
+                    ),
+                  ),
+                  // Loading overlay for unbuffered content
+                  if (!isBuffered)
+                    Container(
+                      color: Colors.black.withOpacity(0.7),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.8)),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Loading...',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
