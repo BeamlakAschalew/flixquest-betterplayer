@@ -20,6 +20,7 @@ export 'src/configuration/better_player_theme.dart';
 export 'src/configuration/better_player_translations.dart';
 export 'src/configuration/better_player_video_format.dart';
 export 'src/controls/better_player_controls_state.dart';
+export 'src/controls/better_player_gesture_controls.dart';
 export 'src/controls/better_player_multiple_gesture_detector.dart';
 export 'src/controls/better_player_overflow_menu_item.dart';
 export 'src/controls/better_player_progress_colors.dart';

@@ -31,6 +31,10 @@ public class SwiftBetterPlayerPlugin: NSObject, FlutterPlugin, FlutterPlatformVi
         let instance = SwiftBetterPlayerPlugin(registrar: registrar)
         registrar.addMethodCallDelegate(instance, channel: channel)
         registrar.register(instance, withId: "com.jhomlala/better_player")
+        
+        // Setup brightness channel
+        let brightnessChannel = FlutterMethodChannel(name: "better_player_plus/brightness", binaryMessenger: registrar.messenger())
+        registrar.addMethodCallDelegate(instance, channel: brightnessChannel)
     }
 
     public func createArgsCodec() -> (FlutterMessageCodec & NSObjectProtocol) { FlutterStandardMessageCodec.sharedInstance() }
@@ -202,6 +206,22 @@ public class SwiftBetterPlayerPlugin: NSObject, FlutterPlugin, FlutterPlatformVi
 
 extension SwiftBetterPlayerPlugin {
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // Handle brightness channel methods
+        if call.method == "getBrightness" {
+            result(NSNumber(value: UIScreen.main.brightness))
+            return
+        }
+        if call.method == "setBrightness" {
+            guard let argsMap = call.arguments as? [String: Any],
+                  let brightness = (argsMap["brightness"] as? NSNumber)?.doubleValue else {
+                result(FlutterError(code: "INVALID_ARGUMENT", message: "Brightness value is required", details: nil))
+                return
+            }
+            UIScreen.main.brightness = CGFloat(brightness)
+            result(nil)
+            return
+        }
+        
         if call.method == "init" {
             for (_, player) in players { player.dispose() }
             players.removeAll()

@@ -1,4 +1,5 @@
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/controls/better_player_gesture_controls.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -68,6 +69,7 @@ class BetterPlayerControlsConfiguration {
     this.onMovieRecommendationsTap,
     this.enableMovieRecommendations = false,
     this.enableNextEpisodeButton = true,
+    this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -279,4 +281,7 @@ class BetterPlayerControlsConfiguration {
 
   ///Enable next episode button (floating button at 85% progress for TV shows)
   final bool enableNextEpisodeButton;
+
+  ///Gesture-based controls configuration (volume/brightness swipe)
+  final BetterPlayerGestureConfiguration gestureConfiguration;
 }

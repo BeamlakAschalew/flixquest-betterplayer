@@ -21,6 +21,8 @@ import android.util.LongSparseArray
 import android.util.Rational
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
+import android.provider.Settings
+import android.view.WindowManager
 import uz.shs.better_player_plus.BetterPlayerCache.releaseCache
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -52,6 +54,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private var pipRunnable: Runnable? = null
     private var pipBroadcastReceiver: BroadcastReceiver? = null
     private var currentPipPlayer: BetterPlayer? = null
+    private var brightnessChannel: MethodChannel? = null
+    
     override fun onAttachedToEngine(binding: FlutterPluginBinding) {
         val loader = FlutterLoader()
         flutterState = FlutterState(
@@ -73,6 +77,26 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             binding.textureRegistry
         )
         flutterState?.startListening(this)
+        
+        // Setup brightness channel
+        brightnessChannel = MethodChannel(binding.binaryMessenger, "better_player_plus/brightness")
+        brightnessChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getBrightness" -> {
+                    result.success(getBrightness())
+                }
+                "setBrightness" -> {
+                    val brightness = call.argument<Double>("brightness")
+                    if (brightness != null) {
+                        setBrightness(brightness.toFloat())
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Brightness value is required", null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
 
@@ -615,6 +639,48 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             pipHandler = null
         }
         pipRunnable = null
+    }
+    
+    /**
+     * Get current screen brightness (0.0 - 1.0)
+     */
+    private fun getBrightness(): Float {
+        return try {
+            if (activity?.window != null) {
+                val layoutParams = activity!!.window.attributes
+                if (layoutParams.screenBrightness >= 0) {
+                    layoutParams.screenBrightness
+                } else {
+                    // Get system brightness
+                    val systemBrightness = Settings.System.getInt(
+                        activity!!.contentResolver,
+                        Settings.System.SCREEN_BRIGHTNESS,
+                        125
+                    )
+                    systemBrightness / 255.0f
+                }
+            } else {
+                0.5f
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get brightness", e)
+            0.5f
+        }
+    }
+    
+    /**
+     * Set screen brightness (0.0 - 1.0)
+     */
+    private fun setBrightness(brightness: Float) {
+        try {
+            if (activity?.window != null) {
+                val layoutParams = activity!!.window.attributes
+                layoutParams.screenBrightness = brightness.coerceIn(0.0f, 1.0f)
+                activity!!.window.attributes = layoutParams
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set brightness", e)
+        }
     }
 
     private interface KeyForAssetFn {

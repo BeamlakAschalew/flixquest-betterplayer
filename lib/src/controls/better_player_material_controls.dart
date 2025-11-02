@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:better_player_plus/src/configuration/better_player_controls_configuration.dart';
 import 'package:better_player_plus/src/controls/better_player_clickable_widget.dart';
 import 'package:better_player_plus/src/controls/better_player_controls_state.dart';
+import 'package:better_player_plus/src/controls/better_player_gesture_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_material_progress_bar.dart';
 import 'package:better_player_plus/src/controls/better_player_multiple_gesture_detector.dart';
 import 'package:better_player_plus/src/controls/better_player_progress_colors.dart';
+import 'package:better_player_plus/src/core/better_player_brightness_manager.dart';
 import 'package:better_player_plus/src/core/better_player_controller.dart';
 import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:better_player_plus/src/video_player/video_player.dart';
@@ -48,6 +50,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   BetterPlayerController? _betterPlayerController;
   StreamSubscription? _controlsVisibilityStreamSubscription;
 
+  // Gesture control state
+  double _currentBrightness = 0.5;
+  bool _brightnessInitialized = false;
+
   BetterPlayerControlsConfiguration get _controlsConfiguration => widget.controlsConfiguration;
 
   @override
@@ -64,13 +70,76 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     return buildLTRDirectionality(_buildMainWidget());
   }
 
+  /// Initialize brightness on first build
+  Future<void> _initializeBrightness() async {
+    if (!_brightnessInitialized) {
+      try {
+        _currentBrightness = await BetterPlayerBrightnessManager.getBrightness();
+        _brightnessInitialized = true;
+      } catch (e) {
+        BetterPlayerUtils.log('Failed to initialize brightness: $e');
+      }
+    }
+  }
+
+  /// Handle volume change from gesture
+  void _onVolumeChanged(double volume) {
+    _betterPlayerController?.setVolume(volume);
+    setState(() {
+      _latestVolume = volume;
+    });
+  }
+
+  /// Handle brightness change from gesture
+  void _onBrightnessChanged(double brightness) {
+    setState(() {
+      _currentBrightness = brightness;
+    });
+    BetterPlayerBrightnessManager.setBrightness(brightness);
+  }
+
+  /// Handle seek from gesture
+  void _onSeek(Duration seekDuration) async {
+    final currentPosition = await _controller?.position;
+    if (currentPosition != null) {
+      final newPosition = currentPosition + seekDuration;
+      _betterPlayerController?.seekTo(newPosition);
+    }
+  }
+
   ///Builds main widget of the controls.
   Widget _buildMainWidget() {
     _wasLoading = isLoading(_latestValue);
     if (_latestValue?.hasError == true) {
       return Container(color: Colors.black, child: _buildErrorWidget());
     }
-    return GestureDetector(
+
+    // Initialize brightness on first build
+    if (!_brightnessInitialized) {
+      _initializeBrightness();
+    }
+
+    final gestureConfig = _controlsConfiguration.gestureConfiguration;
+    final bool anyGestureEnabled =
+        gestureConfig.enableVolumeSwipe || gestureConfig.enableBrightnessSwipe || gestureConfig.enableSeekSwipe;
+
+    print('🎯 BetterPlayer: anyGestureEnabled=$anyGestureEnabled, config=$gestureConfig');
+
+    // Build the controls UI
+    Widget controlsUI = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_wasLoading) Center(child: _buildLoadingWidget()) else _buildHitArea(),
+        Positioned(top: 0, left: 0, right: 0, child: _buildTopBar()),
+        Positioned(bottom: 0, left: 0, right: 0, child: _buildBottomBar()),
+        _buildNextVideoWidget(),
+      ],
+    );
+
+    // Wrap controls UI in gesture detector for tap/double-tap
+    // Use translucent so touches can pass through to gesture handler
+    Widget mainContent = GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onTap: () {
         if (BetterPlayerMultipleGestureDetector.of(context) != null) {
           BetterPlayerMultipleGestureDetector.of(context)!.onTap?.call();
@@ -88,24 +157,35 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           BetterPlayerMultipleGestureDetector.of(context)!.onLongPress?.call();
         }
       },
-      child: AbsorbPointer(
-        absorbing: controlsNotVisible,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (_wasLoading) Center(child: _buildLoadingWidget()) else _buildHitArea(),
-            Positioned(top: 0, left: 0, right: 0, child: _buildTopBar()),
-            Positioned(bottom: 0, left: 0, right: 0, child: _buildBottomBar()),
-            _buildNextVideoWidget(),
-          ],
-        ),
-      ),
+      child: AbsorbPointer(absorbing: controlsNotVisible, child: controlsUI),
     );
+
+    // Wrap with gesture handler if any gesture is enabled
+    // The gesture handler is outside AbsorbPointer so it can receive events even when controls are hidden
+    if (anyGestureEnabled) {
+      print('🎯 BetterPlayer: Wrapping with GestureHandler now!');
+      mainContent = BetterPlayerGestureHandler(
+        configuration: gestureConfig,
+        currentVolume: _latestVolume ?? _latestValue?.volume ?? 0.5,
+        currentBrightness: _currentBrightness,
+        onVolumeChanged: _onVolumeChanged,
+        onBrightnessChanged: _onBrightnessChanged,
+        onSeek: _onSeek,
+        child: mainContent,
+      );
+      print('🎯 BetterPlayer: GestureHandler wrapped!');
+    } else {
+      print('🎯 BetterPlayer: NOT wrapping with GestureHandler - gestures disabled');
+    }
+
+    return mainContent;
   }
 
   @override
   void dispose() {
     _dispose();
+    // Restore original brightness when disposing
+    BetterPlayerBrightnessManager.restoreOriginalBrightness();
     super.dispose();
   }
 
