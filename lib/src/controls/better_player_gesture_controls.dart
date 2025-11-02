@@ -58,6 +58,7 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     required this.onSeek,
     required this.currentVolume,
     required this.currentBrightness,
+    this.controlsVisible = true, // Whether controls are currently visible
   }) : super(key: key);
 
   final Widget child;
@@ -67,6 +68,7 @@ class BetterPlayerGestureHandler extends StatefulWidget {
   final Function(Duration position) onSeek;
   final double currentVolume;
   final double currentBrightness;
+  final bool controlsVisible;
 
   @override
   State<BetterPlayerGestureHandler> createState() => _BetterPlayerGestureHandlerState();
@@ -172,6 +174,67 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     }
   }
 
+  void _onHorizontalDragStart(DragStartDetails details) {
+    if (!widget.configuration.enableSeekSwipe) return;
+
+    print('🎯 BetterPlayer Gesture: Horizontal drag started (Seek)');
+
+    _dragStartPosition = details.localPosition;
+    _hasMovedEnough = false; // Don't activate until we move enough
+    _currentGesture = GestureFeedbackType.seekForward; // Temporary
+    _initialValue = 0.0;
+
+    // DON'T call setState or set _isGestureActive yet - wait for actual movement
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details, double screenWidth) {
+    if (_dragStartPosition == null) return;
+
+    final config = widget.configuration;
+    final double delta = details.localPosition.dx - _dragStartPosition!.dx;
+
+    // Check if we've moved enough to be considered a real drag (not a tap)
+    if (!_hasMovedEnough) {
+      if (delta.abs() < config.minimumSwipeDistance) {
+        return; // Still below threshold, could be a tap
+      }
+      // We've moved enough - activate the gesture now!
+      _hasMovedEnough = true;
+      _isGestureActive = true;
+      _gestureValue = 0.0;
+      setState(() {});
+    }
+
+    if (!_isGestureActive) return;
+
+    // Cancel any pending hide timer while actively dragging
+    _feedbackTimer?.cancel();
+
+    final double sensitivity = config.seekSwipeSensitivity;
+    final double normalizedDelta = (delta / screenWidth) * sensitivity;
+
+    setState(() {
+      _gestureValue = normalizedDelta * 100; // Convert to seconds
+      _currentGesture = normalizedDelta > 0 ? GestureFeedbackType.seekForward : GestureFeedbackType.seekBackward;
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    // Only perform seek if gesture was actually activated
+    if (_isGestureActive && _gestureValue != 0) {
+      final seekDuration = Duration(seconds: _gestureValue.abs().round());
+      widget.onSeek(seekDuration);
+    }
+
+    _dragStartPosition = null;
+    _hasMovedEnough = false;
+
+    // Only hide feedback if gesture was actually activated
+    if (_isGestureActive) {
+      _hideFeedbackAfterDelay();
+    }
+  }
+
   void _hideFeedbackAfterDelay() {
     _feedbackTimer?.cancel();
     _feedbackTimer = Timer(widget.configuration.feedbackDuration, () {
@@ -200,15 +263,15 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
         // Original child (controls) - put FIRST so gesture zones can overlay
         widget.child,
 
-        // Left side - Brightness control
-        if (widget.configuration.enableBrightnessSwipe)
+        // Left side - Brightness control (only active when controls are hidden)
+        if (widget.configuration.enableBrightnessSwipe && !widget.controlsVisible)
           Positioned(
             left: 0,
             top: topSafeZone, // Don't cover top bar
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.deferToChild, // Only intercept vertical drags, let taps through
+              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
               onVerticalDragStart: (details) => _onVerticalDragStart(details, true),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, true, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
@@ -216,15 +279,15 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             ),
           ),
 
-        // Right side - Volume control
-        if (widget.configuration.enableVolumeSwipe)
+        // Right side - Volume control (only active when controls are hidden)
+        if (widget.configuration.enableVolumeSwipe && !widget.controlsVisible)
           Positioned(
             right: 0,
             top: topSafeZone, // Don't cover top bar
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.deferToChild, // Only intercept vertical drags, let taps through
+              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
               onVerticalDragStart: (details) => _onVerticalDragStart(details, false),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, false, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
@@ -232,8 +295,22 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             ),
           ),
 
-        // NOTE: Center seek control removed - it was blocking taps to show/hide controls
-        // If you want seek gestures, add them back with HitTestBehavior.translucent
+        // Bottom center - Seek control (only active when controls are hidden)
+        // Small horizontal strip at the bottom for seek gestures
+        if (widget.configuration.enableSeekSwipe && !widget.controlsVisible)
+          Positioned(
+            left: swipeAreaWidth, // Start after left gesture zone
+            right: swipeAreaWidth, // End before right gesture zone
+            bottom: 20, // Small strip near bottom
+            height: 60, // Small height to not interfere with buttons
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
+              onHorizontalDragStart: _onHorizontalDragStart,
+              onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
+              onHorizontalDragEnd: _onHorizontalDragEnd,
+              child: Container(color: Colors.transparent),
+            ),
+          ),
 
         // Feedback overlay (always on top)
         if (_isGestureActive && _currentGesture != null) _buildFeedbackOverlay(),

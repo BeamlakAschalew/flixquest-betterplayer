@@ -168,6 +168,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         configuration: gestureConfig,
         currentVolume: _latestVolume ?? _latestValue?.volume ?? 0.5,
         currentBrightness: _currentBrightness,
+        controlsVisible: !controlsNotVisible, // Pass controls visibility state
         onVolumeChanged: _onVolumeChanged,
         onBrightnessChanged: _onBrightnessChanged,
         onSeek: _onSeek,
