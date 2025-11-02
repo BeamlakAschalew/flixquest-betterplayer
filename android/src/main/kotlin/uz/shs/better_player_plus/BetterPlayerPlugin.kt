@@ -675,7 +675,12 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         try {
             if (activity?.window != null) {
                 val layoutParams = activity!!.window.attributes
-                layoutParams.screenBrightness = brightness.coerceIn(0.0f, 1.0f)
+                // Set to -1 to restore system brightness control, otherwise set specific brightness
+                layoutParams.screenBrightness = if (brightness < 0) {
+                    -1.0f // Use system brightness
+                } else {
+                    brightness.coerceIn(0.0f, 1.0f)
+                }
                 activity!!.window.attributes = layoutParams
             }
         } catch (e: Exception) {

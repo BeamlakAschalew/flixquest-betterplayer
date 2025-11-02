@@ -43,14 +43,12 @@ class BetterPlayerBrightnessManager {
 
   /// Restore original brightness
   static Future<void> restoreOriginalBrightness() async {
-    if (_originalBrightness != null) {
-      try {
-        await _channel.invokeMethod('setBrightness', {'brightness': _originalBrightness});
-        _currentBrightness = _originalBrightness!;
-        _originalBrightness = null;
-      } catch (e) {
-        BetterPlayerUtils.log('Failed to restore brightness: $e');
-      }
+    try {
+      // Set brightness to -1 to restore system brightness control
+      await _channel.invokeMethod('setBrightness', {'brightness': -1.0});
+      _originalBrightness = null;
+    } catch (e) {
+      BetterPlayerUtils.log('Failed to restore brightness: $e');
     }
   }
 
