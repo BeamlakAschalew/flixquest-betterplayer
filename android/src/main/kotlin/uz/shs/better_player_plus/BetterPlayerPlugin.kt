@@ -746,8 +746,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 val targetVolume = (volume.coerceIn(0.0f, 1.0f) * maxVolume).toInt()
                 Log.d(TAG, "setDeviceVolume: volume=$volume, target=$targetVolume, max=$maxVolume")
-                // Use FLAG_SHOW_UI to show the volume indicator (optional, remove 0 flag)
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI)
+                // Don't show UI - let the app handle the visual feedback
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
             } else {
                 Log.e(TAG, "setDeviceVolume: AudioManager is null")
             }
