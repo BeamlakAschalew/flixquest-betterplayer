@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -55,6 +56,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private var pipBroadcastReceiver: BroadcastReceiver? = null
     private var currentPipPlayer: BetterPlayer? = null
     private var brightnessChannel: MethodChannel? = null
+    private var volumeChannel: MethodChannel? = null
     
     override fun onAttachedToEngine(binding: FlutterPluginBinding) {
         val loader = FlutterLoader()
@@ -92,6 +94,29 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                         result.success(null)
                     } else {
                         result.error("INVALID_ARGUMENT", "Brightness value is required", null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        
+        // Setup volume channel
+        volumeChannel = MethodChannel(binding.binaryMessenger, "better_player_plus/volume")
+        volumeChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getVolume" -> {
+                    val volume = getDeviceVolume().toDouble()
+                    Log.d(TAG, "Volume channel: getVolume returning $volume")
+                    result.success(volume)
+                }
+                "setVolume" -> {
+                    val volume = call.argument<Double>("volume")
+                    Log.d(TAG, "Volume channel: setVolume called with $volume")
+                    if (volume != null) {
+                        setDeviceVolume(volume.toFloat())
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Volume value is required", null)
                     }
                 }
                 else -> result.notImplemented()
@@ -685,6 +710,49 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set brightness", e)
+        }
+    }
+    
+    /**
+     * Get current device media volume (0.0 - 1.0)
+     */
+    private fun getDeviceVolume(): Float {
+        return try {
+            val context = activity ?: flutterState?.applicationContext
+            val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                Log.d(TAG, "getDeviceVolume: current=$currentVolume, max=$maxVolume")
+                currentVolume.toFloat() / maxVolume.toFloat()
+            } else {
+                Log.e(TAG, "getDeviceVolume: AudioManager is null")
+                0.5f
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get device volume", e)
+            0.5f
+        }
+    }
+    
+    /**
+     * Set device media volume (0.0 - 1.0)
+     */
+    private fun setDeviceVolume(volume: Float) {
+        try {
+            val context = activity ?: flutterState?.applicationContext
+            val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val targetVolume = (volume.coerceIn(0.0f, 1.0f) * maxVolume).toInt()
+                Log.d(TAG, "setDeviceVolume: volume=$volume, target=$targetVolume, max=$maxVolume")
+                // Use FLAG_SHOW_UI to show the volume indicator (optional, remove 0 flag)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI)
+            } else {
+                Log.e(TAG, "setDeviceVolume: AudioManager is null")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set device volume", e)
         }
     }
 

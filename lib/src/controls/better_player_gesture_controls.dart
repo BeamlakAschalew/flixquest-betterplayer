@@ -59,6 +59,7 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     required this.currentVolume,
     required this.currentBrightness,
     this.controlsVisible = true, // Whether controls are currently visible
+    this.onTap, // Callback to show controls overlay on tap
   }) : super(key: key);
 
   final Widget child;
@@ -69,6 +70,7 @@ class BetterPlayerGestureHandler extends StatefulWidget {
   final double currentVolume;
   final double currentBrightness;
   final bool controlsVisible;
+  final VoidCallback? onTap;
 
   @override
   State<BetterPlayerGestureHandler> createState() => _BetterPlayerGestureHandlerState();
@@ -222,7 +224,9 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
   void _onHorizontalDragEnd(DragEndDetails details) {
     // Only perform seek if gesture was actually activated
     if (_isGestureActive && _gestureValue != 0) {
-      final seekDuration = Duration(seconds: _gestureValue.abs().round());
+      // Preserve the sign: positive for forward, negative for backward
+      final seekSeconds = _gestureValue.round();
+      final seekDuration = Duration(seconds: seekSeconds);
       widget.onSeek(seekDuration);
     }
 
@@ -271,7 +275,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
+              behavior: HitTestBehavior.opaque, // Capture all events in this area
+              onTap: () {
+                // Forward tap to show controls overlay
+                widget.onTap?.call();
+              },
               onVerticalDragStart: (details) => _onVerticalDragStart(details, true),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, true, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
@@ -287,7 +295,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
+              behavior: HitTestBehavior.opaque, // Capture all events in this area
+              onTap: () {
+                // Forward tap to show controls overlay
+                widget.onTap?.call();
+              },
               onVerticalDragStart: (details) => _onVerticalDragStart(details, false),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, false, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
@@ -304,7 +316,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: 20, // Small strip near bottom
             height: 60, // Small height to not interfere with buttons
             child: GestureDetector(
-              behavior: HitTestBehavior.translucent, // Let taps pass through while catching drags
+              behavior: HitTestBehavior.opaque, // Capture all events in this area
+              onTap: () {
+                // Forward tap to show controls overlay
+                widget.onTap?.call();
+              },
               onHorizontalDragStart: _onHorizontalDragStart,
               onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
               onHorizontalDragEnd: _onHorizontalDragEnd,

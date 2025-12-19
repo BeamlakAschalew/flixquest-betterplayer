@@ -7,6 +7,7 @@ import 'package:better_player_plus/src/controls/better_player_material_progress_
 import 'package:better_player_plus/src/controls/better_player_multiple_gesture_detector.dart';
 import 'package:better_player_plus/src/controls/better_player_progress_colors.dart';
 import 'package:better_player_plus/src/core/better_player_brightness_manager.dart';
+import 'package:better_player_plus/src/core/better_player_volume_manager.dart';
 import 'package:better_player_plus/src/core/better_player_controller.dart';
 import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:better_player_plus/src/video_player/video_player.dart';
@@ -53,6 +54,8 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   // Gesture control state
   double _currentBrightness = 0.5;
   bool _brightnessInitialized = false;
+  double _currentDeviceVolume = 0.5;
+  bool _volumeInitialized = false;
 
   BetterPlayerControlsConfiguration get _controlsConfiguration => widget.controlsConfiguration;
 
@@ -82,12 +85,27 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     }
   }
 
-  /// Handle volume change from gesture
+  /// Initialize device volume on first build
+  Future<void> _initializeDeviceVolume() async {
+    if (!_volumeInitialized) {
+      try {
+        _currentDeviceVolume = await BetterPlayerVolumeManager.getVolume();
+        _volumeInitialized = true;
+        print('🎯 BetterPlayer: Device volume initialized to $_currentDeviceVolume');
+        if (mounted) setState(() {});
+      } catch (e) {
+        BetterPlayerUtils.log('Failed to initialize device volume: $e');
+      }
+    }
+  }
+
+  /// Handle volume change from gesture - controls device system volume
   void _onVolumeChanged(double volume) {
-    _betterPlayerController?.setVolume(volume);
+    print('🎯 BetterPlayer: _onVolumeChanged called with $volume');
     setState(() {
-      _latestVolume = volume;
+      _currentDeviceVolume = volume;
     });
+    BetterPlayerVolumeManager.setVolume(volume);
   }
 
   /// Handle brightness change from gesture
@@ -117,6 +135,11 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     // Initialize brightness on first build
     if (!_brightnessInitialized) {
       _initializeBrightness();
+    }
+
+    // Initialize device volume on first build
+    if (!_volumeInitialized) {
+      _initializeDeviceVolume();
     }
 
     final gestureConfig = _controlsConfiguration.gestureConfiguration;
@@ -166,12 +189,16 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       print('🎯 BetterPlayer: Wrapping with GestureHandler now!');
       mainContent = BetterPlayerGestureHandler(
         configuration: gestureConfig,
-        currentVolume: _latestVolume ?? _latestValue?.volume ?? 0.5,
+        currentVolume: _currentDeviceVolume, // Use device volume instead of player volume
         currentBrightness: _currentBrightness,
         controlsVisible: !controlsNotVisible, // Pass controls visibility state
         onVolumeChanged: _onVolumeChanged,
         onBrightnessChanged: _onBrightnessChanged,
         onSeek: _onSeek,
+        onTap: () {
+          // Toggle controls visibility when tapping on gesture zones
+          controlsNotVisible ? cancelAndRestartTimer() : changePlayerControlsNotVisible(true);
+        },
         child: mainContent,
       );
       print('🎯 BetterPlayer: GestureHandler wrapped!');
