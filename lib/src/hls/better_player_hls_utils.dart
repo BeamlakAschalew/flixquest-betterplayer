@@ -164,6 +164,8 @@ sealed class BetterPlayerHlsUtils {
             label: audio.name,
             language: audio.format.language,
             url: audio.url.toString(),
+            isDefault:
+                audio.format.selectionFlags != null && Util.checkBitPositionIsSet(audio.format.selectionFlags!, 1),
           ),
         );
       }

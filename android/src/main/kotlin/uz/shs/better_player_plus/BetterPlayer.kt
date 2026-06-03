@@ -687,14 +687,27 @@ internal class BetterPlayer(
                             }
                         }
                     }
+                    val normalizedName = normalizeTrackName(name)
+                    var fallbackMatch: Pair<Int, Int>? = null
+                    var audioTrackOrder = 0
                     for (groupIndex in 0 until trackGroupArray.length) {
                         val group = trackGroupArray[groupIndex]
                         for (groupElementIndex in 0 until group.length) {
-                            val label = group.getFormat(groupElementIndex).label
-                            // Exact match by label and provided group index
-                            if (name == label && index == groupIndex) {
+                            val format = group.getFormat(groupElementIndex)
+                            val label = format.label
+                            val normalizedLabel = normalizeTrackName(label)
+                            val normalizedLanguage = normalizeTrackName(format.language)
+
+                            if (index == audioTrackOrder) {
                                 setAudioTrack(rendererIndex, groupIndex, groupElementIndex)
                                 return
+                            }
+
+                            if (fallbackMatch == null &&
+                                (normalizedName == normalizedLabel ||
+                                    normalizedName == normalizedLanguage)
+                            ) {
+                                fallbackMatch = Pair(groupIndex, groupElementIndex)
                             }
 
                             ///Fallback option
@@ -709,13 +722,28 @@ internal class BetterPlayer(
                                 setAudioTrack(rendererIndex, groupIndex, groupElementIndex)
                                 return
                             }
+
+                            audioTrackOrder++
                         }
+                    }
+
+                    fallbackMatch?.let {
+                        setAudioTrack(rendererIndex, it.first, it.second)
+                        return
                     }
                 }
             }
         } catch (exception: Exception) {
             Log.e(TAG, "setAudioTrack failed$exception")
         }
+    }
+
+    private fun normalizeTrackName(value: String?): String? {
+        if (value == null) {
+            return null
+        }
+
+        return value.lowercase(Locale.ROOT).trim()
     }
 
     private fun setAudioTrack(rendererIndex: Int, groupIndex: Int, trackIndex: Int) {
@@ -729,12 +757,17 @@ internal class BetterPlayer(
                 val builder = trackSelector.parameters
                     .buildUpon()
                     .setRendererDisabled(rendererIndex, false)
-                    .addOverride(
-                        TrackSelectionOverride(
-                            group,
-                            safeTrackIndex
-                        )
+
+                for (audioGroupIndex in 0 until trackGroups.length) {
+                    builder.clearOverridesOfType(trackGroups[audioGroupIndex].type)
+                }
+
+                builder.addOverride(
+                    TrackSelectionOverride(
+                        group,
+                        safeTrackIndex
                     )
+                )
 
                 trackSelector.setParameters(builder)
             } else {
