@@ -445,8 +445,7 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black87,
         borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .5), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -468,7 +467,7 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
                     // Loading overlay for unbuffered content
                     if (!isBuffered)
                       Container(
-                        color: CupertinoColors.black.withOpacity(0.7),
+                        color: CupertinoColors.black.withValues(alpha: .7),
                         child: Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -476,13 +475,13 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
                               SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CupertinoActivityIndicator(color: CupertinoColors.white.withOpacity(0.8)),
+                                child: CupertinoActivityIndicator(color: CupertinoColors.white.withValues(alpha: .8)),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 'Loading...',
                                 style: TextStyle(
-                                  color: CupertinoColors.white.withOpacity(0.8),
+                                  color: CupertinoColors.white.withValues(alpha: .8),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                 ),

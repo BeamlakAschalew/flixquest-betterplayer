@@ -30,9 +30,7 @@ class BetterPlayerBrightnessManager {
 
     try {
       // Save original brightness on first change
-      if (_originalBrightness == null) {
-        _originalBrightness = await getBrightness();
-      }
+      _originalBrightness ??= await getBrightness();
 
       await _channel.invokeMethod('setBrightness', {'brightness': brightness});
       _currentBrightness = brightness;

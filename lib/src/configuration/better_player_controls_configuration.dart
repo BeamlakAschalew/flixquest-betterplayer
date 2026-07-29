@@ -1,7 +1,6 @@
 import 'package:better_player_plus/better_player_plus.dart';
-import 'package:better_player_plus/src/controls/better_player_gesture_controls.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 ///UI configuration of Better Player. Allows to change colors/icons/behavior
 ///of controls. Used in BetterPlayerConfiguration. Configuration applies only
@@ -11,14 +10,14 @@ class BetterPlayerControlsConfiguration {
     this.controlBarColor = Colors.black87,
     this.textColor = Colors.white,
     this.iconsColor = Colors.white,
-    this.playIcon = Icons.play_arrow_outlined,
-    this.pauseIcon = Icons.pause_outlined,
-    this.muteIcon = Icons.volume_up_outlined,
-    this.unMuteIcon = Icons.volume_off_outlined,
-    this.fullscreenEnableIcon = Icons.fullscreen_outlined,
-    this.fullscreenDisableIcon = Icons.fullscreen_exit_outlined,
-    this.skipBackIcon = Icons.replay_10_outlined,
-    this.skipForwardIcon = Icons.forward_10_outlined,
+    this.playIcon = PhosphorIconsRegular.play,
+    this.pauseIcon = PhosphorIconsRegular.pause,
+    this.muteIcon = PhosphorIconsRegular.speakerHigh,
+    this.unMuteIcon = PhosphorIconsRegular.speakerSlash,
+    this.fullscreenEnableIcon = PhosphorIconsRegular.cornersOut,
+    this.fullscreenDisableIcon = PhosphorIconsRegular.cornersIn,
+    this.skipBackIcon = PhosphorIconsRegular.arrowCounterClockwise,
+    this.skipForwardIcon = PhosphorIconsRegular.arrowClockwise,
     this.enableFullscreen = true,
     this.enableMute = true,
     this.enableProgressText = true,
@@ -40,17 +39,18 @@ class BetterPlayerControlsConfiguration {
     this.liveTextColor = Colors.red,
     this.enableOverflowMenu = true,
     this.enablePlaybackSpeed = true,
+    this.playbackSpeeds = const [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
     this.enableSubtitles = true,
     this.enableQualities = true,
     this.enablePip = true,
     this.enableRetry = true,
     this.overflowMenuCustomItems = const [],
-    this.overflowMenuIcon = Icons.more_vert_outlined,
-    this.pipMenuIcon = Icons.picture_in_picture_outlined,
-    this.playbackSpeedIcon = Icons.shutter_speed_outlined,
-    this.qualitiesIcon = Icons.hd_outlined,
-    this.subtitlesIcon = Icons.closed_caption_outlined,
-    this.audioTracksIcon = Icons.audiotrack_outlined,
+    this.overflowMenuIcon = PhosphorIconsRegular.dotsThreeVertical,
+    this.pipMenuIcon = PhosphorIconsRegular.pictureInpicture,
+    this.playbackSpeedIcon = PhosphorIconsRegular.gauge,
+    this.qualitiesIcon = PhosphorIconsRegular.monitorPlay,
+    this.subtitlesIcon = PhosphorIconsRegular.closedCaptioning,
+    this.audioTracksIcon = PhosphorIconsRegular.waveform,
     this.overflowMenuIconsColor = Colors.black,
     this.forwardSkipTimeInMilliseconds = 10000,
     this.backwardSkipTimeInMilliseconds = 10000,
@@ -82,14 +82,7 @@ class BetterPlayerControlsConfiguration {
     progressBarBackgroundColor: Colors.white70,
   );
 
-  factory BetterPlayerControlsConfiguration.cupertino() => const BetterPlayerControlsConfiguration(
-    fullscreenEnableIcon: CupertinoIcons.arrow_up_left_arrow_down_right,
-    fullscreenDisableIcon: CupertinoIcons.arrow_down_right_arrow_up_left,
-    playIcon: CupertinoIcons.play_arrow_solid,
-    pauseIcon: CupertinoIcons.pause_solid,
-    skipBackIcon: CupertinoIcons.gobackward_15,
-    skipForwardIcon: CupertinoIcons.goforward_15,
-  );
+  factory BetterPlayerControlsConfiguration.cupertino() => const BetterPlayerControlsConfiguration();
 
   ///Setup BetterPlayerControlsConfiguration based on Theme options.
   factory BetterPlayerControlsConfiguration.theme(ThemeData theme) => BetterPlayerControlsConfiguration(
@@ -191,6 +184,9 @@ class BetterPlayerControlsConfiguration {
 
   ///Flag used to show/hide playback speed
   final bool enablePlaybackSpeed;
+
+  ///Playback speeds displayed by the speed selector.
+  final List<double> playbackSpeeds;
 
   ///Flag used to show/hide subtitles
   final bool enableSubtitles;

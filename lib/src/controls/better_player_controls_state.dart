@@ -1,15 +1,14 @@
-import 'dart:io';
 import 'dart:math';
+
 import 'package:better_player_plus/better_player_plus.dart';
-import 'package:better_player_plus/src/controls/better_player_clickable_widget.dart';
+import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:collection/collection.dart' show IterableExtension;
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-///Base class for both material and cupertino controls
+/// Shared behavior and modern modal presentation for player controls.
 abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State<T> {
-  ///Min. time of buffered video to hide loading timer (in milliseconds)
   static const int _bufferingInterval = 20000;
 
   BetterPlayerController? get betterPlayerController;
@@ -22,419 +21,367 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
   void cancelAndRestartTimer();
 
-  bool isVideoFinished(VideoPlayerValue? videoPlayerValue) =>
-      videoPlayerValue?.position != null &&
-      videoPlayerValue?.duration != null &&
-      videoPlayerValue!.position.inMilliseconds != 0 &&
-      videoPlayerValue.duration!.inMilliseconds != 0 &&
-      videoPlayerValue.position >= videoPlayerValue.duration!;
+  bool isVideoFinished(VideoPlayerValue? value) =>
+      value?.position != null &&
+      value?.duration != null &&
+      value!.position.inMilliseconds != 0 &&
+      value.duration!.inMilliseconds != 0 &&
+      value.position >= value.duration!;
 
   void skipBack() {
-    if (latestValue != null) {
-      cancelAndRestartTimer();
-      final beginning = Duration.zero.inMilliseconds;
-      final skip =
-          (latestValue!.position -
-                  Duration(milliseconds: betterPlayerControlsConfiguration.backwardSkipTimeInMilliseconds))
-              .inMilliseconds;
-      betterPlayerController!.seekTo(Duration(milliseconds: max(skip, beginning)));
-    }
+    if (latestValue == null) return;
+    cancelAndRestartTimer();
+    final target = max(
+      0,
+      (latestValue!.position - Duration(milliseconds: betterPlayerControlsConfiguration.backwardSkipTimeInMilliseconds))
+          .inMilliseconds,
+    );
+    betterPlayerController!.seekTo(Duration(milliseconds: target));
   }
 
   void skipForward() {
-    if (latestValue != null) {
-      cancelAndRestartTimer();
-      final end = latestValue!.duration!.inMilliseconds;
-      final skip =
-          (latestValue!.position +
-                  Duration(milliseconds: betterPlayerControlsConfiguration.forwardSkipTimeInMilliseconds))
-              .inMilliseconds;
-      betterPlayerController!.seekTo(Duration(milliseconds: min(skip, end)));
-    }
+    if (latestValue?.duration == null) return;
+    cancelAndRestartTimer();
+    final target = min(
+      latestValue!.duration!.inMilliseconds,
+      (latestValue!.position + Duration(milliseconds: betterPlayerControlsConfiguration.forwardSkipTimeInMilliseconds))
+          .inMilliseconds,
+    );
+    betterPlayerController!.seekTo(Duration(milliseconds: target));
   }
 
   void onShowMoreClicked() {
-    _showModalBottomSheet([_buildMoreOptionsList()]);
-  }
-
-  Widget _buildMoreOptionsList() {
     final translations = betterPlayerController!.translations;
-    return SingleChildScrollView(
-      // ignore: avoid_unnecessary_containers
-      child: Container(
-        child: Column(
-          children: [
-            if (betterPlayerControlsConfiguration.enablePlaybackSpeed)
-              _buildMoreOptionsListRow(
-                betterPlayerControlsConfiguration.playbackSpeedIcon,
-                translations.overflowMenuPlaybackSpeed,
-                () {
-                  Navigator.of(context).pop();
-                  _showSpeedChooserWidget();
-                },
-              ),
-            if (betterPlayerControlsConfiguration.enableSubtitles)
-              _buildMoreOptionsListRow(
-                betterPlayerControlsConfiguration.subtitlesIcon,
-                translations.overflowMenuSubtitles,
-                () {
-                  Navigator.of(context).pop();
-                  _showSubtitlesSelectionWidget();
-                },
-              ),
-            if (betterPlayerControlsConfiguration.enableQualities)
-              _buildMoreOptionsListRow(
-                betterPlayerControlsConfiguration.qualitiesIcon,
-                translations.overflowMenuQuality,
-                () {
-                  Navigator.of(context).pop();
-                  _showQualitiesSelectionWidget();
-                },
-              ),
-            if (betterPlayerControlsConfiguration.enableAudioTracks)
-              _buildMoreOptionsListRow(
-                betterPlayerControlsConfiguration.audioTracksIcon,
-                translations.overflowMenuAudioTracks,
-                () {
-                  Navigator.of(context).pop();
-                  _showAudioTracksSelectionWidget();
-                },
-              ),
-            if (betterPlayerControlsConfiguration.overflowMenuCustomItems.isNotEmpty)
-              ...betterPlayerControlsConfiguration.overflowMenuCustomItems.map(
-                (customItem) => _buildMoreOptionsListRow(customItem.icon, customItem.title, () {
-                  Navigator.of(context).pop();
-                  customItem.onClicked.call();
-                }),
-              ),
-          ],
+    final items = <_PlayerMenuItem>[
+      if (betterPlayerControlsConfiguration.enablePlaybackSpeed)
+        _PlayerMenuItem(
+          icon: betterPlayerControlsConfiguration.playbackSpeedIcon,
+          title: translations.overflowMenuPlaybackSpeed,
+          subtitle: '${betterPlayerController!.videoPlayerController?.value.speed ?? 1}×',
+          onTap: _showSpeedChooserWidget,
         ),
+      if (betterPlayerControlsConfiguration.enableSubtitles)
+        _PlayerMenuItem(
+          icon: betterPlayerControlsConfiguration.subtitlesIcon,
+          title: translations.overflowMenuSubtitles,
+          subtitle: _selectedSubtitleLabel(),
+          onTap: _showSubtitlesSelectionWidget,
+        ),
+      if (betterPlayerControlsConfiguration.enableQualities)
+        _PlayerMenuItem(
+          icon: betterPlayerControlsConfiguration.qualitiesIcon,
+          title: translations.overflowMenuQuality,
+          subtitle: _selectedQualityLabel(),
+          onTap: _showQualitiesSelectionWidget,
+        ),
+      if (betterPlayerControlsConfiguration.enableAudioTracks)
+        _PlayerMenuItem(
+          icon: betterPlayerControlsConfiguration.audioTracksIcon,
+          title: translations.overflowMenuAudioTracks,
+          subtitle: _selectedAudioLabel(),
+          onTap: _showAudioTracksSelectionWidget,
+        ),
+      ...betterPlayerControlsConfiguration.overflowMenuCustomItems.map(
+        (item) => _PlayerMenuItem(icon: item.icon, title: item.title, onTap: item.onClicked),
+      ),
+    ];
+    _showSheet(
+      icon: PhosphorIcons.slidersHorizontal(),
+      title: 'Player settings',
+      subtitle: betterPlayerControlsConfiguration.name.isEmpty ? null : betterPlayerControlsConfiguration.name,
+      child: _selectionList(
+        items
+            .map(
+              (item) => BetterPlayerSelectionTile(
+                icon: item.icon,
+                title: item.title,
+                subtitle: item.subtitle,
+                onTap: () {
+                  _closeSheet();
+                  item.onTap();
+                },
+              ),
+            )
+            .toList(),
       ),
     );
   }
-
-  Widget _buildMoreOptionsListRow(IconData icon, String name, void Function() onTap) =>
-      BetterPlayerMaterialClickableWidget(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              Icon(icon, color: betterPlayerControlsConfiguration.overflowMenuIconsColor),
-              const SizedBox(width: 16),
-              Text(name, style: _getOverflowMenuElementTextStyle(false)),
-            ],
-          ),
-        ),
-      );
 
   void _showSpeedChooserWidget() {
-    _showModalBottomSheet([
-      _buildSpeedRow(0.25),
-      _buildSpeedRow(0.5),
-      _buildSpeedRow(0.75),
-      _buildSpeedRow(1),
-      _buildSpeedRow(1.25),
-      _buildSpeedRow(1.5),
-      _buildSpeedRow(1.75),
-      _buildSpeedRow(2),
-    ]);
-  }
-
-  Widget _buildSpeedRow(double value) {
-    final bool isSelected = betterPlayerController!.videoPlayerController!.value.speed == value;
-
-    return BetterPlayerMaterialClickableWidget(
-      onTap: () {
-        Navigator.of(context).pop();
-        betterPlayerController!.setSpeed(value);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        child: Row(
-          children: [
-            SizedBox(width: isSelected ? 8 : 16),
-            Visibility(
-              visible: isSelected,
-              child: Icon(Icons.check_outlined, color: betterPlayerControlsConfiguration.overflowModalTextColor),
+    final speeds =
+        betterPlayerControlsConfiguration.playbackSpeeds.where((speed) => speed > 0 && speed <= 2).toSet().toList()
+          ..sort();
+    final current = betterPlayerController!.videoPlayerController?.value.speed ?? 1;
+    _showSheet(
+      icon: betterPlayerControlsConfiguration.playbackSpeedIcon,
+      title: betterPlayerController!.translations.overflowMenuPlaybackSpeed,
+      subtitle: '${current.toStringAsFixed(current % 1 == 0 ? 0 : 2)}×',
+      child: speeds.isEmpty
+          ? BetterPlayerEmptyState(icon: PhosphorIcons.gauge(), title: betterPlayerController!.translations.generalNone)
+          : _selectionList(
+              speeds
+                  .map(
+                    (speed) => BetterPlayerSelectionTile(
+                      icon: speed == 1 ? PhosphorIcons.play() : PhosphorIcons.gauge(),
+                      title: '${speed.toStringAsFixed(speed % 1 == 0 ? 0 : 2)}×',
+                      subtitle: speed == 1 ? betterPlayerController!.translations.generalDefault : null,
+                      selected: current == speed,
+                      onTap: () {
+                        _closeSheet();
+                        betterPlayerController!.setSpeed(speed);
+                      },
+                    ),
+                  )
+                  .toList(),
             ),
-            const SizedBox(width: 16),
-            Text('$value x', style: _getOverflowMenuElementTextStyle(isSelected)),
-          ],
-        ),
-      ),
     );
   }
 
-  ///Latest value can be null
-  bool isLoading(VideoPlayerValue? latestValue) {
-    if (latestValue != null) {
-      if (!latestValue.isPlaying && latestValue.duration == null) {
-        return true;
-      }
-
-      final Duration position = latestValue.position;
-
-      Duration? bufferedEndPosition;
-      if (latestValue.buffered.isNotEmpty) {
-        bufferedEndPosition = latestValue.buffered.last.end;
-      }
-
-      if (bufferedEndPosition != null) {
-        final difference = bufferedEndPosition - position;
-
-        if (latestValue.isPlaying && latestValue.isBuffering && difference.inMilliseconds < _bufferingInterval) {
-          return true;
-        }
-      }
-    }
-    return false;
+  bool isLoading(VideoPlayerValue? value) {
+    if (value == null) return false;
+    if (!value.isPlaying && value.duration == null) return true;
+    final bufferedEnd = value.buffered.isNotEmpty ? value.buffered.last.end : null;
+    return bufferedEnd != null &&
+        value.isPlaying &&
+        value.isBuffering &&
+        (bufferedEnd - value.position).inMilliseconds < _bufferingInterval;
   }
 
   void _showSubtitlesSelectionWidget() {
-    final subtitles = List.of(betterPlayerController!.betterPlayerSubtitlesSourceList);
-    final noneSubtitlesElementExists =
-        subtitles.firstWhereOrNull((source) => source.type == BetterPlayerSubtitlesSourceType.none) != null;
-    if (!noneSubtitlesElementExists) {
+    final subtitles = List<BetterPlayerSubtitlesSource>.of(betterPlayerController!.betterPlayerSubtitlesSourceList);
+    if (subtitles.firstWhereOrNull((source) => source.type == BetterPlayerSubtitlesSourceType.none) == null) {
       subtitles.add(BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none));
     }
-
-    _showModalBottomSheet(subtitles.map(_buildSubtitlesSourceRow).toList());
-  }
-
-  Widget _buildSubtitlesSourceRow(BetterPlayerSubtitlesSource subtitlesSource) {
-    final selectedSourceType = betterPlayerController!.betterPlayerSubtitlesSource;
-    final bool isSelected =
-        (subtitlesSource == selectedSourceType) ||
-        (subtitlesSource.type == BetterPlayerSubtitlesSourceType.none &&
-            subtitlesSource.type == selectedSourceType!.type);
-
-    return BetterPlayerMaterialClickableWidget(
-      onTap: () {
-        Navigator.of(context).pop();
-        betterPlayerController!.setupSubtitleSource(subtitlesSource);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        child: Row(
-          children: [
-            SizedBox(width: isSelected ? 8 : 16),
-            Visibility(
-              visible: isSelected,
-              child: Icon(Icons.check_outlined, color: betterPlayerControlsConfiguration.overflowModalTextColor),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              subtitlesSource.type == BetterPlayerSubtitlesSourceType.none
-                  ? betterPlayerController!.translations.generalNone
-                  : subtitlesSource.name ?? betterPlayerController!.translations.generalDefault,
-              style: _getOverflowMenuElementTextStyle(isSelected),
-            ),
-          ],
-        ),
+    final selected = betterPlayerController!.betterPlayerSubtitlesSource;
+    _showSheet(
+      icon: betterPlayerControlsConfiguration.subtitlesIcon,
+      title: betterPlayerController!.translations.overflowMenuSubtitles,
+      subtitle: _selectedSubtitleLabel(),
+      child: _selectionList(
+        subtitles.asMap().entries.map((entry) {
+          final index = entry.key;
+          final source = entry.value;
+          final off = source.type == BetterPlayerSubtitlesSourceType.none;
+          final isSelected =
+              identical(source, selected) ||
+              source == selected ||
+              (off && selected?.type == BetterPlayerSubtitlesSourceType.none);
+          final title = off
+              ? betterPlayerController!.translations.generalNone
+              : source.name?.trim().isNotEmpty == true
+              ? source.name!.trim()
+              : betterPlayerController!.translations.generalDefault;
+          final typeLabel = off ? null : '${source.type?.name ?? 'subtitle'} • ${index + 1}';
+          return BetterPlayerSelectionTile(
+            icon: off
+                ? PhosphorIcons.subtitlesSlash()
+                : isSelected
+                ? PhosphorIcons.closedCaptioning(PhosphorIconsStyle.fill)
+                : PhosphorIcons.closedCaptioning(),
+            title: title,
+            subtitle: typeLabel,
+            selected: isSelected,
+            onTap: () async {
+              await betterPlayerController!.setupSubtitleSource(source);
+              if (mounted) _closeSheet();
+            },
+          );
+        }).toList(),
       ),
     );
   }
 
-  ///Build both track and resolution selection
-  ///Track selection is used for HLS / DASH videos
-  ///Resolution selection is used for normal videos
   void _showQualitiesSelectionWidget() {
-    // HLS / DASH
-    final List<String> asmsTrackNames = betterPlayerController!.betterPlayerDataSource!.asmsTrackNames ?? [];
-    final List<BetterPlayerAsmsTrack> asmsTracks = betterPlayerController!.betterPlayerAsmsTracks;
-    final List<Widget> children = [];
-    for (var index = 0; index < asmsTracks.length; index++) {
-      final track = asmsTracks[index];
-
-      String? preferredName;
-      if (track.height == 0 && track.width == 0 && track.bitrate == 0) {
-        preferredName = betterPlayerController!.translations.qualityAuto;
-      } else {
-        preferredName = asmsTrackNames.length > index ? asmsTrackNames[index] : null;
-      }
-      children.add(_buildTrackRow(asmsTracks[index], preferredName));
-    }
-
-    // normal videos
-    final resolutions = betterPlayerController!.betterPlayerDataSource!.resolutions;
-    resolutions?.forEach((key, value) {
-      children.add(_buildResolutionSelectionRow(key, value));
-    });
-
-    if (children.isEmpty) {
-      children.add(
-        _buildTrackRow(BetterPlayerAsmsTrack.defaultTrack(), betterPlayerController!.translations.qualityAuto),
+    final items = <Widget>[];
+    final names = betterPlayerController!.betterPlayerDataSource?.asmsTrackNames ?? const <String>[];
+    final tracks = betterPlayerController!.betterPlayerAsmsTracks;
+    for (var index = 0; index < tracks.length; index++) {
+      final track = tracks[index];
+      final automatic = track.height == 0 && track.width == 0 && track.bitrate == 0;
+      final label = automatic
+          ? betterPlayerController!.translations.qualityAuto
+          : index < names.length && names[index].trim().isNotEmpty
+          ? names[index]
+          : _qualityLabel(track);
+      final selected = betterPlayerController!.betterPlayerAsmsTrack == track;
+      items.add(
+        BetterPlayerSelectionTile(
+          icon: automatic
+              ? PhosphorIcons.magicWand()
+              : selected
+              ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill)
+              : PhosphorIcons.monitorPlay(),
+          title: label,
+          subtitle: automatic ? null : _qualityDetails(track),
+          selected: selected,
+          onTap: () {
+            _closeSheet();
+            betterPlayerController!.setTrack(track);
+          },
+        ),
       );
     }
-
-    _showModalBottomSheet(children);
-  }
-
-  Widget _buildTrackRow(BetterPlayerAsmsTrack track, String? preferredName) {
-    final int width = track.width ?? 0;
-    final int height = track.height ?? 0;
-    final int bitrate = track.bitrate ?? 0;
-    final String mimeType = (track.mimeType ?? '').replaceAll('video/', '');
-    final String trackName = preferredName ?? '${width}x$height ${BetterPlayerUtils.formatBitrate(bitrate)} $mimeType';
-
-    final BetterPlayerAsmsTrack? selectedTrack = betterPlayerController!.betterPlayerAsmsTrack;
-    final bool isSelected = selectedTrack != null && selectedTrack == track;
-
-    return BetterPlayerMaterialClickableWidget(
-      onTap: () {
-        Navigator.of(context).pop();
-        betterPlayerController!.setTrack(track);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        child: Row(
-          children: [
-            SizedBox(width: isSelected ? 8 : 16),
-            Visibility(
-              visible: isSelected,
-              child: Icon(Icons.check_outlined, color: betterPlayerControlsConfiguration.overflowModalTextColor),
-            ),
-            const SizedBox(width: 16),
-            Text(trackName, style: _getOverflowMenuElementTextStyle(isSelected)),
-          ],
+    betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+      final selected = url == betterPlayerController!.betterPlayerDataSource?.url;
+      items.add(
+        BetterPlayerSelectionTile(
+          icon: selected ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill) : PhosphorIcons.monitorPlay(),
+          title: name,
+          selected: selected,
+          onTap: () {
+            _closeSheet();
+            betterPlayerController!.setResolution(url);
+          },
         ),
-      ),
-    );
-  }
-
-  Widget _buildResolutionSelectionRow(String name, String url) {
-    final bool isSelected = url == betterPlayerController!.betterPlayerDataSource!.url;
-    return BetterPlayerMaterialClickableWidget(
-      onTap: () {
-        Navigator.of(context).pop();
-        betterPlayerController!.setResolution(url);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        child: Row(
-          children: [
-            SizedBox(width: isSelected ? 8 : 16),
-            Visibility(
-              visible: isSelected,
-              child: Icon(Icons.check_outlined, color: betterPlayerControlsConfiguration.overflowModalTextColor),
-            ),
-            const SizedBox(width: 16),
-            Text(name, style: _getOverflowMenuElementTextStyle(isSelected)),
-          ],
-        ),
-      ),
+      );
+    });
+    _showSheet(
+      icon: betterPlayerControlsConfiguration.qualitiesIcon,
+      title: betterPlayerController!.translations.overflowMenuQuality,
+      subtitle: _selectedQualityLabel(),
+      child: items.isEmpty
+          ? BetterPlayerEmptyState(
+              icon: PhosphorIcons.monitorPlay(),
+              title: betterPlayerController!.translations.qualityAuto,
+            )
+          : _selectionList(items),
     );
   }
 
   void _showAudioTracksSelectionWidget() {
-    //HLS / DASH
-    final List<BetterPlayerAsmsAudioTrack>? asmsTracks = betterPlayerController!.betterPlayerAsmsAudioTracks;
-    final List<Widget> children = [];
-    final BetterPlayerAsmsAudioTrack? selectedAsmsAudioTrack = betterPlayerController!.betterPlayerAsmsAudioTrack;
-    if (asmsTracks != null) {
-      for (var index = 0; index < asmsTracks.length; index++) {
-        final bool isSelected = selectedAsmsAudioTrack != null && selectedAsmsAudioTrack == asmsTracks[index];
-        children.add(_buildAudioTrackRow(asmsTracks[index], isSelected));
-      }
-    }
-
-    if (children.isEmpty) {
-      children.add(
-        _buildAudioTrackRow(
-          BetterPlayerAsmsAudioTrack(label: betterPlayerController!.translations.generalDefault),
-          true,
-        ),
-      );
-    }
-
-    _showModalBottomSheet(children);
+    final tracks = betterPlayerController!.betterPlayerAsmsAudioTracks ?? const <BetterPlayerAsmsAudioTrack>[];
+    final selected = betterPlayerController!.betterPlayerAsmsAudioTrack;
+    _showSheet(
+      icon: betterPlayerControlsConfiguration.audioTracksIcon,
+      title: betterPlayerController!.translations.overflowMenuAudioTracks,
+      subtitle: _selectedAudioLabel(),
+      child: tracks.isEmpty
+          ? BetterPlayerEmptyState(
+              icon: PhosphorIcons.waveform(),
+              title: betterPlayerController!.translations.generalDefault,
+            )
+          : _selectionList(
+              tracks.asMap().entries.map((entry) {
+                final index = entry.key;
+                final track = entry.value;
+                final isSelected = selected == track || (selected == null && track.isDefault);
+                final label = track.label?.trim().isNotEmpty == true
+                    ? track.label!.trim()
+                    : track.language?.trim().isNotEmpty == true
+                    ? track.language!.trim()
+                    : '${betterPlayerController!.translations.generalDefault} ${index + 1}';
+                final details = <String>{
+                  if (track.language?.trim().isNotEmpty == true) track.language!.trim(),
+                  if (track.mimeType?.trim().isNotEmpty == true) track.mimeType!.replaceFirst('audio/', ''),
+                  if (track.isDefault) betterPlayerController!.translations.generalDefault,
+                }.join(' • ');
+                return BetterPlayerSelectionTile(
+                  icon: isSelected ? PhosphorIcons.waveform(PhosphorIconsStyle.fill) : PhosphorIcons.waveform(),
+                  title: label,
+                  subtitle: details,
+                  selected: isSelected,
+                  onTap: () {
+                    _closeSheet();
+                    betterPlayerController!.setAudioTrack(track);
+                  },
+                );
+              }).toList(),
+            ),
+    );
   }
 
-  Widget _buildAudioTrackRow(BetterPlayerAsmsAudioTrack audioTrack, bool isSelected) =>
-      BetterPlayerMaterialClickableWidget(
-        onTap: () {
-          Navigator.of(context).pop();
-          betterPlayerController!.setAudioTrack(audioTrack);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            children: [
-              SizedBox(width: isSelected ? 8 : 16),
-              Visibility(
-                visible: isSelected,
-                child: Icon(Icons.check_outlined, color: betterPlayerControlsConfiguration.overflowModalTextColor),
-              ),
-              const SizedBox(width: 16),
-              Text(audioTrack.label!, style: _getOverflowMenuElementTextStyle(isSelected)),
-            ],
-          ),
-        ),
-      );
+  String? _selectedSubtitleLabel() {
+    final source = betterPlayerController!.betterPlayerSubtitlesSource;
+    if (source == null || source.type == BetterPlayerSubtitlesSourceType.none) {
+      return betterPlayerController!.translations.generalNone;
+    }
+    return source.name ?? betterPlayerController!.translations.generalDefault;
+  }
 
-  TextStyle _getOverflowMenuElementTextStyle(bool isSelected) => TextStyle(
-    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-    color: isSelected
-        ? betterPlayerControlsConfiguration.overflowModalTextColor
-        : betterPlayerControlsConfiguration.overflowModalTextColor.withValues(alpha: 0.7),
+  String _selectedQualityLabel() {
+    final track = betterPlayerController!.betterPlayerAsmsTrack;
+    if (track == null || (track.height == 0 && track.width == 0 && track.bitrate == 0)) {
+      return betterPlayerController!.translations.qualityAuto;
+    }
+    return _qualityLabel(track);
+  }
+
+  String _qualityLabel(BetterPlayerAsmsTrack track) {
+    if ((track.height ?? 0) > 0) return '${track.height}p';
+    if ((track.width ?? 0) > 0) return '${track.width}px';
+    return betterPlayerController!.translations.qualityAuto;
+  }
+
+  String? _qualityDetails(BetterPlayerAsmsTrack track) {
+    final details = <String>[
+      if ((track.width ?? 0) > 0 && (track.height ?? 0) > 0) '${track.width}×${track.height}',
+      if ((track.bitrate ?? 0) > 0) BetterPlayerUtils.formatBitrate(track.bitrate!),
+      if (track.codecs?.trim().isNotEmpty == true) track.codecs!.trim(),
+      if (track.mimeType?.trim().isNotEmpty == true) track.mimeType!.replaceFirst('video/', ''),
+    ];
+    return details.isEmpty ? null : details.join(' • ');
+  }
+
+  String _selectedAudioLabel() {
+    final track = betterPlayerController!.betterPlayerAsmsAudioTrack;
+    return track?.label ?? track?.language ?? betterPlayerController!.translations.generalDefault;
+  }
+
+  Widget _selectionList(List<Widget> children) => ListView.separated(
+    shrinkWrap: true,
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+    itemCount: children.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 2),
+    itemBuilder: (_, index) => children[index],
   );
 
-  void _showModalBottomSheet(List<Widget> children) {
-    Platform.isAndroid ? _showMaterialBottomSheet(children) : _showCupertinoModalBottomSheet(children);
+  void _closeSheet() {
+    Navigator.of(
+      context,
+      rootNavigator: betterPlayerController?.betterPlayerConfiguration.useRootNavigator ?? false,
+    ).pop();
   }
 
-  void _showCupertinoModalBottomSheet(List<Widget> children) {
-    showCupertinoModalPopup<void>(
-      barrierColor: Colors.transparent,
-      context: context,
-      useRootNavigator: betterPlayerController?.betterPlayerConfiguration.useRootNavigator ?? false,
-      builder: (context) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            decoration: BoxDecoration(
-              color: betterPlayerControlsConfiguration.overflowModalColor,
-              /*shape: RoundedRectangleBorder(side: Bor,borderRadius: 24,)*/
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-            ),
-            child: Column(children: children),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showMaterialBottomSheet(List<Widget> children) {
+  void _showSheet({required IconData icon, required String title, required Widget child, String? subtitle}) {
     showModalBottomSheet<void>(
-      backgroundColor: Colors.transparent,
       context: context,
       useRootNavigator: betterPlayerController?.betterPlayerConfiguration.useRootNavigator ?? false,
-      builder: (context) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            decoration: BoxDecoration(
-              color: betterPlayerControlsConfiguration.overflowModalColor,
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-            ),
-            child: Column(children: children),
-          ),
-        ),
-      ),
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .58),
+      builder: (sheetContext) {
+        final inheritedTheme = Theme.of(context);
+        final configured = betterPlayerControlsConfiguration;
+        final modalSurface = configured.overflowModalColor;
+        final modalText = configured.overflowModalTextColor;
+        final useConfiguredSurface = modalSurface != Colors.white || modalText != Colors.black;
+        final colors = inheritedTheme.colorScheme;
+        final themed = inheritedTheme.copyWith(
+          colorScheme: useConfiguredSurface
+              ? colors.copyWith(
+                  surface: modalSurface,
+                  surfaceContainerHigh: modalSurface,
+                  surfaceContainerLow: Color.alphaBlend(modalText.withValues(alpha: .05), modalSurface),
+                  surfaceContainerHighest: Color.alphaBlend(modalText.withValues(alpha: .1), modalSurface),
+                  onSurface: modalText,
+                  onSurfaceVariant: modalText.withValues(alpha: .72),
+                  outlineVariant: modalText.withValues(alpha: .24),
+                  primary: betterPlayerReadableAccent(configured.overflowMenuIconsColor, modalSurface),
+                )
+              : colors,
+        );
+        return Theme(
+          data: themed,
+          child: BetterPlayerModalSheet(icon: icon, title: title, subtitle: subtitle, child: child),
+        );
+      },
     );
   }
 
-  ///Builds directionality widget which wraps child widget and forces left to
-  ///right directionality.
-  Widget buildLTRDirectionality(Widget child) => Directionality(textDirection: TextDirection.ltr, child: child);
+  ///Preserves ambient directionality so selectors and labels support RTL.
+  Widget buildLTRDirectionality(Widget child) => child;
 
-  ///Called when player controls visibility should be changed.
   void changePlayerControlsNotVisible(bool notVisible) {
     setState(() {
       if (notVisible) {
@@ -443,4 +390,13 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       controlsNotVisible = notVisible;
     });
   }
+}
+
+class _PlayerMenuItem {
+  const _PlayerMenuItem({required this.icon, required this.title, required this.onTap, this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
 }

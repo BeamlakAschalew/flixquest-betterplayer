@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:async';
+
+import 'package:better_player_plus/src/controls/better_player_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 /// Configuration for gesture-based controls
 class BetterPlayerGestureConfiguration {
@@ -50,7 +52,6 @@ enum GestureFeedbackType { volume, brightness, seekForward, seekBackward }
 /// Widget that handles gesture-based controls for video player
 class BetterPlayerGestureHandler extends StatefulWidget {
   const BetterPlayerGestureHandler({
-    Key? key,
     required this.child,
     required this.configuration,
     required this.onVolumeChanged,
@@ -60,7 +61,8 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     required this.currentBrightness,
     this.controlsVisible = true, // Whether controls are currently visible
     this.onTap, // Callback to show controls overlay on tap
-  }) : super(key: key);
+    super.key,
+  });
 
   final Widget child;
   final BetterPlayerGestureConfiguration configuration;
@@ -99,11 +101,6 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     if (isLeftSide && !config.enableBrightnessSwipe) return;
     if (!isLeftSide && !config.enableVolumeSwipe) return;
 
-    // DEBUG: Log gesture detection
-    print(
-      '🎯 BetterPlayer Gesture: Vertical drag started on ${isLeftSide ? "LEFT (Brightness)" : "RIGHT (Volume)"} side',
-    );
-
     _dragStartPosition = details.localPosition;
     _hasMovedEnough = false; // Don't activate gesture until we move enough
 
@@ -111,11 +108,9 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     if (isLeftSide) {
       _currentGesture = GestureFeedbackType.brightness;
       _initialValue = widget.currentBrightness;
-      print('🎯 Starting brightness gesture from: ${_initialValue.toStringAsFixed(2)}');
     } else {
       _currentGesture = GestureFeedbackType.volume;
       _initialValue = widget.currentVolume;
-      print('🎯 Starting volume gesture from: ${_initialValue.toStringAsFixed(2)}');
     }
 
     // DON'T call setState or set _isGestureActive yet - wait for actual movement
@@ -144,9 +139,6 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
 
     // Cancel any pending hide timer while actively dragging
     _feedbackTimer?.cancel();
-
-    // DEBUG: Log gesture value
-    print('🎯 BetterPlayer Gesture: ${isLeftSide ? "Brightness" : "Volume"} delta=$delta, initial=$_initialValue');
 
     final double sensitivity = isLeftSide ? config.brightnessSwipeSensitivity : config.volumeSwipeSensitivity;
 
@@ -178,8 +170,6 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
 
   void _onHorizontalDragStart(DragStartDetails details) {
     if (!widget.configuration.enableSeekSwipe) return;
-
-    print('🎯 BetterPlayer Gesture: Horizontal drag started (Seek)');
 
     _dragStartPosition = details.localPosition;
     _hasMovedEnough = false; // Don't activate until we move enough
@@ -253,7 +243,6 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
 
   @override
   Widget build(BuildContext context) {
-    print('🎯 BetterPlayer: Building GestureHandler widget');
     final size = MediaQuery.of(context).size;
     final swipeAreaWidth = size.width * widget.configuration.swipeAreaWidthPercentage;
 
@@ -335,119 +324,31 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
   }
 
   Widget _buildFeedbackOverlay() {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
-    final surfaceColor = theme.colorScheme.surface;
-    final onSurfaceColor = theme.colorScheme.onSurface;
-
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: surfaceColor.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: primaryColor.withOpacity(0.3), width: 2),
-        ),
-        child: _buildFeedbackContent(primaryColor, onSurfaceColor),
-      ),
-    );
+    return Center(child: _buildFeedbackContent());
   }
 
-  Widget _buildFeedbackContent(Color primaryColor, Color onSurfaceColor) {
+  Widget _buildFeedbackContent() {
     switch (_currentGesture!) {
       case GestureFeedbackType.volume:
-        return _buildVolumeIndicator(primaryColor, onSurfaceColor);
+        final percentage = (_gestureValue * 100).round();
+        return BetterPlayerGesturePill(
+          icon: percentage == 0 ? PhosphorIcons.speakerSlash() : PhosphorIcons.speakerHigh(),
+          label: '$percentage%',
+          value: _gestureValue,
+        );
       case GestureFeedbackType.brightness:
-        return _buildBrightnessIndicator(primaryColor, onSurfaceColor);
+        return BetterPlayerGesturePill(
+          icon: PhosphorIcons.sun(),
+          label: '${(_gestureValue * 100).round()}%',
+          value: _gestureValue,
+        );
       case GestureFeedbackType.seekForward:
       case GestureFeedbackType.seekBackward:
-        return _buildSeekIndicator(primaryColor, onSurfaceColor);
+        final forward = _currentGesture == GestureFeedbackType.seekForward;
+        return BetterPlayerGesturePill(
+          icon: forward ? PhosphorIcons.fastForward() : PhosphorIcons.rewind(),
+          label: '${forward ? '+' : '-'}${_gestureValue.abs().round()}s',
+        );
     }
-  }
-
-  Widget _buildVolumeIndicator(Color primaryColor, Color textColor) {
-    final percentage = (_gestureValue * 100).round();
-    final isMuted = percentage == 0;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(isMuted ? Icons.volume_off : Icons.volume_up, color: primaryColor, size: 36),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: 160,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: _gestureValue,
-              backgroundColor: textColor.withOpacity(0.2),
-              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-              minHeight: 6,
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '$percentage%',
-          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBrightnessIndicator(Color primaryColor, Color textColor) {
-    final percentage = (_gestureValue * 100).round();
-
-    // Use more granular brightness icons
-    IconData brightnessIcon;
-    if (percentage < 20) {
-      brightnessIcon = Icons.brightness_low;
-    } else if (percentage < 70) {
-      brightnessIcon = Icons.brightness_medium;
-    } else {
-      brightnessIcon = Icons.brightness_high;
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(brightnessIcon, color: primaryColor, size: 36),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: 160,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: _gestureValue,
-              backgroundColor: textColor.withOpacity(0.2),
-              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-              minHeight: 6,
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '$percentage%',
-          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSeekIndicator(Color primaryColor, Color textColor) {
-    final seconds = _gestureValue.abs().round();
-    final isForward = _currentGesture == GestureFeedbackType.seekForward;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(isForward ? Icons.fast_forward : Icons.fast_rewind, color: primaryColor, size: 36),
-        const SizedBox(width: 12),
-        Text(
-          '${isForward ? '+' : '-'}${seconds}s',
-          style: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
   }
 }

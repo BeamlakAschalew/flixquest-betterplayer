@@ -28,8 +28,6 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
   final StreamController<bool> playerOrientationStreamController = StreamController();
 
   bool _initialized = false;
-  bool _isFull = false;
-
   StreamSubscription? _controllerEventSubscription;
 
   @override
@@ -59,14 +57,6 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     setState(() {
       if (!_initialized) {
         _initialized = true;
-      }
-    });
-  }
-
-  void _onFullScreenChanged(BetterPlayerControllerEvent event) {
-    setState(() {
-      if (!_isFull) {
-        _isFull = true;
       }
     });
   }

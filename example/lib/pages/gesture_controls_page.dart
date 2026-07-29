@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../constants.dart';
 
 class GestureControlsPage extends StatefulWidget {
+  const GestureControlsPage({super.key});
+
   @override
-  _GestureControlsPageState createState() => _GestureControlsPageState();
+  State<GestureControlsPage> createState() => _GestureControlsPageState();
 }
 
 class _GestureControlsPageState extends State<GestureControlsPage> {

@@ -14,9 +14,8 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
     this.onDragUpdate,
     this.onTapDown,
     this.showThumbnailPreview = true,
-    Key? key,
-  }) : colors = colors ?? BetterPlayerProgressColors(),
-       super(key: key);
+    super.key,
+  }) : colors = colors ?? BetterPlayerProgressColors();
 
   final VideoPlayerController? controller;
   final BetterPlayerController? betterPlayerController;
@@ -28,7 +27,7 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
   final bool showThumbnailPreview;
 
   @override
-  _VideoProgressBarState createState() {
+  State<BetterPlayerMaterialVideoProgressBar> createState() {
     return _VideoProgressBarState();
   }
 }
@@ -353,7 +352,7 @@ class _ProgressBarPainter extends CustomPainter {
 
   VideoPlayerValue value;
   BetterPlayerProgressColors colors;
-  BetterPlayerController _betterPlayerController;
+  final BetterPlayerController _betterPlayerController;
 
   @override
   bool shouldRepaint(CustomPainter painter) {
@@ -451,8 +450,7 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black87,
         borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .5), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -474,7 +472,7 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
                     // Loading overlay for unbuffered content
                     if (!isBuffered)
                       Container(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: .7),
                         child: Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -484,14 +482,14 @@ class _ThumbnailPreviewWidget extends StatelessWidget {
                                 height: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.8)),
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha: .8)),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 'Loading...',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
+                                  color: Colors.white.withValues(alpha: .8),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                 ),
