@@ -10,6 +10,7 @@ class BetterPlayerTvMenuItem {
     this.subtitle,
     this.selected = false,
     this.enabled = true,
+    this.showsNext = false,
   });
 
   final String label;
@@ -18,6 +19,7 @@ class BetterPlayerTvMenuItem {
   final VoidCallback onSelected;
   final bool selected;
   final bool enabled;
+  final bool showsNext;
 }
 
 class BetterPlayerTvMenu extends StatefulWidget {
@@ -25,6 +27,7 @@ class BetterPlayerTvMenu extends StatefulWidget {
     required this.title,
     required this.items,
     required this.onClose,
+    this.onBack,
     this.accentColor = Colors.deepOrange,
     super.key,
   });
@@ -32,6 +35,7 @@ class BetterPlayerTvMenu extends StatefulWidget {
   final String title;
   final List<BetterPlayerTvMenuItem> items;
   final VoidCallback onClose;
+  final VoidCallback? onBack;
   final Color accentColor;
 
   @override
@@ -88,10 +92,12 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
   }
 
   KeyEventResult _handleKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.browserBack) {
-      widget.onClose();
+      (widget.onBack ?? widget.onClose)();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
@@ -298,7 +304,7 @@ class _TvMenuTileState extends State<_TvMenuTile> {
                 ),
                 if (widget.item.selected)
                   Icon(PhosphorIcons.checkCircle(PhosphorIconsStyle.fill), color: widget.accentColor, size: 24)
-                else
+                else if (widget.item.showsNext)
                   const Icon(PhosphorIconsRegular.caretRight, color: Colors.white54, size: 20),
               ],
             ),
@@ -330,6 +336,8 @@ class _TvMenuCloseButtonState extends State<_TvMenuCloseButton> {
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
       actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(

@@ -12,9 +12,10 @@ class BetterPlayerTvControlsController {
 
   bool handleBack() => _state?._handleExternalBack() ?? false;
 
-  void show() => _state?._showFromController();
+  void show({bool restorePreviousFocus = false}) =>
+      _state?._showFromController(restorePreviousFocus: restorePreviousFocus);
 
-  void hide() => _state?._setVisibility(false);
+  void hide({bool preserveFocus = false}) => _state?._hideFromController(preserveFocus: preserveFocus);
 }
 
 class BetterPlayerTvControls extends StatefulWidget {
@@ -43,9 +44,12 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   Timer? _hideTimer;
   VideoPlayerValue _value = VideoPlayerValue.uninitialized();
   _TvMenuData? _menu;
+  final List<_TvMenuData> _menuHistory = <_TvMenuData>[];
+  ValueNotifier<VideoPlayerValue>? _attachedVideoController;
+  FocusNode? _menuReturnFocus;
+  FocusNode? _overlayReturnFocus;
   bool _visible = true;
   bool _timelineEditing = false;
-  bool _videoListenerAttached = false;
 
   BetterPlayerControlsConfiguration get _configuration => widget.controller.betterPlayerControlsConfiguration;
 
@@ -68,12 +72,30 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     });
   }
 
-  void _attachVideoListener() {
-    if (_videoListenerAttached || widget.controller.videoPlayerController == null) {
-      return;
+  @override
+  void didUpdateWidget(BetterPlayerTvControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controlsController, widget.controlsController)) {
+      if (identical(oldWidget.controlsController?._state, this)) {
+        oldWidget.controlsController?._state = null;
+      }
+      widget.controlsController?._state = this;
     }
-    _videoListenerAttached = true;
-    widget.controller.videoPlayerController!.addListener(_onVideoValue);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeEventsListener(_onPlayerEvent);
+      _attachedVideoController?.removeListener(_onVideoValue);
+      _attachedVideoController = null;
+      widget.controller.addEventsListener(_onPlayerEvent);
+      _attachVideoListener();
+    }
+  }
+
+  void _attachVideoListener() {
+    final controller = widget.controller.videoPlayerController;
+    if (identical(_attachedVideoController, controller)) return;
+    _attachedVideoController?.removeListener(_onVideoValue);
+    _attachedVideoController = controller;
+    controller?.addListener(_onVideoValue);
     _onVideoValue();
   }
 
@@ -83,7 +105,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   }
 
   void _onVideoValue() {
-    final value = widget.controller.videoPlayerController?.value;
+    final value = _attachedVideoController?.value;
     if (value != null && mounted) setState(() => _value = value);
   }
 
@@ -91,9 +113,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   void dispose() {
     _hideTimer?.cancel();
     widget.controller.removeEventsListener(_onPlayerEvent);
-    if (_videoListenerAttached) {
-      widget.controller.videoPlayerController?.removeListener(_onVideoValue);
-    }
+    _attachedVideoController?.removeListener(_onVideoValue);
     _rootFocus.dispose();
     _playFocus.dispose();
     if (identical(widget.controlsController?._state, this)) {
@@ -152,7 +172,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   bool _handleExternalBack() {
     if (_menu != null) {
-      _closeMenu();
+      _handleMenuBack();
       return true;
     }
     if (_visible) {
@@ -162,14 +182,34 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     return false;
   }
 
-  void _showFromController() {
+  void _showFromController({required bool restorePreviousFocus}) {
     _setVisibility(true);
-    _requestPlayFocus();
+    final target = restorePreviousFocus ? _overlayReturnFocus : null;
+    _overlayReturnFocus = null;
+    _requestControlFocus(target);
+  }
+
+  void _hideFromController({required bool preserveFocus}) {
+    if (preserveFocus && _visible && _overlayReturnFocus == null) {
+      final currentFocus = FocusManager.instance.primaryFocus;
+      if (currentFocus != null && currentFocus != _rootFocus && currentFocus.context != null) {
+        _overlayReturnFocus = currentFocus;
+      }
+    }
+    _setVisibility(false);
   }
 
   void _requestPlayFocus() {
+    _requestControlFocus(_playFocus);
+  }
+
+  void _requestControlFocus(FocusNode? preferred) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _playFocus.requestFocus();
+      if (!mounted) return;
+      final target = preferred != null && preferred.context != null && preferred.canRequestFocus
+          ? preferred
+          : _playFocus;
+      target.requestFocus();
     });
   }
 
@@ -214,14 +254,33 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _restartHideTimer();
   }
 
-  void _openMenu(String title, List<BetterPlayerTvMenuItem> items) {
+  void _openMenu(String title, List<BetterPlayerTvMenuItem> items, {bool nested = false}) {
     _hideTimer?.cancel();
+    if (_menu == null) {
+      _menuReturnFocus = FocusManager.instance.primaryFocus;
+      _menuHistory.clear();
+    } else if (nested) {
+      _menuHistory.add(_menu!);
+    } else {
+      _menuHistory.clear();
+    }
     setState(() => _menu = _TvMenuData(title, items));
   }
 
-  void _closeMenu() {
+  void _handleMenuBack() {
+    if (_menuHistory.isEmpty) {
+      _closeMenu();
+      return;
+    }
+    setState(() => _menu = _menuHistory.removeLast());
+  }
+
+  void _closeMenu({bool restoreFocus = true}) {
+    final returnFocus = _menuReturnFocus;
+    _menuReturnFocus = null;
+    _menuHistory.clear();
     setState(() => _menu = null);
-    _requestPlayFocus();
+    if (restoreFocus) _requestControlFocus(returnFocus);
     _restartHideTimer();
   }
 
@@ -232,35 +291,42 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           label: 'Playback speed',
           subtitle: '${_value.speed}×',
           icon: PhosphorIcons.gauge(),
-          onSelected: _openSpeedMenu,
+          showsNext: true,
+          onSelected: () => _openSpeedMenu(nested: true),
         ),
       if (_configuration.enableSubtitles)
         BetterPlayerTvMenuItem(
           label: 'Subtitles',
           subtitle: _subtitleLabel(),
           icon: PhosphorIcons.closedCaptioning(),
-          onSelected: _openSubtitlesMenu,
+          showsNext: true,
+          onSelected: () => _openSubtitlesMenu(nested: true),
         ),
       if (_configuration.enableAudioTracks)
         BetterPlayerTvMenuItem(
           label: 'Audio track',
           subtitle: _audioLabel(),
           icon: PhosphorIcons.waveform(),
-          onSelected: _openAudioMenu,
+          showsNext: true,
+          onSelected: () => _openAudioMenu(nested: true),
         ),
       if (_configuration.enableQualities)
         BetterPlayerTvMenuItem(
           label: 'Quality',
           subtitle: _qualityLabel(),
           icon: PhosphorIcons.highDefinition(),
-          onSelected: _openQualityMenu,
+          showsNext: true,
+          onSelected: () => _openQualityMenu(nested: true),
         ),
       for (final item in _configuration.overflowMenuCustomItems)
         BetterPlayerTvMenuItem(
           label: item.title,
           icon: item.icon,
+          showsNext: true,
           onSelected: () {
-            _closeMenu();
+            final returnFocus = _menuReturnFocus;
+            _closeMenu(restoreFocus: false);
+            _overlayReturnFocus = returnFocus;
             item.onClicked();
           },
         ),
@@ -268,7 +334,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _openMenu('Player settings', items);
   }
 
-  void _openSpeedMenu() {
+  void _openSpeedMenu({bool nested = false}) {
     final current = _value.speed;
     _openMenu(
       'Playback speed',
@@ -286,10 +352,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
             ),
           )
           .toList(growable: false),
+      nested: nested,
     );
   }
 
-  void _openSubtitlesMenu() {
+  void _openSubtitlesMenu({bool nested = false}) {
     final selected = widget.controller.betterPlayerSubtitlesSource;
     final sources = <BetterPlayerSubtitlesSource>[
       BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none),
@@ -323,10 +390,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
             );
           })
           .toList(growable: false),
+      nested: nested,
     );
   }
 
-  void _openAudioMenu() {
+  void _openAudioMenu({bool nested = false}) {
     final tracks = widget.controller.betterPlayerAsmsAudioTracks ?? const [];
     final selected = widget.controller.betterPlayerAsmsAudioTrack;
     _openMenu(
@@ -358,10 +426,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                   ),
                 )
                 .toList(growable: false),
+      nested: nested,
     );
   }
 
-  void _openQualityMenu() {
+  void _openQualityMenu({bool nested = false}) {
     final items = <BetterPlayerTvMenuItem>[];
     final tracks = widget.controller.betterPlayerAsmsTracks;
     final selectedTrack = widget.controller.betterPlayerAsmsTrack;
@@ -408,7 +477,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       );
     }
-    _openMenu('Video quality', items);
+    _openMenu('Video quality', items, nested: nested);
   }
 
   String _subtitleLabel() {
@@ -452,11 +521,28 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            if (_visible) _buildControls(),
+            IgnorePointer(
+              ignoring: !_visible,
+              child: ExcludeFocus(
+                excluding: !_visible,
+                child: AnimatedOpacity(
+                  opacity: _visible ? 1 : 0,
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  child: _buildControls(),
+                ),
+              ),
+            ),
             if (_value.isBuffering) Center(child: CircularProgressIndicator(color: _accent)),
             if (_value.hasError) _buildError(),
             if (_menu case final menu?)
-              BetterPlayerTvMenu(title: menu.title, items: menu.items, onClose: _closeMenu, accentColor: _accent),
+              BetterPlayerTvMenu(
+                title: menu.title,
+                items: menu.items,
+                onClose: _closeMenu,
+                onBack: _handleMenuBack,
+                accentColor: _accent,
+              ),
           ],
         ),
       ),

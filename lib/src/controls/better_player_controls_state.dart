@@ -198,6 +198,9 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     for (var index = 0; index < tracks.length; index++) {
       final track = tracks[index];
       final automatic = track.height == 0 && track.width == 0 && track.bitrate == 0;
+      final currentSize = betterPlayerController?.videoPlayerController?.value.size;
+      final currentHeight = currentSize?.height.toInt() ?? 0;
+      final currentWidth = currentSize?.width.toInt() ?? 0;
       final label = automatic
           ? betterPlayerController!.translations.qualityAuto
           : index < names.length && names[index].trim().isNotEmpty
@@ -212,7 +215,9 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
               ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill)
               : PhosphorIcons.monitorPlay(),
           title: label,
-          subtitle: automatic ? null : _qualityDetails(track),
+          subtitle: automatic
+              ? (currentHeight > 0 ? '$currentWidth×$currentHeight' : null)
+              : _qualityDetails(track),
           selected: selected,
           onTap: () {
             _closeSheet();
@@ -347,6 +352,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       context: context,
       useRootNavigator: betterPlayerController?.betterPlayerConfiguration.useRootNavigator ?? false,
       useSafeArea: true,
+      showDragHandle: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: .58),

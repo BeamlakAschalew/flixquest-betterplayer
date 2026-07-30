@@ -70,7 +70,6 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     Widget content = LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 520 || constraints.maxHeight < 270;
-        final loading = isLoading(_latestValue);
         final overlay = Stack(
           fit: StackFit.expand,
           children: [
@@ -82,7 +81,6 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
               onEnd: _onPlayerHide,
               child: IgnorePointer(ignoring: controlsNotVisible, child: _buildVisibleControls(compact)),
             ),
-            if (loading) Center(child: _buildLoadingControls(compact)),
             _buildNextVideoWidget(),
           ],
         );
@@ -159,7 +157,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           ),
         ),
         Align(alignment: Alignment.topCenter, child: _topBar(compact)),
-        if (!isLoading(_latestValue)) Center(child: _transportControls(compact)),
+        Center(child: _transportControlsArea(compact)),
         Align(alignment: Alignment.bottomCenter, child: _bottomBar(compact)),
       ],
     );
@@ -512,6 +510,23 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     );
   }
 
+  Widget _transportControlsArea(bool compact) {
+    final loading = isLoading(_latestValue);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _transportControls(compact),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 3,
+          child: loading
+              ? IgnorePointer(child: _buildLoadingWidget())
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLoadingWidget() {
     if (_configuration.loadingWidget != null) {
       return _configuration.loadingWidget!;
@@ -519,26 +534,18 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     return Semantics(
       label: 'Buffering',
       liveRegion: true,
-      child: Container(
-        width: 64,
-        height: 64,
-        padding: const EdgeInsets.all(17),
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: .28), shape: BoxShape.circle),
-        child: CircularProgressIndicator(strokeWidth: 3, color: _configuration.loadingColor),
+      child: SizedBox(
+        width: 60,
+        height: 3,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            minHeight: 3,
+            color: _configuration.loadingColor,
+            backgroundColor: _configuration.loadingColor.withValues(alpha: .24),
+          ),
+        ),
       ),
-    );
-  }
-
-  Widget _buildLoadingControls(bool compact) {
-    final transportEnabled =
-        _betterPlayerController?.controlsEnabled == true &&
-        (_configuration.enablePlayPause || _configuration.enableSkips);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IgnorePointer(child: _buildLoadingWidget()),
-        if (transportEnabled) ...[SizedBox(height: compact ? 12 : 18), _transportControls(compact)],
-      ],
     );
   }
 
