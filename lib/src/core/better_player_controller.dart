@@ -191,6 +191,13 @@ class BetterPlayerController {
   ///Selected videoPlayerValue when error occurred.
   VideoPlayerValue? _videoPlayerValueOnError;
 
+  ///Retries transient network failures without requiring a user action.
+  Timer? _networkRecoveryTimer;
+  bool _networkRecoveryInProgress = false;
+  int _networkRecoveryAttempts = 0;
+  static const Duration _initialNetworkRecoveryDelay = Duration(seconds: 1);
+  static const Duration _networkRecoveryInterval = Duration(seconds: 5);
+
   ///Flag which holds information about player visibility
   bool _isPlayerVisible = true;
 
@@ -219,6 +226,7 @@ class BetterPlayerController {
 
   ///Setup new data source in Better Player.
   Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
+    _cancelNetworkRecovery(clearSavedPosition: true);
     postEvent(
       BetterPlayerEvent(
         BetterPlayerEventType.setupDataSource,
@@ -712,12 +720,16 @@ class BetterPlayerController {
 
     if (currentVideoPlayerValue.hasError) {
       _videoPlayerValueOnError ??= currentVideoPlayerValue;
+      _scheduleNetworkRecovery();
       _postEvent(
         BetterPlayerEvent(
           BetterPlayerEventType.exception,
           parameters: <String, dynamic>{'exception': currentVideoPlayerValue.errorDescription},
         ),
       );
+    }
+    if (currentVideoPlayerValue.initialized && !currentVideoPlayerValue.hasError) {
+      _cancelNetworkRecovery(clearSavedPosition: !_networkRecoveryInProgress);
     }
     if (currentVideoPlayerValue.initialized && !_hasCurrentDataSourceInitialized) {
       _hasCurrentDataSourceInitialized = true;
@@ -1110,6 +1122,51 @@ class BetterPlayerController {
     }
   }
 
+  void _scheduleNetworkRecovery() {
+    if (_disposed ||
+        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
+        _networkRecoveryInProgress ||
+        _networkRecoveryTimer?.isActive == true) {
+      return;
+    }
+    final delay = _networkRecoveryAttempts == 0 ? _initialNetworkRecoveryDelay : _networkRecoveryInterval;
+    _networkRecoveryTimer = Timer(delay, () {
+      _networkRecoveryTimer = null;
+      unawaited(_attemptNetworkRecovery());
+    });
+  }
+
+  Future<void> _attemptNetworkRecovery() async {
+    if (_disposed ||
+        _networkRecoveryInProgress ||
+        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network) {
+      return;
+    }
+    _networkRecoveryInProgress = true;
+    try {
+      await retryDataSource();
+      _networkRecoveryAttempts = 0;
+    } catch (error) {
+      _networkRecoveryAttempts++;
+      BetterPlayerUtils.log('Network playback recovery failed: $error');
+    } finally {
+      _networkRecoveryInProgress = false;
+      final value = videoPlayerController?.value;
+      if (!_disposed && (value == null || value.hasError || !value.initialized)) {
+        _scheduleNetworkRecovery();
+      }
+    }
+  }
+
+  void _cancelNetworkRecovery({required bool clearSavedPosition}) {
+    _networkRecoveryTimer?.cancel();
+    _networkRecoveryTimer = null;
+    if (clearSavedPosition) {
+      _videoPlayerValueOnError = null;
+      _networkRecoveryAttempts = 0;
+    }
+  }
+
   ///Set [audioTrack] in player. Works only for HLS or DASH streams.
   void setAudioTrack(BetterPlayerAsmsAudioTrack audioTrack) {
     if (videoPlayerController == null) {
@@ -1208,6 +1265,7 @@ class BetterPlayerController {
       }
       _eventListeners.clear();
       _nextVideoTimer?.cancel();
+      _cancelNetworkRecovery(clearSavedPosition: true);
       _nextVideoTimeStreamController.close();
       _controlsVisibilityStreamController.close();
       _videoEventStreamSubscription?.cancel();

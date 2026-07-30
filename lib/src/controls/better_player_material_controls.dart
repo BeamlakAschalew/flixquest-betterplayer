@@ -70,6 +70,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     Widget content = LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 520 || constraints.maxHeight < 270;
+        final loading = isLoading(_latestValue);
         final overlay = Stack(
           fit: StackFit.expand,
           children: [
@@ -81,7 +82,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
               onEnd: _onPlayerHide,
               child: IgnorePointer(ignoring: controlsNotVisible, child: _buildVisibleControls(compact)),
             ),
-            if (isLoading(_latestValue)) Center(child: _buildLoadingWidget()),
+            if (loading) Center(child: _buildLoadingControls(compact)),
             _buildNextVideoWidget(),
           ],
         );
@@ -158,7 +159,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           ),
         ),
         Align(alignment: Alignment.topCenter, child: _topBar(compact)),
-        Center(child: _transportControls(compact)),
+        if (!isLoading(_latestValue)) Center(child: _transportControls(compact)),
         Align(alignment: Alignment.bottomCenter, child: _bottomBar(compact)),
       ],
     );
@@ -225,21 +226,23 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   }
 
   Widget _transportControls(bool compact) {
-    if (isLoading(_latestValue)) return const SizedBox.shrink();
     final finished = isVideoFinished(_latestValue);
     final iconColor = _configuration.iconsColor;
     final gap = compact ? 16.0 : 28.0;
+    final canSeek = _latestValue?.duration != null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_configuration.enableSkips)
           BetterPlayerControlButton(
+            key: const Key('better_player_material_controls_skip_back_button'),
             icon: _configuration.skipBackIcon,
             label: 'Seek back ${_configuration.backwardSkipTimeInMilliseconds ~/ 1000} seconds',
             iconColor: iconColor,
+            backgroundColor: Colors.black.withValues(alpha: .14),
             size: compact ? 44 : 52,
             iconSize: compact ? 21 : 25,
-            onPressed: skipBack,
+            onPressed: canSeek ? skipBack : null,
           ),
         SizedBox(width: gap),
         if (_configuration.enablePlayPause)
@@ -256,6 +259,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                 ? 'Pause'
                 : 'Play',
             iconColor: iconColor,
+            backgroundColor: Colors.black.withValues(alpha: .18),
             size: compact ? 62 : 76,
             iconSize: compact ? 31 : 38,
             onPressed: _onPlayPause,
@@ -263,12 +267,14 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         SizedBox(width: gap),
         if (_configuration.enableSkips)
           BetterPlayerControlButton(
+            key: const Key('better_player_material_controls_skip_forward_button'),
             icon: _configuration.skipForwardIcon,
             label: 'Seek forward ${_configuration.forwardSkipTimeInMilliseconds ~/ 1000} seconds',
             iconColor: iconColor,
+            backgroundColor: Colors.black.withValues(alpha: .14),
             size: compact ? 44 : 52,
             iconSize: compact ? 21 : 25,
-            onPressed: skipForward,
+            onPressed: canSeek ? skipForward : null,
           ),
       ],
     );
@@ -517,9 +523,22 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         width: 64,
         height: 64,
         padding: const EdgeInsets.all(17),
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: .65), shape: BoxShape.circle),
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: .28), shape: BoxShape.circle),
         child: CircularProgressIndicator(strokeWidth: 3, color: _configuration.loadingColor),
       ),
+    );
+  }
+
+  Widget _buildLoadingControls(bool compact) {
+    final transportEnabled =
+        _betterPlayerController?.controlsEnabled == true &&
+        (_configuration.enablePlayPause || _configuration.enableSkips);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IgnorePointer(child: _buildLoadingWidget()),
+        if (transportEnabled) ...[SizedBox(height: compact ? 12 : 18), _transportControls(compact)],
+      ],
     );
   }
 
@@ -635,9 +654,17 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
 
   void _updateState() {
     if (!mounted || _controller == null) return;
-    if (!controlsNotVisible || isVideoFinished(_controller!.value) || isLoading(_controller!.value)) {
+    final nextValue = _controller!.value;
+    final loadingChanged = isLoading(_latestValue) != isLoading(nextValue);
+    final shouldRebuild =
+        !controlsNotVisible ||
+        isVideoFinished(nextValue) ||
+        isLoading(nextValue) ||
+        loadingChanged ||
+        _latestValue?.hasError != nextValue.hasError;
+    _latestValue = nextValue;
+    if (shouldRebuild) {
       setState(() {
-        _latestValue = _controller!.value;
         if (isVideoFinished(_latestValue)) {
           changePlayerControlsNotVisible(false);
         }

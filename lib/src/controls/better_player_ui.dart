@@ -17,6 +17,7 @@ class BetterPlayerControlButton extends StatelessWidget {
     required this.onPressed,
     this.iconColor = Colors.white,
     this.selected = false,
+    this.backgroundColor,
     this.size = 48,
     this.iconSize = 24,
     super.key,
@@ -27,12 +28,13 @@ class BetterPlayerControlButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Color iconColor;
   final bool selected;
+  final Color? backgroundColor;
   final double size;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    final background = selected ? iconColor.withValues(alpha: .14) : Colors.transparent;
+    final background = selected ? iconColor.withValues(alpha: .14) : backgroundColor ?? Colors.transparent;
     final foreground = iconColor;
     return Semantics(
       button: true,

@@ -285,15 +285,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         [self play];
     } else {
         _stalledCount++;
-        if (_stalledCount > 60){
-            if (_eventSink != nil) {
-                _eventSink([FlutterError
-                        errorWithCode:@"VideoError"
-                        message:@"Failed to load video: playback stalled"
-                        details:nil]);
-            }
-            return;
-        }
         [self performSelector:@selector(startStalledCheck) withObject:nil afterDelay:1];
 
     }

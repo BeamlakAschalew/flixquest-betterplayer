@@ -225,13 +225,6 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
                 play()
             } else {
                 stalledCount += 1
-                if stalledCount > 60 {
-                    if let eventSink = eventSink {
-                        let error = FlutterError(code: "VideoError", message: "Failed to load video: playback stalled", details: nil)
-                        eventSink(error)
-                    }
-                    return
-                }
                 perform(#selector(startStalledCheckObjC), with: nil, afterDelay: 1)
             }
         }

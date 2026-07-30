@@ -68,6 +68,8 @@ import androidx.media3.exoplayer.source.ClippingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import java.io.File
 import java.lang.Exception
 import java.lang.IllegalStateException
@@ -75,6 +77,43 @@ import java.util.*
 import kotlin.math.max
 import kotlin.math.min
 import androidx.core.net.toUri
+
+private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 10_000L
+private const val SHORT_SEGMENT_RETRY_COUNT = 3
+
+/**
+ * Retries ordinary loads persistently, but exposes a short adaptive media
+ * segment after repeated failures so the player can seek past that exact
+ * segment. Manifest, initialization, and segments longer than ten seconds keep
+ * the normal resilient behavior.
+ */
+private class ShortSegmentLoadErrorHandlingPolicy(
+    private val onShortSegmentExhausted: (startMs: Long, endMs: Long) -> Boolean
+) : DefaultLoadErrorHandlingPolicy(Int.MAX_VALUE) {
+    override fun getRetryDelayMsFor(
+        loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+    ): Long {
+        val mediaLoadData = loadErrorInfo.mediaLoadData
+        val startMs = mediaLoadData.mediaStartTimeMs
+        val endMs = mediaLoadData.mediaEndTimeMs
+        val durationMs = endMs - startMs
+        val isShortMediaSegment =
+            mediaLoadData.dataType == C.DATA_TYPE_MEDIA &&
+                startMs != C.TIME_UNSET &&
+                endMs != C.TIME_UNSET &&
+                durationMs in 1..MAX_SKIPPABLE_SEGMENT_DURATION_MS
+
+        if (isShortMediaSegment) {
+            if (loadErrorInfo.errorCount >= SHORT_SEGMENT_RETRY_COUNT &&
+                onShortSegmentExhausted(startMs, endMs)
+            ) {
+                return C.TIME_UNSET
+            }
+            return min(loadErrorInfo.errorCount * 1_000L, 5_000L)
+        }
+        return super.getRetryDelayMsFor(loadErrorInfo)
+    }
+}
 
 @UnstableApi
 internal class BetterPlayer(
@@ -103,6 +142,12 @@ internal class BetterPlayer(
     private val customDefaultLoadControl: CustomDefaultLoadControl =
         customDefaultLoadControl ?: CustomDefaultLoadControl()
     private var lastSendBufferedPosition = 0L
+    private val resilientLoadErrorHandlingPolicy =
+        DefaultLoadErrorHandlingPolicy(Int.MAX_VALUE)
+    private var pendingBrokenSegmentEndMs: Long? = null
+    private val skippedBrokenSegmentEnds = mutableSetOf<Long>()
+    private val shortSegmentLoadErrorHandlingPolicy =
+        ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
 
     init {
         val loadBuilder = DefaultLoadControl.Builder()
@@ -141,6 +186,8 @@ internal class BetterPlayer(
     ) {
         this.key = key
         isInitialized = false
+        pendingBrokenSegmentEndMs = null
+        skippedBrokenSegmentEnds.clear()
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
@@ -410,6 +457,7 @@ internal class BetterPlayer(
                 DefaultSsChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
+                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -419,6 +467,7 @@ internal class BetterPlayer(
                 DefaultDashChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
+                setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -426,6 +475,7 @@ internal class BetterPlayer(
 
             C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(mediaDataSourceFactory)
                 .apply {
+                    setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
                     if (drmSessionManagerProvider != null) {
                         setDrmSessionManagerProvider(drmSessionManagerProvider)
                     }
@@ -435,6 +485,7 @@ internal class BetterPlayer(
                 mediaDataSourceFactory,
                 DefaultExtractorsFactory()
             ).apply {
+                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -497,12 +548,55 @@ internal class BetterPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (skipBrokenShortSegment()) {
+                    return
+                }
                 eventSink.error("VideoError", "Video player had error $error", "")
             }
         })
         val reply: MutableMap<String, Any> = HashMap()
         reply["textureId"] = textureEntry.id()
         result.success(reply)
+    }
+
+    private fun markShortSegmentForSkipping(startMs: Long, endMs: Long): Boolean {
+        if (skippedBrokenSegmentEnds.contains(endMs)) {
+            return true
+        }
+        val currentPositionMs = exoPlayer?.currentPosition ?: return false
+        val segmentIsBlockingPlayback =
+            currentPositionMs + 1_000L >= startMs && currentPositionMs <= endMs
+        if (!segmentIsBlockingPlayback) {
+            return false
+        }
+        pendingBrokenSegmentEndMs = endMs
+        return true
+    }
+
+    private fun skipBrokenShortSegment(): Boolean {
+        val segmentEndMs = pendingBrokenSegmentEndMs ?: return false
+        pendingBrokenSegmentEndMs = null
+        if (!skippedBrokenSegmentEnds.add(segmentEndMs)) {
+            return false
+        }
+        val player = exoPlayer ?: return false
+        val durationMs = player.duration
+        val unboundedTargetMs = segmentEndMs + 1L
+        val targetMs =
+            if (durationMs == C.TIME_UNSET || durationMs <= 0L) {
+                unboundedTargetMs
+            } else {
+                min(unboundedTargetMs, durationMs)
+            }
+        val resumePlayback = player.playWhenReady
+        Log.w(
+            TAG,
+            "Skipping repeatedly broken adaptive segment to ${targetMs}ms"
+        )
+        player.seekTo(targetMs)
+        player.prepare()
+        player.playWhenReady = resumePlayback
+        return true
     }
 
     fun sendBufferingUpdate(isFromBufferingStart: Boolean) {
