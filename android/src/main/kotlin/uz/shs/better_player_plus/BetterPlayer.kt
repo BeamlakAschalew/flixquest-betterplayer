@@ -77,6 +77,7 @@ import java.io.File
 import java.lang.Exception
 import java.lang.IllegalStateException
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
 import androidx.core.net.toUri
@@ -137,6 +138,8 @@ internal class BetterPlayer(
     private var playerNotificationManager: PlayerNotificationManager? = null
     private var refreshHandler: Handler? = null
     private var refreshRunnable: Runnable? = null
+    private var positionSnapshotHandler: Handler? = null
+    private var positionSnapshotRunnable: Runnable? = null
     private var exoPlayerEventListener: Player.Listener? = null
     private var bitmap: Bitmap? = null
     private var mediaSession: MediaSessionCompat? = null
@@ -148,8 +151,19 @@ internal class BetterPlayer(
     private var lastSendBufferedPosition = 0L
     private val resilientLoadErrorHandlingPolicy =
         DefaultLoadErrorHandlingPolicy(Int.MAX_VALUE)
+    /**
+     * LoadErrorHandlingPolicy callbacks run on ExoPlayer's playback thread,
+     * while player APIs (including currentPosition) must run on the player
+     * application looper. Keep only cross-thread state in the callback and
+     * read the player again from onPlayerError on the main thread.
+     */
+    @Volatile
+    private var pendingBrokenSegmentStartMs: Long? = null
+    @Volatile
     private var pendingBrokenSegmentEndMs: Long? = null
-    private val skippedBrokenSegmentEnds = mutableSetOf<Long>()
+    private val skippedBrokenSegmentEnds = ConcurrentHashMap.newKeySet<Long>()
+    @Volatile
+    private var lastKnownPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
 
@@ -190,6 +204,8 @@ internal class BetterPlayer(
     ) {
         this.key = key
         isInitialized = false
+        lastKnownPositionMs = 0L
+        pendingBrokenSegmentStartMs = null
         pendingBrokenSegmentEndMs = null
         skippedBrokenSegmentEnds.clear()
         val uri = dataSource?.toUri()
@@ -381,6 +397,10 @@ internal class BetterPlayer(
 
         refreshHandler = Handler(Looper.getMainLooper())
         refreshRunnable = Runnable {
+            // This runnable is posted to the player's application looper.
+            // Keep a snapshot for the load-error callback, which runs on a
+            // separate playback thread and must not access ExoPlayer directly.
+            lastKnownPositionMs = exoPlayer?.currentPosition ?: 0L
             val playbackState: PlaybackStateCompat = if (exoPlayer?.isPlaying == true) {
                 PlaybackStateCompat.Builder()
                     .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
@@ -555,6 +575,18 @@ internal class BetterPlayer(
         surface = Surface(textureEntry.surfaceTexture())
         exoPlayer?.setVideoSurface(surface)
         setAudioAttributes(exoPlayer, true)
+
+        // Keep a main-thread position snapshot available to the load-error
+        // policy. The policy itself runs on ExoPlayer's playback thread and
+        // must never call player APIs directly.
+        positionSnapshotHandler = Handler(Looper.getMainLooper())
+        positionSnapshotRunnable = object : Runnable {
+            override fun run() {
+                lastKnownPositionMs = exoPlayer?.currentPosition ?: 0L
+                positionSnapshotHandler?.postDelayed(this, 250L)
+            }
+        }
+        positionSnapshotHandler?.post(positionSnapshotRunnable!!)
         exoPlayer?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
@@ -604,23 +636,35 @@ internal class BetterPlayer(
         if (skippedBrokenSegmentEnds.contains(endMs)) {
             return true
         }
-        val currentPositionMs = exoPlayer?.currentPosition ?: return false
+        // Do not access ExoPlayer here. This policy callback is invoked on
+        // ExoPlayer's playback thread; player APIs are main-thread-only.
+        val currentPositionMs = lastKnownPositionMs
         val segmentIsBlockingPlayback =
             currentPositionMs + 1_000L >= startMs && currentPositionMs <= endMs
         if (!segmentIsBlockingPlayback) {
             return false
         }
+        pendingBrokenSegmentStartMs = startMs
         pendingBrokenSegmentEndMs = endMs
         return true
     }
 
     private fun skipBrokenShortSegment(): Boolean {
+        val segmentStartMs = pendingBrokenSegmentStartMs ?: return false
         val segmentEndMs = pendingBrokenSegmentEndMs ?: return false
+        pendingBrokenSegmentStartMs = null
         pendingBrokenSegmentEndMs = null
-        if (!skippedBrokenSegmentEnds.add(segmentEndMs)) {
+        val player = exoPlayer ?: return false
+        // onPlayerError is delivered on the player's application looper, so
+        // this access is safe. Re-check against the live position because the
+        // snapshot used by the playback-thread callback may be up to one
+        // refresh interval old.
+        val currentPositionMs = player.currentPosition
+        val segmentIsBlockingPlayback =
+            currentPositionMs + 1_000L >= segmentStartMs && currentPositionMs <= segmentEndMs
+        if (!segmentIsBlockingPlayback || !skippedBrokenSegmentEnds.add(segmentEndMs)) {
             return false
         }
-        val player = exoPlayer ?: return false
         val durationMs = player.duration
         val unboundedTargetMs = segmentEndMs + 1L
         val targetMs =
@@ -926,6 +970,9 @@ internal class BetterPlayer(
     fun dispose() {
         disposeMediaSession()
         disposeRemoteNotifications()
+        positionSnapshotHandler?.removeCallbacksAndMessages(null)
+        positionSnapshotHandler = null
+        positionSnapshotRunnable = null
         if (isInitialized) {
             exoPlayer?.stop()
         }
