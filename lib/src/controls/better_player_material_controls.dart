@@ -84,7 +84,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             _buildNextVideoWidget(),
           ],
         );
-        return _betterPlayerController?.isFullScreen == true ? SafeArea(child: overlay) : overlay;
+        return overlay;
       },
     );
 
@@ -138,9 +138,11 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
 
   Widget _buildVisibleControls(bool compact) {
     if (_betterPlayerController?.controlsEnabled != true) {
-      return Align(
-        alignment: Alignment.topRight,
-        child: Padding(padding: const EdgeInsets.all(10), child: _lockButton()),
+      return _withFullscreenSafeArea(
+        Align(
+          alignment: Alignment.topRight,
+          child: Padding(padding: const EdgeInsets.all(10), child: _lockButton()),
+        ),
       );
     }
     return Stack(
@@ -156,12 +158,22 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             ),
           ),
         ),
-        Align(alignment: Alignment.topCenter, child: _topBar(compact)),
-        Center(child: _transportControlsArea(compact)),
-        Align(alignment: Alignment.bottomCenter, child: _bottomBar(compact)),
+        _withFullscreenSafeArea(
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(alignment: Alignment.topCenter, child: _topBar(compact)),
+              Center(child: _transportControlsArea(compact)),
+              Align(alignment: Alignment.bottomCenter, child: _bottomBar(compact)),
+            ],
+          ),
+        ),
       ],
     );
   }
+
+  Widget _withFullscreenSafeArea(Widget child) =>
+      _betterPlayerController?.isFullScreen == true ? SafeArea(child: child) : child;
 
   Widget _topBar(bool compact) {
     final iconColor = _configuration.iconsColor;

@@ -1,4 +1,5 @@
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/controls/better_player_material_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:better_player_plus/src/core/better_player_with_controls.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
@@ -87,6 +88,37 @@ void main() {
     await tester.tap(playTapSurface);
     await tester.pump(const Duration(milliseconds: 400));
     expect(videoController.value.isPlaying, isTrue);
+  });
+
+  testWidgets('fullscreen scrim fills unsafe area while controls remain safe', (WidgetTester tester) async {
+    mockController.enterFullScreen();
+
+    await tester.pumpWidget(
+      _wrapWidget(
+        BetterPlayerControllerProvider(
+          controller: mockController,
+          child: BetterPlayerMaterialControls(
+            onControlsVisibilityChanged: (_) {},
+            onFullScreenChanged: (_) {},
+            controlsConfiguration: mockController.betterPlayerControlsConfiguration,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final scrim = find.byWidgetPredicate(
+      (widget) =>
+          widget is DecoratedBox &&
+          widget.decoration is BoxDecoration &&
+          (widget.decoration as BoxDecoration).gradient is LinearGradient,
+    );
+    expect(scrim, findsOneWidget);
+    expect(find.ancestor(of: scrim, matching: find.byType(SafeArea)), findsNothing);
+
+    final playButton = find.byKey(const Key('better_player_material_controls_play_pause_button'));
+    expect(playButton, findsOneWidget);
+    expect(find.ancestor(of: playButton, matching: find.byType(SafeArea)), findsOneWidget);
   });
 }
 
