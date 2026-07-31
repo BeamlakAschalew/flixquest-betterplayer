@@ -48,6 +48,7 @@ import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
@@ -62,6 +63,8 @@ import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
 import androidx.media3.exoplayer.drm.LocalMediaDrmCallback
 import androidx.media3.exoplayer.drm.UnsupportedDrmException
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadHelper
 import androidx.media3.exoplayer.smoothstreaming.DefaultSsChunkSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
 import androidx.media3.exoplayer.source.ClippingMediaSource
@@ -80,6 +83,7 @@ import androidx.core.net.toUri
 
 private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 10_000L
 private const val SHORT_SEGMENT_RETRY_COUNT = 3
+private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
 
 /**
  * Retries ordinary loads persistently, but exposes a short adaptive media
@@ -239,7 +243,11 @@ internal class BetterPlayer(
         } else {
             dataSourceFactory = DefaultDataSource.Factory(context)
         }
-        val mediaSource = buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
+        val mediaSource = cacheKey
+            ?.removePrefix(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX)
+            ?.takeIf { cacheKey.startsWith(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX) }
+            ?.let { downloadId -> buildFlixQuestOfflineMediaSource(context, downloadId) }
+            ?: buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
         if (overriddenDuration != 0L) {
             val clippingMediaSource = ClippingMediaSource(
                 mediaSource,
@@ -494,6 +502,39 @@ internal class BetterPlayer(
             else -> {
                 throw IllegalStateException("Unsupported type: $type")
             }
+        }
+    }
+
+    /**
+     * FlixQuest stores HLS/DASH downloads in Media3's cache rather than as a
+     * single file. Its Better Player fork can open those downloads directly by
+     * reusing the app's read-only cache factory. Reflection deliberately keeps
+     * this plugin buildable outside the FlixQuest application.
+     */
+    @OptIn(UnstableApi::class)
+    private fun buildFlixQuestOfflineMediaSource(
+        context: Context,
+        downloadId: String,
+    ): MediaSource {
+        try {
+            val storeClass = Class.forName(
+                "dev.beamlak.flixquest_v2.downloads.StreamDownloadStore",
+            )
+            val companion = storeClass.getField("Companion").get(null)
+            val store = companion.javaClass
+                .getMethod("get", Context::class.java)
+                .invoke(companion, context.applicationContext)
+            val download = store.javaClass
+                .getMethod("getDownload", String::class.java)
+                .invoke(store, downloadId) as? Download
+                ?: throw IllegalArgumentException("Offline download not found: $downloadId")
+            val cacheFactory = store.javaClass
+                .getMethod("readOnlyCacheFactory")
+                .invoke(store) as? CacheDataSource.Factory
+                ?: throw IllegalStateException("Offline cache is unavailable.")
+            return DownloadHelper.createMediaSource(download.request, cacheFactory)
+        } catch (error: ReflectiveOperationException) {
+            throw IllegalStateException("Could not access the FlixQuest offline cache.", error)
         }
     }
 
