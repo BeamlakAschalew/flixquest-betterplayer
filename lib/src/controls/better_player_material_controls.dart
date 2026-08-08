@@ -65,7 +65,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     }
     _initializeSystemLevels();
     final gestures = _configuration.gestureConfiguration;
-    final gesturesEnabled = gestures.enableVolumeSwipe || gestures.enableBrightnessSwipe || gestures.enableSeekSwipe;
+    final gesturesEnabled = (gestures.enableVolumeSwipe || gestures.enableBrightnessSwipe || gestures.enableSeekSwipe) && _betterPlayerController?.controlsEnabled == true;
 
     Widget content = LayoutBuilder(
       builder: (context, constraints) {
@@ -383,7 +383,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   );
 
   Widget _muteButton(bool compact) => BetterPlayerControlButton(
-    icon: (_latestValue?.volume ?? 0) > 0 ? _configuration.muteIcon : _configuration.unMuteIcon,
+    icon: (_latestValue?.volume ?? 0) > 0 ? _configuration.unMuteIcon : _configuration.muteIcon,
     label: (_latestValue?.volume ?? 0) > 0 ? 'Mute' : 'Unmute',
     iconColor: _configuration.iconsColor,
     size: compact ? 42 : 48,

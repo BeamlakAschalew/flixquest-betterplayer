@@ -37,10 +37,21 @@ class BetterPlayerAsmsUtils {
       }
 
       final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        BetterPlayerUtils.log(
+          'GetDataFromUrl failed: HTTP ${response.statusCode}',
+        );
+        return null;
+      }
       var data = '';
       await response.transform(const Utf8Decoder()).listen((content) {
         data += content;
       }).asFuture<String?>();
+
+      if (data.trim().isEmpty) {
+        BetterPlayerUtils.log('GetDataFromUrl failed: empty response body');
+        return null;
+      }
 
       return data;
     } on Exception catch (exception) {
