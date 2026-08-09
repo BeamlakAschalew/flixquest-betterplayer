@@ -40,6 +40,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<void> setDataSource(int? textureId, DataSource dataSource) async {
+    await _channel.invokeMethod<void>('setDataSource', <String, dynamic>{
+      'textureId': textureId,
+      'dataSource': _dataSourceDescription(dataSource),
+    });
+  }
+
+  Map<String, dynamic> _dataSourceDescription(DataSource dataSource) {
     Map<String, dynamic>? dataSourceDescription;
     switch (dataSource.sourceType) {
       case DataSourceType.asset:
@@ -98,11 +105,12 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           'clearKey': dataSource.clearKey,
         };
     }
-    await _channel.invokeMethod<void>('setDataSource', <String, dynamic>{
-      'textureId': textureId,
-      'dataSource': dataSourceDescription,
-    });
-    return;
+    final preRoll = dataSource.preRollDataSource;
+    if (preRoll != null) {
+      dataSourceDescription['preRollDataSource'] = _dataSourceDescription(preRoll);
+      dataSourceDescription['contentStartPosition'] = dataSource.contentStartPosition?.inMilliseconds ?? 0;
+    }
+    return dataSourceDescription;
   }
 
   @override

@@ -165,6 +165,8 @@ internal class BetterPlayer(
     private val skippedBrokenSegmentEnds = ConcurrentHashMap.newKeySet<Long>()
     @Volatile
     private var lastKnownPositionMs = 0L
+    private var hasPreRollSequence = false
+    private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
 
@@ -205,7 +207,9 @@ internal class BetterPlayer(
         licenseUrl: String?,
         drmHeaders: Map<String, String>?,
         cacheKey: String?,
-        clearKey: String?
+        clearKey: String?,
+        preRollDataSource: Map<String, Any?>? = null,
+        contentStartPositionMs: Long = 0L
     ) {
         this.key = key
         isInitialized = false
@@ -269,18 +273,77 @@ internal class BetterPlayer(
             ?.takeIf { cacheKey.startsWith(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX) }
             ?.let { downloadId -> buildFlixQuestOfflineMediaSource(context, downloadId) }
             ?: buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
-        if (overriddenDuration != 0L) {
+        val contentMediaSource = if (overriddenDuration != 0L) {
             val clippingMediaSource = ClippingMediaSource(
                 mediaSource,
                 0,
                 overriddenDuration * 1000
             )
-            exoPlayer?.setMediaSource(clippingMediaSource)
+            clippingMediaSource
         } else {
-            exoPlayer?.setMediaSource(mediaSource)
+            mediaSource
+        }
+        hasPreRollSequence = preRollDataSource != null
+        this.contentStartPositionMs = contentStartPositionMs.coerceAtLeast(0L)
+        if (preRollDataSource != null) {
+            val preRollMediaSource = buildPreRollMediaSource(
+                context,
+                preRollDataSource
+            )
+            exoPlayer?.setMediaSources(listOf(preRollMediaSource, contentMediaSource))
+        } else {
+            exoPlayer?.setMediaSource(contentMediaSource)
         }
         exoPlayer?.prepare()
         result.success(null)
+    }
+
+    private fun buildPreRollMediaSource(
+        context: Context,
+        dataSource: Map<String, Any?>
+    ): MediaSource {
+        val uri = (dataSource["uri"] as? String)?.toUri()
+        val headers = (dataSource["headers"] as? Map<*, *>)
+            ?.entries
+            ?.mapNotNull { entry ->
+                val name = entry.key as? String
+                val value = entry.value as? String
+                if (name != null && value != null) name to value else null
+            }
+            ?.toMap()
+            ?: emptyMap()
+        val userAgent = getUserAgent(headers)
+        var factory: DataSource.Factory = if (isHTTP(uri)) {
+            getDataSourceFactory(userAgent, headers)
+        } else {
+            DefaultDataSource.Factory(context)
+        }
+        val useCache = dataSource["useCache"] as? Boolean ?: false
+        val maxCacheSize = (dataSource["maxCacheSize"] as? Number)?.toLong() ?: 0L
+        val maxCacheFileSize =
+            (dataSource["maxCacheFileSize"] as? Number)?.toLong() ?: 0L
+        if (useCache && maxCacheSize > 0 && maxCacheFileSize > 0) {
+            factory = CacheDataSourceFactory(
+                context,
+                maxCacheSize,
+                maxCacheFileSize,
+                factory
+            )
+        }
+
+        val contentDrmSessionManager = drmSessionManager
+        drmSessionManager = null
+        return try {
+            buildMediaSource(
+                uri,
+                factory,
+                dataSource["formatHint"] as? String,
+                dataSource["cacheKey"] as? String,
+                context
+            )
+        } finally {
+            drmSessionManager = contentDrmSessionManager
+        }
     }
 
     fun setupPlayerNotification(
@@ -592,6 +655,18 @@ internal class BetterPlayer(
         }
         positionSnapshotHandler?.post(positionSnapshotRunnable!!)
         exoPlayer?.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val player = exoPlayer ?: return
+                if (!hasPreRollSequence || player.currentMediaItemIndex != 1) {
+                    return
+                }
+                if (contentStartPositionMs > 0L) {
+                    player.seekTo(1, contentStartPositionMs)
+                }
+                isInitialized = true
+                sendInitialized()
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
@@ -625,6 +700,17 @@ internal class BetterPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val player = exoPlayer
+                if (hasPreRollSequence &&
+                    player?.currentMediaItemIndex == 0 &&
+                    player.hasNextMediaItem()
+                ) {
+                    val resumePlayback = player.playWhenReady
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.playWhenReady = resumePlayback
+                    return
+                }
                 if (skipBrokenShortSegment()) {
                     return
                 }

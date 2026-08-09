@@ -233,9 +233,30 @@ class BetterPlayerController {
   Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) =>
       _setupDataSourceWithSubtitle(betterPlayerDataSource);
 
+  /// Plays [preRollDataSource] and [betterPlayerDataSource] as one native
+  /// sequence while retaining the same surface, controls, and fullscreen
+  /// route across the transition.
+  Future setupDataSourceWithPreRoll({
+    required BetterPlayerDataSource preRollDataSource,
+    required BetterPlayerDataSource betterPlayerDataSource,
+    Duration contentStartPosition = Duration.zero,
+  }) {
+    if (preRollDataSource.type != BetterPlayerDataSourceType.network ||
+        betterPlayerDataSource.type != BetterPlayerDataSourceType.network) {
+      throw ArgumentError('Pre-roll sequences currently require network data sources.');
+    }
+    return _setupDataSourceWithSubtitle(
+      betterPlayerDataSource,
+      preRollDataSource: preRollDataSource,
+      contentStartPosition: contentStartPosition,
+    );
+  }
+
   Future<void> _setupDataSourceWithSubtitle(
     BetterPlayerDataSource betterPlayerDataSource, {
     BetterPlayerSubtitlesSource? subtitlesSourceToRestore,
+    BetterPlayerDataSource? preRollDataSource,
+    Duration contentStartPosition = Duration.zero,
   }) async {
     _cancelNetworkRecovery(clearSavedPosition: true);
     postEvent(
@@ -280,7 +301,11 @@ class BetterPlayerController {
     }
 
     ///Process data source
-    await _setupDataSource(betterPlayerDataSource);
+    await _setupDataSource(
+      betterPlayerDataSource,
+      preRollDataSource: preRollDataSource,
+      contentStartPosition: contentStartPosition,
+    );
     final castConfiguration = betterPlayerDataSource.castConfiguration;
     if (castConfiguration != null && Platform.isAndroid) {
       await videoPlayerController?.configureCast(castConfiguration.toMap());
@@ -458,7 +483,11 @@ class BetterPlayerController {
   }
 
   ///Internal method which invokes videoPlayerController source setup.
-  Future _setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
+  Future _setupDataSource(
+    BetterPlayerDataSource betterPlayerDataSource, {
+    BetterPlayerDataSource? preRollDataSource,
+    Duration contentStartPosition = Duration.zero,
+  }) async {
     switch (betterPlayerDataSource.type) {
       case BetterPlayerDataSourceType.network:
         await videoPlayerController?.setNetworkDataSource(
@@ -481,6 +510,20 @@ class BetterPlayerController {
           activityName: _betterPlayerDataSource?.notificationConfiguration?.activityName,
           clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
           videoExtension: _betterPlayerDataSource!.videoExtension,
+          preRollDataSource: preRollDataSource == null
+              ? null
+              : DataSource(
+                  sourceType: DataSourceType.network,
+                  uri: preRollDataSource.url,
+                  formatHint: _getVideoFormat(preRollDataSource.videoFormat),
+                  headers: preRollDataSource.headers,
+                  useCache: preRollDataSource.cacheConfiguration?.useCache ?? false,
+                  maxCacheSize: preRollDataSource.cacheConfiguration?.maxCacheSize,
+                  maxCacheFileSize: preRollDataSource.cacheConfiguration?.maxCacheFileSize,
+                  cacheKey: preRollDataSource.cacheConfiguration?.key,
+                  videoExtension: preRollDataSource.videoExtension,
+                ),
+          contentStartPosition: contentStartPosition,
         );
 
       case BetterPlayerDataSourceType.file:

@@ -303,7 +303,35 @@ extension SwiftBetterPlayerPlugin {
                 }
                 player.setDataSourceAsset(assetPath, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration)
             } else if let uriArg = uriArg, let url = URL(string: uriArg) {
-                player.setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: videoExtension)
+                let preRoll = dataSource["preRollDataSource"] as? [String: Any]
+                let preRollUrl = (preRoll?["uri"] as? String).flatMap(URL.init(string:))
+                if let preRoll = preRoll, let preRollUrl = preRollUrl {
+                    let preRollHeaders = preRoll["headers"] as? [String: Any] ?? [:]
+                    let preRollUseCache = (preRoll["useCache"] as? NSNumber)?.boolValue ?? false
+                    let preRollCacheKey = preRoll["cacheKey"] as? String
+                    let preRollVideoExtension = preRoll["videoExtension"] as? String
+                    let contentStartPosition = (dataSource["contentStartPosition"] as? NSNumber)?.intValue ?? 0
+                    player.setDataSourceSequence(
+                        preRollURL: preRollUrl,
+                        preRollHeaders: preRollHeaders,
+                        preRollUseCache: preRollUseCache,
+                        preRollCacheKey: preRollCacheKey,
+                        preRollVideoExtension: preRollVideoExtension,
+                        contentURL: url,
+                        contentKey: key,
+                        contentCertificateUrl: certificateUrl,
+                        contentLicenseUrl: licenseUrl,
+                        contentHeaders: headers,
+                        contentUseCache: useCache,
+                        contentCacheKey: cacheKey,
+                        cacheManager: cacheManager,
+                        overriddenDuration: overriddenDuration,
+                        contentVideoExtension: videoExtension,
+                        contentStartPosition: contentStartPosition
+                    )
+                } else {
+                    player.setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: videoExtension)
+                }
             } else {
                 result(FlutterMethodNotImplemented)
                 return

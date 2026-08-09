@@ -398,6 +398,14 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             val clearKey = getParameter<String?>(dataSource, DRM_CLEARKEY_PARAMETER, null)
             val drmHeaders: Map<String, String> =
                 getParameter(dataSource, DRM_HEADERS_PARAMETER, HashMap())
+            val preRollDataSource =
+                getParameter<Map<String, Any?>?>(
+                    dataSource,
+                    PRE_ROLL_DATA_SOURCE_PARAMETER,
+                    null
+                )
+            val contentStartPosition: Number =
+                getParameter(dataSource, CONTENT_START_POSITION_PARAMETER, 0)
             player.setDataSource(
                 flutterState!!.applicationContext,
                 key,
@@ -412,7 +420,9 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 licenseUrl,
                 drmHeaders,
                 cacheKey,
-                clearKey
+                clearKey,
+                preRollDataSource,
+                contentStartPosition.toLong()
             )
         }
     }
@@ -870,6 +880,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val INIT_METHOD = "init"
         private const val CREATE_METHOD = "create"
         private const val SET_DATA_SOURCE_METHOD = "setDataSource"
+        private const val PRE_ROLL_DATA_SOURCE_PARAMETER = "preRollDataSource"
+        private const val CONTENT_START_POSITION_PARAMETER = "contentStartPosition"
         private const val CONFIGURE_CAST_METHOD = "configureCast"
         private const val SET_LOOPING_METHOD = "setLooping"
         private const val SET_VOLUME_METHOD = "setVolume"

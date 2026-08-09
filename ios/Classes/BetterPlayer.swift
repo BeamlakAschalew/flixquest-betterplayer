@@ -32,12 +32,16 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     public var playerRate: Float = 1.0
     public var overriddenDuration: Int = 0
     public var lastAvPlayerTimeControlStatus: AVPlayer.TimeControlStatus? = nil
+    private weak var observedItem: AVPlayerItem?
+    private weak var sequenceContentItem: AVPlayerItem?
+    private var sequenceContentStartPosition: Int = 0
+    private var sequenceContentStartApplied: Bool = false
 
     private var pipController: AVPictureInPictureController?
     private var restoreUIOnPipStop: ((Bool) -> Void)?
 
     public override init() {
-        self.player = AVPlayer()
+        self.player = AVQueuePlayer()
         super.init()
         self.player.actionAtItemEnd = .none
         if #available(iOS 10.0, *) {
@@ -70,6 +74,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
             item.addObserver(self, forKeyPath: "playbackBufferEmpty", options: [], context: &playbackBufferEmptyContext)
             item.addObserver(self, forKeyPath: "playbackBufferFull", options: [], context: &playbackBufferFullContext)
             NotificationCenter.default.addObserver(self, selector: #selector(itemDidPlayToEndTime(_:)), name: .AVPlayerItemDidPlayToEndTime, object: item)
+            observedItem = item
             observersAdded = true
         }
     }
@@ -77,18 +82,35 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     private func removeObservers() {
         if observersAdded {
             player.removeObserver(self, forKeyPath: "rate", context: nil)
-            player.currentItem?.removeObserver(self, forKeyPath: "status", context: &statusContext)
-            player.currentItem?.removeObserver(self, forKeyPath: "presentationSize", context: &presentationSizeContext)
-            player.currentItem?.removeObserver(self, forKeyPath: "loadedTimeRanges", context: &timeRangeContext)
-            player.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp", context: &playbackLikelyToKeepUpContext)
-            player.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty", context: &playbackBufferEmptyContext)
-            player.currentItem?.removeObserver(self, forKeyPath: "playbackBufferFull", context: &playbackBufferFullContext)
+            observedItem?.removeObserver(self, forKeyPath: "status", context: &statusContext)
+            observedItem?.removeObserver(self, forKeyPath: "presentationSize", context: &presentationSizeContext)
+            observedItem?.removeObserver(self, forKeyPath: "loadedTimeRanges", context: &timeRangeContext)
+            observedItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp", context: &playbackLikelyToKeepUpContext)
+            observedItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty", context: &playbackBufferEmptyContext)
+            observedItem?.removeObserver(self, forKeyPath: "playbackBufferFull", context: &playbackBufferFullContext)
             NotificationCenter.default.removeObserver(self)
+            observedItem = nil
             observersAdded = false
         }
     }
 
     @objc private func itemDidPlayToEndTime(_ notification: Notification) {
+        if let contentItem = sequenceContentItem,
+           let endedItem = notification.object as? AVPlayerItem,
+           endedItem !== contentItem {
+            removeObservers()
+            isInitialized = false
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, !self.disposed else { return }
+                if self.player.currentItem !== contentItem,
+                   let queue = self.player as? AVQueuePlayer {
+                    queue.advanceToNextItem()
+                }
+                self.addObservers(contentItem)
+                self.onReadyToPlay()
+            }
+            return
+        }
         if isLooping {
             if let p = notification.object as? AVPlayerItem {
                 p.seek(to: .zero, completionHandler: nil)
@@ -158,41 +180,73 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
 
     public func setDataSourceURL(_ url: URL, key: String?, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, videoExtension: String?) {
         self.overriddenDuration = 0
-        var finalHeaders = headers
-        if finalHeaders["dummy"] == nil {} // keep dictionary type stable
-
-        let item: AVPlayerItem
-        if useCache {
-            let _cacheKey = cacheKey
-            let _videoExt = videoExtension
-            item = cacheManager.getCachingPlayerItemForNormalPlayback(url, cacheKey: _cacheKey, videoExtension: _videoExt, headers: finalHeaders as NSDictionary as! [NSObject: AnyObject]) ?? AVPlayerItem(url: url)
-        } else {
-            let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": finalHeaders])
-            if let certificateUrl = certificateUrl, !certificateUrl.isEmpty {
-                let certURL = URL(string: certificateUrl)
-                let licURL = licenseUrl.flatMap { URL(string: $0) }
-                if let certURL = certURL {
-                    let delegate = BetterPlayerEzDrmAssetsLoaderDelegate(certURL, withLicenseURL: licURL)
-                    self.loaderDelegate = delegate
-                    let qos = DispatchQoS.QoSClass.default
-                    let streamQueue = DispatchQueue(label: "streamQueue", qos: DispatchQoS(qosClass: qos, relativePriority: -1), attributes: [])
-                    asset.resourceLoader.setDelegate(delegate, queue: streamQueue)
-                }
-            }
-            item = AVPlayerItem(asset: asset)
-        }
+        let item = makePlayerItem(url, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, videoExtension: videoExtension)
         if #available(iOS 10.0, *), overriddenDuration > 0 {
             self.overriddenDuration = overriddenDuration
         }
         setDataSourcePlayerItem(item, key: key)
     }
 
+    public func setDataSourceSequence(preRollURL: URL, preRollHeaders: [AnyHashable: Any], preRollUseCache: Bool, preRollCacheKey: String?, preRollVideoExtension: String?, contentURL: URL, contentKey: String?, contentCertificateUrl: String?, contentLicenseUrl: String?, contentHeaders: [AnyHashable: Any], contentUseCache: Bool, contentCacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, contentVideoExtension: String?, contentStartPosition: Int) {
+        self.overriddenDuration = overriddenDuration
+        let preRollItem = makePlayerItem(preRollURL, certificateUrl: nil, licenseUrl: nil, headers: preRollHeaders, useCache: preRollUseCache, cacheKey: preRollCacheKey, cacheManager: cacheManager, videoExtension: preRollVideoExtension)
+        let contentItem = makePlayerItem(contentURL, certificateUrl: contentCertificateUrl, licenseUrl: contentLicenseUrl, headers: contentHeaders, useCache: contentUseCache, cacheKey: contentCacheKey, cacheManager: cacheManager, videoExtension: contentVideoExtension)
+
+        removeObservers()
+        self.key = contentKey
+        self.stalledCount = 0
+        self.isStalledCheckStarted = false
+        self.playerRate = 1
+        self.isInitialized = false
+        self.sequenceContentItem = contentItem
+        self.sequenceContentStartPosition = max(0, contentStartPosition)
+        self.sequenceContentStartApplied = false
+        if let queue = player as? AVQueuePlayer {
+            queue.pause()
+            queue.removeAllItems()
+            queue.actionAtItemEnd = .advance
+            queue.insert(preRollItem, after: nil)
+            queue.insert(contentItem, after: preRollItem)
+        }
+        addObservers(preRollItem)
+    }
+
+    private func makePlayerItem(_ url: URL, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, videoExtension: String?) -> AVPlayerItem {
+        var finalHeaders = headers
+        if finalHeaders["dummy"] == nil {} // keep dictionary type stable
+        if useCache {
+            return cacheManager.getCachingPlayerItemForNormalPlayback(url, cacheKey: cacheKey, videoExtension: videoExtension, headers: finalHeaders as NSDictionary as! [NSObject: AnyObject]) ?? AVPlayerItem(url: url)
+        }
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": finalHeaders])
+        if let certificateUrl = certificateUrl, !certificateUrl.isEmpty,
+           let certURL = URL(string: certificateUrl) {
+            let licURL = licenseUrl.flatMap { URL(string: $0) }
+            let delegate = BetterPlayerEzDrmAssetsLoaderDelegate(certURL, withLicenseURL: licURL)
+            self.loaderDelegate = delegate
+            let qos = DispatchQoS.QoSClass.default
+            let streamQueue = DispatchQueue(label: "streamQueue", qos: DispatchQoS(qosClass: qos, relativePriority: -1), attributes: [])
+            asset.resourceLoader.setDelegate(delegate, queue: streamQueue)
+        }
+        return AVPlayerItem(asset: asset)
+    }
+
     private func setDataSourcePlayerItem(_ item: AVPlayerItem, key: String?) {
+        removeObservers()
+        sequenceContentItem = nil
+        sequenceContentStartPosition = 0
+        sequenceContentStartApplied = false
         self.key = key
         self.stalledCount = 0
         self.isStalledCheckStarted = false
         self.playerRate = 1
-        player.replaceCurrentItem(with: item)
+        if let queue = player as? AVQueuePlayer {
+            queue.pause()
+            queue.removeAllItems()
+            queue.actionAtItemEnd = .none
+            queue.insert(item, after: nil)
+        } else {
+            player.replaceCurrentItem(with: item)
+        }
 
         let asset = item.asset
         asset.loadValuesAsynchronously(forKeys: ["tracks"]) {
@@ -282,6 +336,16 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
             if let item = object as? AVPlayerItem {
                 switch item.status {
                 case .failed:
+                    if let contentItem = sequenceContentItem, item !== contentItem {
+                        removeObservers()
+                        isInitialized = false
+                        if let queue = player as? AVQueuePlayer {
+                            queue.advanceToNextItem()
+                        }
+                        addObservers(contentItem)
+                        onReadyToPlay()
+                        return
+                    }
                     NSLog("Failed to load video: \(String(describing: item.error?.localizedDescription))")
                     if let eventSink = eventSink {
                         let message = "Failed to load video: \(item.error?.localizedDescription ?? "unknown")"
@@ -328,6 +392,22 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         guard let eventSink = eventSink, !isInitialized, key != nil else { return }
         guard player.currentItem != nil else { return }
         guard player.status == .readyToPlay else { return }
+
+        if let contentItem = sequenceContentItem,
+           player.currentItem === contentItem,
+           !sequenceContentStartApplied {
+            sequenceContentStartApplied = true
+            if sequenceContentStartPosition > 0 {
+                player.seek(
+                    to: CMTimeMake(
+                        value: Int64(sequenceContentStartPosition),
+                        timescale: 1000
+                    ),
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero
+                )
+            }
+        }
 
         let size = player.currentItem?.presentationSize ?? .zero
         var width = size.width
@@ -573,6 +653,9 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         disposed = false
         failedCount = 0
         key = nil
+        sequenceContentItem = nil
+        sequenceContentStartPosition = 0
+        sequenceContentStartApplied = false
         guard player.currentItem != nil else { return }
         removeObservers()
         player.currentItem?.asset.cancelLoading()

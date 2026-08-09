@@ -220,6 +220,8 @@ class DataSource {
     this.activityName,
     this.clearKey,
     this.videoExtension,
+    this.preRollDataSource,
+    this.contentStartPosition,
   }) : assert(uri == null || asset == null);
 
   /// The maximum cache size to keep on disk in bytes.
@@ -303,6 +305,14 @@ class DataSource {
   final String? clearKey;
 
   final String? videoExtension;
+
+  /// Optional item played immediately before this source in the same native
+  /// player timeline.
+  final DataSource? preRollDataSource;
+
+  /// Position applied when the player advances from [preRollDataSource] to
+  /// this content item.
+  final Duration? contentStartPosition;
 
   /// Key to compare DataSource
   String get key {

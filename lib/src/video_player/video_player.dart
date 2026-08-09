@@ -212,7 +212,9 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       switch (event.eventType) {
         case VideoEventType.initialized:
           value = value.copyWith(duration: event.duration, size: event.size);
-          _initializingCompleter.complete(null);
+          if (!_initializingCompleter.isCompleted) {
+            _initializingCompleter.complete(null);
+          }
           _applyPlayPause();
         case VideoEventType.completed:
           value = value.copyWith(isPlaying: false, position: value.duration);
@@ -315,6 +317,8 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     String? activityName,
     String? clearKey,
     String? videoExtension,
+    DataSource? preRollDataSource,
+    Duration? contentStartPosition,
   }) => _setDataSource(
     DataSource(
       sourceType: DataSourceType.network,
@@ -337,6 +341,8 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       activityName: activityName,
       clearKey: clearKey,
       videoExtension: videoExtension,
+      preRollDataSource: preRollDataSource,
+      contentStartPosition: contentStartPosition,
     ),
   );
 
