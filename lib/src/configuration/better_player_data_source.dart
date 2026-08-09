@@ -1,5 +1,6 @@
 import 'package:better_player_plus/src/configuration/better_player_buffering_configuration.dart';
 import 'package:better_player_plus/src/configuration/better_player_cache_configuration.dart';
+import 'package:better_player_plus/src/configuration/better_player_cast_configuration.dart';
 import 'package:better_player_plus/src/configuration/better_player_data_source_type.dart';
 import 'package:better_player_plus/src/configuration/better_player_drm_configuration.dart';
 import 'package:better_player_plus/src/configuration/better_player_notification_configuration.dart';
@@ -22,6 +23,7 @@ class BetterPlayerDataSource {
     this.useAsmsAudioTracks = true,
     this.asmsTrackNames,
     this.resolutions,
+    this.selectedResolution,
     this.cacheConfiguration,
     this.notificationConfiguration = const BetterPlayerNotificationConfiguration(showNotification: false),
     this.overriddenDuration,
@@ -30,6 +32,7 @@ class BetterPlayerDataSource {
     this.drmConfiguration,
     this.placeholder,
     this.bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
+    this.castConfiguration,
   }) : assert(
          (type == BetterPlayerDataSourceType.network || type == BetterPlayerDataSourceType.file) ||
              (type == BetterPlayerDataSourceType.memory && bytes!.isNotEmpty),
@@ -56,6 +59,7 @@ class BetterPlayerDataSource {
     BetterPlayerDrmConfiguration? drmConfiguration,
     Widget? placeholder,
     BetterPlayerBufferingConfiguration bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
+    BetterPlayerCastConfiguration? castConfiguration,
   }) => BetterPlayerDataSource(
     BetterPlayerDataSourceType.network,
     url,
@@ -73,6 +77,7 @@ class BetterPlayerDataSource {
     drmConfiguration: drmConfiguration,
     placeholder: placeholder,
     bufferingConfiguration: bufferingConfiguration,
+    castConfiguration: castConfiguration,
   );
 
   ///Factory method to build file data source which uses url as data source.
@@ -166,6 +171,11 @@ class BetterPlayerDataSource {
   ///{"360p": "url", "540p": "url2" }
   final Map<String, String>? resolutions;
 
+  ///Name of the currently selected entry in [resolutions]. Keeping the name
+  ///separate from the URL is important when multiple qualities share a master
+  ///playlist URL.
+  final String? selectedResolution;
+
   ///Optional cache configuration, used only for network data sources
   final BetterPlayerCacheConfiguration? cacheConfiguration;
 
@@ -197,6 +207,9 @@ class BetterPlayerDataSource {
   ///platform.
   final BetterPlayerBufferingConfiguration bufferingConfiguration;
 
+  ///Metadata and behavior used by the native Chromecast sender.
+  final BetterPlayerCastConfiguration? castConfiguration;
+
   BetterPlayerDataSource copyWith({
     BetterPlayerDataSourceType? type,
     String? url,
@@ -208,6 +221,7 @@ class BetterPlayerDataSource {
     bool? useAsmsTracks,
     bool? useAsmsAudioTracks,
     Map<String, String>? resolutions,
+    String? selectedResolution,
     BetterPlayerCacheConfiguration? cacheConfiguration,
     BetterPlayerNotificationConfiguration? notificationConfiguration = const BetterPlayerNotificationConfiguration(
       showNotification: false,
@@ -218,6 +232,7 @@ class BetterPlayerDataSource {
     BetterPlayerDrmConfiguration? drmConfiguration,
     Widget? placeholder,
     BetterPlayerBufferingConfiguration? bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
+    BetterPlayerCastConfiguration? castConfiguration,
   }) => BetterPlayerDataSource(
     type ?? this.type,
     url ?? this.url,
@@ -229,6 +244,7 @@ class BetterPlayerDataSource {
     useAsmsTracks: useAsmsTracks ?? this.useAsmsTracks,
     useAsmsAudioTracks: useAsmsAudioTracks ?? this.useAsmsAudioTracks,
     resolutions: resolutions ?? this.resolutions,
+    selectedResolution: selectedResolution ?? this.selectedResolution,
     cacheConfiguration: cacheConfiguration ?? this.cacheConfiguration,
     notificationConfiguration: notificationConfiguration ?? this.notificationConfiguration,
     overriddenDuration: overriddenDuration ?? this.overriddenDuration,
@@ -237,5 +253,6 @@ class BetterPlayerDataSource {
     drmConfiguration: drmConfiguration ?? this.drmConfiguration,
     placeholder: placeholder ?? this.placeholder,
     bufferingConfiguration: bufferingConfiguration ?? this.bufferingConfiguration,
+    castConfiguration: castConfiguration ?? this.castConfiguration,
   );
 }

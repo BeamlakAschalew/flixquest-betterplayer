@@ -105,6 +105,11 @@ class BetterPlayerController {
   ///Currently selected player track. Used only for HLS / DASH.
   BetterPlayerAsmsTrack? get betterPlayerAsmsTrack => _betterPlayerAsmsTrack;
 
+  String? _betterPlayerResolutionName;
+
+  ///Selected named resolution for non-adaptive sources.
+  String? get betterPlayerResolutionName => _betterPlayerResolutionName;
+
   ///Timer for next video. Used in playlist.
   Timer? _nextVideoTimer;
 
@@ -225,7 +230,13 @@ class BetterPlayerController {
   }
 
   ///Setup new data source in Better Player.
-  Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
+  Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) =>
+      _setupDataSourceWithSubtitle(betterPlayerDataSource);
+
+  Future<void> _setupDataSourceWithSubtitle(
+    BetterPlayerDataSource betterPlayerDataSource, {
+    BetterPlayerSubtitlesSource? subtitlesSourceToRestore,
+  }) async {
     _cancelNetworkRecovery(clearSavedPosition: true);
     postEvent(
       BetterPlayerEvent(
@@ -237,7 +248,10 @@ class BetterPlayerController {
     _hasCurrentDataSourceStarted = false;
     _hasCurrentDataSourceInitialized = false;
     _betterPlayerDataSource = betterPlayerDataSource;
+    _betterPlayerResolutionName = betterPlayerDataSource.selectedResolution;
     _betterPlayerSubtitlesSourceList.clear();
+    _betterPlayerSubtitlesSource = subtitlesSourceToRestore;
+    subtitlesLines.clear();
 
     ///Build videoPlayerController if null
     if (videoPlayerController == null) {
@@ -255,23 +269,46 @@ class BetterPlayerController {
     if (betterPlayerSubtitlesSourceList != null) {
       _betterPlayerSubtitlesSourceList.addAll(betterPlayerDataSource.subtitles!);
     }
+    if (subtitlesSourceToRestore != null &&
+        _betterPlayerSubtitlesSourceList.none((source) => identical(source, subtitlesSourceToRestore))) {
+      _betterPlayerSubtitlesSourceList.add(subtitlesSourceToRestore);
+    }
 
-    if (_isDataSourceAsms(betterPlayerDataSource)) {
-      _setupAsmsDataSource(betterPlayerDataSource).then((value) {
-        _setupSubtitles();
-      });
-    } else {
+    final asmsSetup = _isDataSourceAsms(betterPlayerDataSource) ? _setupAsmsDataSource(betterPlayerDataSource) : null;
+    if (asmsSetup == null) {
       _setupSubtitles();
     }
 
     ///Process data source
     await _setupDataSource(betterPlayerDataSource);
+    final castConfiguration = betterPlayerDataSource.castConfiguration;
+    if (castConfiguration != null && Platform.isAndroid) {
+      await videoPlayerController?.configureCast(castConfiguration.toMap());
+    }
+    if (asmsSetup != null) {
+      await asmsSetup;
+      _setupSubtitles();
+    }
+    if (subtitlesSourceToRestore != null) {
+      await setupSubtitleSource(subtitlesSourceToRestore);
+    }
     setTrack(BetterPlayerAsmsTrack.defaultTrack());
   }
 
   ///Configure subtitles based on subtitles source.
   void _setupSubtitles() {
-    _betterPlayerSubtitlesSourceList.add(BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none));
+    if (_betterPlayerSubtitlesSourceList.none((source) => source.type == BetterPlayerSubtitlesSourceType.none)) {
+      _betterPlayerSubtitlesSourceList.add(BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none));
+    }
+
+    // HLS/DASH subtitle discovery finishes asynchronously. A user can select
+    // one of the supplied subtitle sources while that work is still in
+    // progress; do not replace that choice with the default when discovery
+    // completes.
+    if (_betterPlayerSubtitlesSource != null) {
+      return;
+    }
+
     final defaultSubtitle = _betterPlayerSubtitlesSourceList.firstWhereOrNull(
       (element) => element.selectedByDefault ?? false,
     );
@@ -864,6 +901,9 @@ class BetterPlayerController {
 
     videoPlayerController!.setTrackParameters(track.width, track.height, track.bitrate);
     _betterPlayerAsmsTrack = track;
+    if (_betterPlayerAsmsTracks.isNotEmpty) {
+      _betterPlayerResolutionName = null;
+    }
   }
 
   ///Check if player can be played/paused automatically
@@ -900,19 +940,35 @@ class BetterPlayerController {
   }
 
   ///Set different resolution (quality) for video
-  Future<void> setResolution(String url) async {
+  Future<void> setResolution(String url, {String? name}) async {
     if (videoPlayerController == null) {
       throw StateError('The data source has not been initialized');
     }
     final position = await videoPlayerController!.position;
     final wasPlayingBeforeChange = isPlaying()!;
+    final subtitlesSourceToRestore = _betterPlayerSubtitlesSource;
     pause();
-    await setupDataSource(betterPlayerDataSource!.copyWith(url: url));
+    final resolutionName =
+        name ??
+        betterPlayerDataSource!.resolutions?.entries
+            .where((entry) => entry.value == url)
+            .map((entry) => entry.key)
+            .singleOrNull;
+    await _setupDataSourceWithSubtitle(
+      betterPlayerDataSource!.copyWith(url: url, selectedResolution: resolutionName),
+      subtitlesSourceToRestore: subtitlesSourceToRestore,
+    );
+    _betterPlayerResolutionName = resolutionName;
     seekTo(position!);
     if (wasPlayingBeforeChange) {
       play();
     }
-    _postEvent(BetterPlayerEvent(BetterPlayerEventType.changedResolution, parameters: <String, dynamic>{'url': url}));
+    _postEvent(
+      BetterPlayerEvent(
+        BetterPlayerEventType.changedResolution,
+        parameters: <String, dynamic>{'url': url, 'name': resolutionName},
+      ),
+    );
   }
 
   ///Setup translations for given locale. In normal use cases it shouldn't be

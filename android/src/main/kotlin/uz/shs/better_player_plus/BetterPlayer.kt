@@ -82,15 +82,16 @@ import kotlin.math.max
 import kotlin.math.min
 import androidx.core.net.toUri
 
-private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 10_000L
+private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 30_000L
 private const val SHORT_SEGMENT_RETRY_COUNT = 3
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
 
 /**
  * Retries ordinary loads persistently, but exposes a short adaptive media
  * segment after repeated failures so the player can seek past that exact
- * segment. Manifest, initialization, and segments longer than ten seconds keep
- * the normal resilient behavior.
+ * segment. Manifest and initialization loads keep the normal resilient
+ * behavior. The thirty-second ceiling covers common HLS/DASH segment sizes
+ * without treating unusually long media chunks as safe to skip.
  */
 private class ShortSegmentLoadErrorHandlingPolicy(
     private val onShortSegmentExhausted: (startMs: Long, endMs: Long) -> Boolean
@@ -175,7 +176,10 @@ internal class BetterPlayer(
             this.customDefaultLoadControl.bufferForPlaybackMs,
             this.customDefaultLoadControl.bufferForPlaybackAfterRebufferMs
         )
-        loadBuilder.setBackBuffer(120000, true)
+        loadBuilder.setBackBuffer(
+            this.customDefaultLoadControl.backBufferDurationMs,
+            this.customDefaultLoadControl.retainBackBufferFromKeyframe
+        )
         loadControl = loadBuilder.build()
         exoPlayer = ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
@@ -454,15 +458,14 @@ internal class BetterPlayer(
         cacheKey: String?,
         context: Context
     ): MediaSource {
-        val type: Int
-        if (formatHint == null) {
-            var lastPathSegment = uri?.lastPathSegment
-            if (lastPathSegment == null) {
-                lastPathSegment = ""
-            }
-            type = Util.inferContentTypeForExtension(lastPathSegment.split(".")[1])
+        val type = if (formatHint == null) {
+            // Provider proxy URLs frequently have extensionless paths (for
+            // example, `/proxy?token=...`). Splitting the last path segment and
+            // blindly reading index 1 caused an IndexOutOfBoundsException
+            // before ExoPlayer could report a normal playback failure.
+            uri?.let(Util::inferContentType) ?: C.CONTENT_TYPE_OTHER
         } else {
-            type = when (formatHint) {
+            when (formatHint) {
                 FORMAT_SS -> C.CONTENT_TYPE_SS
                 FORMAT_DASH -> C.CONTENT_TYPE_DASH
                 FORMAT_HLS -> C.CONTENT_TYPE_HLS

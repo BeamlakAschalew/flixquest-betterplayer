@@ -1,5 +1,8 @@
 // ignore_for_file: unawaited_futures, cascade_invocations
 
+import 'dart:async';
+import 'dart:io';
+
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'better_player_mock_controller.dart';
@@ -38,6 +41,44 @@ void main() {
       );
       expect(betterPlayerMockController.betterPlayerDataSource != null, true);
       expect(betterPlayerMockController.videoPlayerController != null, true);
+    });
+
+    test('keeps a subtitle selected while adaptive tracks are loading', () async {
+      final playlistResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        await playlistResponse.future;
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('#EXTM3U\n');
+        await request.response.close();
+      });
+
+      final subtitle = BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.memory,
+        name: 'English',
+        content: 'WEBVTT\n\n00:00.000 --> 00:01.000\nHello',
+      );
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+
+      try {
+        final setup = controller.setupDataSource(
+          BetterPlayerDataSource.network(
+            'http://${server.address.address}:${server.port}/master.m3u8',
+            subtitles: [subtitle],
+          ),
+        );
+        await controller.setupSubtitleSource(subtitle);
+
+        playlistResponse.complete();
+        await setup;
+
+        expect(controller.betterPlayerSubtitlesSource, same(subtitle));
+      } finally {
+        if (!playlistResponse.isCompleted) playlistResponse.complete();
+        await server.close(force: true);
+        controller.dispose();
+      }
     });
 
     test('play should change isPlaying flag', () async {

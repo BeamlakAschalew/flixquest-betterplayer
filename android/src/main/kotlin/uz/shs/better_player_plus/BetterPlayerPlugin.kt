@@ -47,6 +47,7 @@ import androidx.core.util.size
 class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private val videoPlayers = LongSparseArray<BetterPlayer>()
     private val dataSources = LongSparseArray<Map<String, Any?>>()
+    private val castConfigurations = LongSparseArray<Map<String, Any?>>()
     private var flutterState: FlutterState? = null
     private var currentNotificationTextureId: Long = -1
     private var currentNotificationDataSource: Map<String, Any?>? = null
@@ -57,6 +58,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private var currentPipPlayer: BetterPlayer? = null
     private var brightnessChannel: MethodChannel? = null
     private var volumeChannel: MethodChannel? = null
+    private var castManager: BetterPlayerCastManager? = null
     
     override fun onAttachedToEngine(binding: FlutterPluginBinding) {
         val loader = FlutterLoader()
@@ -79,6 +81,16 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             binding.textureRegistry
         )
         flutterState?.startListening(this)
+        castManager = BetterPlayerCastManager(
+            binding.applicationContext,
+            playerFor = { textureId -> videoPlayers[textureId] },
+            dataSourceFor = { textureId -> dataSources[textureId] },
+            configurationFor = { textureId -> castConfigurations[textureId] }
+        )
+        binding.platformViewRegistry.registerViewFactory(
+            "better_player_plus/chromecast_button",
+            BetterPlayerCastButtonFactory(castManager!!)
+        )
         
         // Setup brightness channel
         brightnessChannel = MethodChannel(binding.binaryMessenger, "better_player_plus/brightness")
@@ -132,6 +144,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         }
         disposeAllPlayers()
         releaseCache()
+        castManager?.dispose()
+        castManager = null
         flutterState?.stopListening()
         flutterState = null
     }
@@ -153,6 +167,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         }
         videoPlayers.clear()
         dataSources.clear()
+        castConfigurations.clear()
     }
 
     @UnstableApi
@@ -177,7 +192,9 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                         call.argument(MIN_BUFFER_MS),
                         call.argument(MAX_BUFFER_MS),
                         call.argument(BUFFER_FOR_PLAYBACK_MS),
-                        call.argument(BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+                        call.argument(BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS),
+                        call.argument(BACK_BUFFER_DURATION_MS),
+                        call.argument(RETAIN_BACK_BUFFER_FROM_KEYFRAME)
                     )
                 }
                 val player = BetterPlayer(
@@ -226,41 +243,57 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 setDataSource(call, result, player)
             }
 
+            CONFIGURE_CAST_METHOD -> {
+                val configuration = call.argument<Map<String, Any?>>(CAST_CONFIGURATION_PARAMETER)
+                    ?: emptyMap()
+                castConfigurations.put(textureId, configuration)
+                castManager?.onDataSourceChanged(textureId)
+                result.success(null)
+            }
+
             SET_LOOPING_METHOD -> {
                 player.setLooping(call.argument(LOOPING_PARAMETER)!!)
                 result.success(null)
             }
 
             SET_VOLUME_METHOD -> {
-                player.setVolume(call.argument(VOLUME_PARAMETER)!!)
+                val volume = call.argument<Double>(VOLUME_PARAMETER)!!
+                if (castManager?.setVolume(textureId, volume) != true) {
+                    player.setVolume(volume)
+                }
                 result.success(null)
             }
 
             PLAY_METHOD -> {
                 setupNotification(player)
-                player.play()
+                if (castManager?.play(textureId) != true) player.play()
                 result.success(null)
             }
 
             PAUSE_METHOD -> {
-                player.pause()
+                if (castManager?.pause(textureId) != true) player.pause()
                 result.success(null)
             }
 
             SEEK_TO_METHOD -> {
                 val location = (call.argument<Any>(LOCATION_PARAMETER) as Number?)!!.toInt()
-                player.seekTo(location)
+                if (castManager?.seekTo(textureId, location.toLong()) != true) {
+                    player.seekTo(location)
+                }
                 result.success(null)
             }
 
             POSITION_METHOD -> {
-                result.success(player.position)
+                result.success(castManager?.position(textureId) ?: player.position)
                 player.sendBufferingUpdate(false)
             }
 
             ABSOLUTE_POSITION_METHOD -> result.success(player.absolutePosition)
             SET_SPEED_METHOD -> {
-                player.setSpeed(call.argument(SPEED_PARAMETER)!!)
+                val speed = call.argument<Double>(SPEED_PARAMETER)!!
+                if (castManager?.setSpeed(textureId, speed) != true) {
+                    player.setSpeed(speed)
+                }
                 result.success(null)
             }
 
@@ -652,9 +685,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     }
 
     private fun dispose(player: BetterPlayer, textureId: Long) {
+        castManager?.disposePlayer(textureId)
         player.dispose()
         videoPlayers.remove(textureId)
         dataSources.remove(textureId)
+        castConfigurations.remove(textureId)
         stopPipHandler()
     }
 
@@ -790,6 +825,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val CHANNEL = "better_player_channel"
         private const val EVENTS_CHANNEL = "better_player_channel/videoEvents"
         private const val DATA_SOURCE_PARAMETER = "dataSource"
+        private const val CAST_CONFIGURATION_PARAMETER = "configuration"
         private const val KEY_PARAMETER = "key"
         private const val HEADERS_PARAMETER = "headers"
         private const val USE_CACHE_PARAMETER = "useCache"
@@ -828,10 +864,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         const val MAX_BUFFER_MS = "maxBufferMs"
         const val BUFFER_FOR_PLAYBACK_MS = "bufferForPlaybackMs"
         const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = "bufferForPlaybackAfterRebufferMs"
+        const val BACK_BUFFER_DURATION_MS = "backBufferDurationMs"
+        const val RETAIN_BACK_BUFFER_FROM_KEYFRAME = "retainBackBufferFromKeyframe"
         const val CACHE_KEY_PARAMETER = "cacheKey"
         private const val INIT_METHOD = "init"
         private const val CREATE_METHOD = "create"
         private const val SET_DATA_SOURCE_METHOD = "setDataSource"
+        private const val CONFIGURE_CAST_METHOD = "configureCast"
         private const val SET_LOOPING_METHOD = "setLooping"
         private const val SET_VOLUME_METHOD = "setVolume"
         private const val PLAY_METHOD = "play"

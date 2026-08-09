@@ -215,9 +215,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
               ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill)
               : PhosphorIcons.monitorPlay(),
           title: label,
-          subtitle: automatic
-              ? (currentHeight > 0 ? '$currentWidth×$currentHeight' : null)
-              : _qualityDetails(track),
+          subtitle: automatic ? (currentHeight > 0 ? '$currentWidth×$currentHeight' : null) : _qualityDetails(track),
           selected: selected,
           onTap: () {
             _closeSheet();
@@ -226,29 +224,30 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
         ),
       );
     }
-    betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
-      final selected = url == betterPlayerController!.betterPlayerDataSource?.url;
-      items.add(
-        BetterPlayerSelectionTile(
-          icon: selected ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill) : PhosphorIcons.monitorPlay(),
-          title: name,
-          selected: selected,
-          onTap: () {
-            _closeSheet();
-            betterPlayerController!.setResolution(url);
-          },
-        ),
-      );
-    });
+    if (tracks.isEmpty) {
+      betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+        final selected = name == betterPlayerController!.betterPlayerResolutionName;
+        final detectedDetails = selected ? _detectedQualityDetails() : null;
+        items.add(
+          BetterPlayerSelectionTile(
+            icon: selected ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill) : PhosphorIcons.monitorPlay(),
+            title: name,
+            subtitle: BetterPlayerUtils.resolutionHeightFromLabel(name) == null ? detectedDetails : null,
+            selected: selected,
+            onTap: () {
+              _closeSheet();
+              betterPlayerController!.setResolution(url, name: name);
+            },
+          ),
+        );
+      });
+    }
     _showSheet(
       icon: betterPlayerControlsConfiguration.qualitiesIcon,
       title: betterPlayerController!.translations.overflowMenuQuality,
       subtitle: _selectedQualityLabel(),
       child: items.isEmpty
-          ? BetterPlayerEmptyState(
-              icon: PhosphorIcons.monitorPlay(),
-              title: betterPlayerController!.translations.qualityAuto,
-            )
+          ? BetterPlayerEmptyState(icon: PhosphorIcons.monitorPlay(), title: _selectedQualityLabel())
           : _selectionList(items),
     );
   }
@@ -304,11 +303,30 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
   }
 
   String _selectedQualityLabel() {
+    final detectedHeight = BetterPlayerUtils.detectedVideoHeight(
+      betterPlayerController!.videoPlayerController?.value.size,
+    );
+    final resolutionName = betterPlayerController!.betterPlayerResolutionName;
+    if (resolutionName?.trim().isNotEmpty == true) {
+      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(resolutionName) == null) {
+        return '${detectedHeight}p • ${resolutionName!.trim()}';
+      }
+      return resolutionName!.trim();
+    }
     final track = betterPlayerController!.betterPlayerAsmsTrack;
     if (track == null || (track.height == 0 && track.width == 0 && track.bitrate == 0)) {
-      return betterPlayerController!.translations.qualityAuto;
+      final auto = betterPlayerController!.translations.qualityAuto;
+      return detectedHeight == null ? auto : '$auto • ${detectedHeight}p';
     }
     return _qualityLabel(track);
+  }
+
+  String? _detectedQualityDetails() {
+    final size = betterPlayerController!.videoPlayerController?.value.size;
+    final height = BetterPlayerUtils.detectedVideoHeight(size);
+    final dimensions = BetterPlayerUtils.detectedVideoDimensions(size);
+    if (height == null || dimensions == null) return null;
+    return 'Detected ${height}p • $dimensions';
   }
 
   String _qualityLabel(BetterPlayerAsmsTrack track) {

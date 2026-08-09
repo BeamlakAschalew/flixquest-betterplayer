@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -455,23 +456,32 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       );
     }
-    widget.controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
-      items.add(
-        BetterPlayerTvMenuItem(
-          label: name,
-          icon: PhosphorIcons.monitorPlay(),
-          onSelected: () async {
-            await widget.controller.setResolution(url);
-            if (mounted) _closeMenu();
-          },
-        ),
-      );
-    });
+    if (tracks.isEmpty) {
+      widget.controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+        final selected = name == widget.controller.betterPlayerResolutionName;
+        items.add(
+          BetterPlayerTvMenuItem(
+            label: name,
+            subtitle: selected && BetterPlayerUtils.resolutionHeightFromLabel(name) == null
+                ? _detectedQualityDetails()
+                : null,
+            icon: PhosphorIcons.monitorPlay(),
+            selected: selected,
+            onSelected: () async {
+              await widget.controller.setResolution(url, name: name);
+              if (mounted) _closeMenu();
+            },
+          ),
+        );
+      });
+    }
     if (items.isEmpty) {
       items.add(
         BetterPlayerTvMenuItem(
-          label: 'Automatic',
-          icon: PhosphorIcons.magicWand(),
+          label: _qualityLabel(),
+          icon: widget.controller.betterPlayerResolutionName == null
+              ? PhosphorIcons.magicWand()
+              : PhosphorIcons.monitorPlay(),
           selected: true,
           onSelected: _closeMenu,
         ),
@@ -494,9 +504,27 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   }
 
   String _qualityLabel() {
+    final detectedHeight = BetterPlayerUtils.detectedVideoHeight(widget.controller.videoPlayerController?.value.size);
+    final resolutionName = widget.controller.betterPlayerResolutionName;
+    if (resolutionName?.trim().isNotEmpty == true) {
+      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(resolutionName) == null) {
+        return '${detectedHeight}p • ${resolutionName!.trim()}';
+      }
+      return resolutionName!.trim();
+    }
     final track = widget.controller.betterPlayerAsmsTrack;
-    if (track == null || (track.height ?? 0) == 0) return 'Auto';
+    if (track == null || (track.height ?? 0) == 0) {
+      return detectedHeight == null ? 'Auto' : 'Auto • ${detectedHeight}p';
+    }
     return '${track.height}p';
+  }
+
+  String? _detectedQualityDetails() {
+    final size = widget.controller.videoPlayerController?.value.size;
+    final height = BetterPlayerUtils.detectedVideoHeight(size);
+    final dimensions = BetterPlayerUtils.detectedVideoDimensions(size);
+    if (height == null || dimensions == null) return null;
+    return 'Detected ${height}p • $dimensions';
   }
 
   String _number(double value) => value % 1 == 0 ? value.toStringAsFixed(0) : value.toString();

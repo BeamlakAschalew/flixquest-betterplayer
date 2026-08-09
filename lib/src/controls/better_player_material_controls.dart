@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_player_plus/src/configuration/better_player_controls_configuration.dart';
 import 'package:better_player_plus/src/controls/better_player_controls_state.dart';
+import 'package:better_player_plus/src/controls/better_player_cast_button.dart';
 import 'package:better_player_plus/src/controls/better_player_gesture_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_material_progress_bar.dart';
 import 'package:better_player_plus/src/controls/better_player_multiple_gesture_detector.dart';
@@ -65,7 +66,9 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     }
     _initializeSystemLevels();
     final gestures = _configuration.gestureConfiguration;
-    final gesturesEnabled = (gestures.enableVolumeSwipe || gestures.enableBrightnessSwipe || gestures.enableSeekSwipe) && _betterPlayerController?.controlsEnabled == true;
+    final gesturesEnabled =
+        (gestures.enableVolumeSwipe || gestures.enableBrightnessSwipe || gestures.enableSeekSwipe) &&
+        _betterPlayerController?.controlsEnabled == true;
 
     Widget content = LayoutBuilder(
       builder: (context, constraints) {
@@ -221,6 +224,8 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             ),
           ),
           if (!compact) _lockButton(),
+          if (_configuration.enableCast && _betterPlayerController != null)
+            BetterPlayerCastButton(controller: _betterPlayerController!, color: iconColor, size: compact ? 42 : 48),
           if (_configuration.enablePip) _pipButton(compact),
           if (_configuration.enableOverflowMenu)
             BetterPlayerControlButton(
@@ -529,12 +534,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       children: [
         _transportControls(compact),
         const SizedBox(height: 10),
-        SizedBox(
-          height: 3,
-          child: loading
-              ? IgnorePointer(child: _buildLoadingWidget())
-              : const SizedBox.shrink(),
-        ),
+        SizedBox(height: 3, child: loading ? IgnorePointer(child: _buildLoadingWidget()) : const SizedBox.shrink()),
       ],
     );
   }

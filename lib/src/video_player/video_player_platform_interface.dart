@@ -85,6 +85,11 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('setDataSource() has not been implemented.');
   }
 
+  ///Configures native remote playback metadata for this player instance.
+  Future<void> configureCast(int? textureId, Map<String, Object?> configuration) {
+    throw UnimplementedError('configureCast() has not been implemented.');
+  }
+
   /// Returns a Stream of [VideoEventType]s.
   Stream<VideoEvent> videoEventsFor(int? textureId) {
     throw UnimplementedError('videoEventsFor() has not been implemented.');

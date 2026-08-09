@@ -43,6 +43,7 @@ class BetterPlayerControlsConfiguration {
     this.enableSubtitles = true,
     this.enableQualities = true,
     this.enablePip = true,
+    this.enableCast = false,
     this.enableRetry = true,
     this.overflowMenuCustomItems = const [],
     this.overflowMenuIcon = PhosphorIconsRegular.dotsThreeVertical,
@@ -196,6 +197,9 @@ class BetterPlayerControlsConfiguration {
 
   ///Flag used to show/hide PiP mode
   final bool enablePip;
+
+  ///Flag used to show the native Chromecast route control.
+  final bool enableCast;
 
   ///Flag used to enable/disable retry feature
   final bool enableRetry;

@@ -29,6 +29,8 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
         'maxBufferMs': bufferingConfiguration.maxBufferMs,
         'bufferForPlaybackMs': bufferingConfiguration.bufferForPlaybackMs,
         'bufferForPlaybackAfterRebufferMs': bufferingConfiguration.bufferForPlaybackAfterRebufferMs,
+        'backBufferDurationMs': bufferingConfiguration.backBufferDurationMs,
+        'retainBackBufferFromKeyframe': bufferingConfiguration.retainBackBufferFromKeyframe,
       });
 
       response = responseLinkedHashMap != null ? Map<String, dynamic>.from(responseLinkedHashMap) : null;
@@ -102,6 +104,12 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
     });
     return;
   }
+
+  @override
+  Future<void> configureCast(int? textureId, Map<String, Object?> configuration) => _channel.invokeMethod<void>(
+    'configureCast',
+    <String, Object?>{'textureId': textureId, 'configuration': configuration},
+  );
 
   @override
   Future<void> setLooping(int? textureId, bool looping) =>

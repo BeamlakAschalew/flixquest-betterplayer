@@ -1,3 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Remove the package="uz.shs.better_player_plus" line -->
+    <application>
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="uz.shs.better_player_plus.BetterPlayerCastOptionsProvider" />
+        <receiver android:name="androidx.mediarouter.media.MediaTransferReceiver" />
+    </application>
 </manifest>

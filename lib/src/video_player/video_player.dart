@@ -193,6 +193,9 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   @visibleForTesting
   int? get textureId => _textureId;
 
+  ///Native player identifier used by companion platform views such as Cast.
+  int? get playerId => _textureId;
+
   /// Attempts to open the given [dataSource] and load metadata about the video.
   Future<void> _create() async {
     _textureId = await _videoPlayerPlatform.create(bufferingConfiguration: bufferingConfiguration);
@@ -588,6 +591,9 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   void setMixWithOthers(bool mixWithOthers) {
     _videoPlayerPlatform.setMixWithOthers(_textureId, mixWithOthers);
   }
+
+  Future<void> configureCast(Map<String, Object?> configuration) =>
+      _videoPlayerPlatform.configureCast(_textureId, configuration);
 
   static Future clearCache() async => _videoPlayerPlatform.clearCache();
 
