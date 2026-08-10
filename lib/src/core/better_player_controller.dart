@@ -93,6 +93,10 @@ class BetterPlayerController {
   ///Subtitles lines for current data source.
   List<BetterPlayerSubtitle> subtitlesLines = [];
 
+  ///Invalidates an older network subtitle request when the user selects a
+  ///different track or the player replaces its data source.
+  int _subtitleLoadGeneration = 0;
+
   ///List of tracks available for current data source. Used only for HLS / DASH.
   List<BetterPlayerAsmsTrack> _betterPlayerAsmsTracks = [];
 
@@ -270,6 +274,7 @@ class BetterPlayerController {
     _hasCurrentDataSourceInitialized = false;
     _betterPlayerDataSource = betterPlayerDataSource;
     _betterPlayerResolutionName = betterPlayerDataSource.selectedResolution;
+    _subtitleLoadGeneration++;
     _betterPlayerSubtitlesSourceList.clear();
     _betterPlayerSubtitlesSource = subtitlesSourceToRestore;
     subtitlesLines.clear();
@@ -296,8 +301,9 @@ class BetterPlayerController {
     }
 
     final asmsSetup = _isDataSourceAsms(betterPlayerDataSource) ? _setupAsmsDataSource(betterPlayerDataSource) : null;
+    Future<void>? suppliedSubtitleSetup;
     if (asmsSetup == null) {
-      _setupSubtitles();
+      suppliedSubtitleSetup = _setupSubtitles();
     }
 
     ///Process data source
@@ -312,7 +318,9 @@ class BetterPlayerController {
     }
     if (asmsSetup != null) {
       await asmsSetup;
-      _setupSubtitles();
+      await _setupSubtitles();
+    } else {
+      await suppliedSubtitleSetup;
     }
     if (subtitlesSourceToRestore != null) {
       await setupSubtitleSource(subtitlesSourceToRestore);
@@ -321,7 +329,7 @@ class BetterPlayerController {
   }
 
   ///Configure subtitles based on subtitles source.
-  void _setupSubtitles() {
+  Future<void> _setupSubtitles() async {
     if (_betterPlayerSubtitlesSourceList.none((source) => source.type == BetterPlayerSubtitlesSourceType.none)) {
       _betterPlayerSubtitlesSourceList.add(BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none));
     }
@@ -339,7 +347,7 @@ class BetterPlayerController {
     );
 
     ///Setup subtitles (none is default)
-    setupSubtitleSource(defaultSubtitle ?? _betterPlayerSubtitlesSourceList.last, sourceInitialize: true);
+    await setupSubtitleSource(defaultSubtitle ?? _betterPlayerSubtitlesSourceList.last, sourceInitialize: true);
   }
 
   ///Check if given [betterPlayerDataSource] is HLS / DASH-type data source.
@@ -394,6 +402,7 @@ class BetterPlayerController {
   ///If subtitles source is segmented then don't load videos at start. Videos
   ///will load with just in time policy.
   Future<void> setupSubtitleSource(BetterPlayerSubtitlesSource subtitlesSource, {bool sourceInitialize = false}) async {
+    final loadGeneration = ++_subtitleLoadGeneration;
     _betterPlayerSubtitlesSource = subtitlesSource;
     subtitlesLines.clear();
     _asmsSegmentsLoaded.clear();
@@ -403,7 +412,28 @@ class BetterPlayerController {
       if (subtitlesSource.asmsIsSegmented ?? false) {
         return;
       }
-      final subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
+      var subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
+      if (_disposed ||
+          loadGeneration != _subtitleLoadGeneration ||
+          !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
+        return;
+      }
+      if (sourceInitialize &&
+          subtitlesParsed.isEmpty &&
+          subtitlesSource.type == BetterPlayerSubtitlesSourceType.network) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (_disposed ||
+            loadGeneration != _subtitleLoadGeneration ||
+            !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
+          return;
+        }
+        subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
+        if (_disposed ||
+            loadGeneration != _subtitleLoadGeneration ||
+            !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
+          return;
+        }
+      }
       subtitlesLines.addAll(subtitlesParsed);
     }
 
@@ -1356,6 +1386,7 @@ class BetterPlayerController {
       return;
     }
     if (!_disposed) {
+      _subtitleLoadGeneration++;
       if (videoPlayerController != null) {
         pause();
         videoPlayerController!.removeListener(_onFullScreenStateChanged);

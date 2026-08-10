@@ -43,6 +43,26 @@ void main() {
       expect(betterPlayerMockController.videoPlayerController != null, true);
     });
 
+    test('initial default subtitle is ready when data source setup completes', () async {
+      final subtitle = BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.memory,
+        selectedByDefault: true,
+        content: '1\n00:00:00,000 --> 00:00:01,000\nFirst run\n\n',
+      );
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+
+      try {
+        await controller.setupDataSource(
+          BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl, subtitles: [subtitle]),
+        );
+
+        expect(controller.betterPlayerSubtitlesSource, same(subtitle));
+        expect(controller.subtitlesLines.single.texts, ['First run']);
+      } finally {
+        controller.dispose();
+      }
+    });
+
     test('keeps a subtitle selected while adaptive tracks are loading', () async {
       final playlistResponse = Completer<void>();
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -77,6 +97,30 @@ void main() {
       } finally {
         if (!playlistResponse.isCompleted) playlistResponse.complete();
         await server.close(force: true);
+        controller.dispose();
+      }
+    });
+
+    test('ignores a stale subtitle response after selecting another track', () async {
+      final stale = BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.memory,
+        content: '1\n00:00:00,000 --> 00:00:01,000\nOld\n\n',
+      );
+      final current = BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.memory,
+        content: '1\n00:00:00,000 --> 00:00:01,000\nCurrent\n\n',
+      );
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+
+      try {
+        final staleLoad = controller.setupSubtitleSource(stale);
+        await controller.setupSubtitleSource(current);
+        await staleLoad;
+
+        expect(controller.betterPlayerSubtitlesSource, same(current));
+        expect(controller.subtitlesLines, hasLength(1));
+        expect(controller.subtitlesLines.single.texts, ['Current']);
+      } finally {
         controller.dispose();
       }
     });
