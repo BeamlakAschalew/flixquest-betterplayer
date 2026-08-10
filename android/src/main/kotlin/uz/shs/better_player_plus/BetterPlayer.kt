@@ -166,6 +166,7 @@ internal class BetterPlayer(
     @Volatile
     private var lastKnownPositionMs = 0L
     private var hasPreRollSequence = false
+    private var preRollEndedSent = false
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
@@ -284,6 +285,7 @@ internal class BetterPlayer(
             mediaSource
         }
         hasPreRollSequence = preRollDataSource != null
+        preRollEndedSent = false
         this.contentStartPositionMs = contentStartPositionMs.coerceAtLeast(0L)
         if (preRollDataSource != null) {
             val preRollMediaSource = buildPreRollMediaSource(
@@ -657,7 +659,7 @@ internal class BetterPlayer(
         exoPlayer?.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val player = exoPlayer ?: return
-                if (!hasPreRollSequence || player.currentMediaItemIndex != 1) {
+                if (!hasPreRollSequence || preRollEndedSent || player.currentMediaItemIndex != 1) {
                     return
                 }
                 if (contentStartPositionMs > 0L) {
@@ -665,6 +667,11 @@ internal class BetterPlayer(
                 }
                 isInitialized = true
                 sendInitialized()
+                preRollEndedSent = true
+                val event: MutableMap<String, Any?> = HashMap()
+                event["event"] = "preRollEnded"
+                event["key"] = key
+                eventSink.success(event)
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {

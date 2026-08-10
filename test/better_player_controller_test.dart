@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'better_player_mock_controller.dart';
 import 'better_player_test_utils.dart';
@@ -41,6 +42,23 @@ void main() {
       );
       expect(betterPlayerMockController.betterPlayerDataSource != null, true);
       expect(betterPlayerMockController.videoPlayerController != null, true);
+    });
+
+    test('forwards the native pre-roll transition event', () async {
+      final videoController = MockVideoPlayerController();
+      final controller = BetterPlayerTestUtils.setupBetterPlayerMockController(controller: videoController);
+      final events = <BetterPlayerEvent>[];
+      controller.addEventsListener(events.add);
+
+      try {
+        await controller.setupDataSource(BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl));
+        videoController.videoEventStreamController.add(VideoEvent(eventType: VideoEventType.preRollEnded, key: null));
+        await Future<void>.delayed(Duration.zero);
+
+        expect(events.any((event) => event.betterPlayerEventType == BetterPlayerEventType.preRollEnded), isTrue);
+      } finally {
+        controller.dispose();
+      }
     });
 
     test('initial default subtitle is ready when data source setup completes', () async {

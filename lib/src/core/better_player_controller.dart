@@ -1216,6 +1216,8 @@ class BetterPlayerController {
             },
           ),
         );
+      case VideoEventType.preRollEnded:
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.preRollEnded));
       case VideoEventType.bufferingStart:
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingStart));
       case VideoEventType.bufferingUpdate:

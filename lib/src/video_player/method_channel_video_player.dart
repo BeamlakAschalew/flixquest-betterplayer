@@ -252,6 +252,8 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
               duration: Duration(milliseconds: map['duration'] as int),
               size: size,
             );
+          case 'preRollEnded':
+            return VideoEvent(eventType: VideoEventType.preRollEnded, key: key);
           case 'completed':
             return VideoEvent(eventType: VideoEventType.completed, key: key);
           case 'bufferingUpdate':

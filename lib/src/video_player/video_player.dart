@@ -216,6 +216,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
             _initializingCompleter.complete(null);
           }
           _applyPlayPause();
+        case VideoEventType.preRollEnded:
+          // The native sequence transition is consumed by BetterPlayerController.
+          // The current value is updated by the following initialized event.
+          break;
         case VideoEventType.completed:
           value = value.copyWith(isPlaying: false, position: value.duration);
           _timer?.cancel();

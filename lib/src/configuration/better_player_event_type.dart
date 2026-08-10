@@ -1,6 +1,7 @@
 ///Supported event types
 enum BetterPlayerEventType {
   initialized,
+  preRollEnded,
   play,
   pause,
   seekTo,

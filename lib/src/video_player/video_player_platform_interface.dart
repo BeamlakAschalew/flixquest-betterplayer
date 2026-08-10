@@ -431,6 +431,9 @@ enum VideoEventType {
   /// The video has been initialized.
   initialized,
 
+  /// A pre-roll sequence advanced to the main content item.
+  preRollEnded,
+
   /// The playback has ended.
   completed,
 

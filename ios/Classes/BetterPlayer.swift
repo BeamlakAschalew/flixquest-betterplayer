@@ -36,6 +36,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     private weak var sequenceContentItem: AVPlayerItem?
     private var sequenceContentStartPosition: Int = 0
     private var sequenceContentStartApplied: Bool = false
+    private var sequencePreRollEndedSent: Bool = false
 
     private var pipController: AVPictureInPictureController?
     private var restoreUIOnPipStop: ((Bool) -> Void)?
@@ -201,6 +202,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         self.sequenceContentItem = contentItem
         self.sequenceContentStartPosition = max(0, contentStartPosition)
         self.sequenceContentStartApplied = false
+        self.sequencePreRollEndedSent = false
         if let queue = player as? AVQueuePlayer {
             queue.pause()
             queue.removeAllItems()
@@ -235,6 +237,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         sequenceContentItem = nil
         sequenceContentStartPosition = 0
         sequenceContentStartApplied = false
+        sequencePreRollEndedSent = false
         self.key = key
         self.stalledCount = 0
         self.isStalledCheckStarted = false
@@ -441,6 +444,12 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
                    "width": NSNumber(value: Float(width)),
                    "height": NSNumber(value: Float(height)),
                    "key": key as Any])
+        if let contentItem = sequenceContentItem,
+           player.currentItem === contentItem,
+           !sequencePreRollEndedSent {
+            sequencePreRollEndedSent = true
+            eventSink(["event": "preRollEnded", "key": key as Any])
+        }
     }
 
     public func play() {
@@ -656,6 +665,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         sequenceContentItem = nil
         sequenceContentStartPosition = 0
         sequenceContentStartApplied = false
+        sequencePreRollEndedSent = false
         guard player.currentItem != nil else { return }
         removeObservers()
         player.currentItem?.asset.cancelLoading()
