@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:better_player_plus/src/controls/better_player_material_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_ui.dart';
@@ -26,6 +28,29 @@ void main() {
     expect(find.byWidgetPredicate((widget) => widget is BetterPlayerWithControls), findsOneWidget);
   });
 
+  testWidgets('async selection tiles show progress until work completes', (WidgetTester tester) async {
+    final completion = Completer<void>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: BetterPlayerSelectionTile(
+            icon: Icons.closed_caption,
+            title: 'English',
+            onTap: () => completion.future,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('English'));
+    await tester.pump();
+    expect(find.byKey(const Key('better_player_selection_progress')), findsOneWidget);
+
+    completion.complete();
+    await tester.pump();
+    expect(find.byKey(const Key('better_player_selection_progress')), findsNothing);
+  });
+
   testWidgets('buffering controls can seek and pause without tapping the overlay', (WidgetTester tester) async {
     final videoController = MockVideoPlayerController();
     mockController.videoPlayerController = videoController;
@@ -38,8 +63,8 @@ void main() {
     );
 
     await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.byKey(const Key('better_player_material_controls_skip_back_button')), findsOneWidget);
     expect(find.byKey(const Key('better_player_material_controls_play_pause_button')), findsOneWidget);
     expect(find.byKey(const Key('better_player_material_controls_skip_forward_button')), findsOneWidget);
@@ -67,7 +92,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 400));
     expect(videoController.value.isPlaying, isFalse);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
   testWidgets('initial loading exposes a functional play button', (WidgetTester tester) async {
@@ -77,8 +102,8 @@ void main() {
     videoController.value = VideoPlayerValue(duration: null);
 
     await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     final playTapSurface = find.descendant(
       of: find.byKey(const Key('better_player_material_controls_play_pause_button')),
       matching: find.byType(InkResponse),
@@ -91,6 +116,10 @@ void main() {
   });
 
   testWidgets('fullscreen scrim fills unsafe area while controls remain safe', (WidgetTester tester) async {
+    final videoController = MockVideoPlayerController();
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2));
     mockController.enterFullScreen();
 
     await tester.pumpWidget(
@@ -105,7 +134,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
     final scrim = find.byWidgetPredicate(
       (widget) =>
@@ -119,6 +148,66 @@ void main() {
     final playButton = find.byKey(const Key('better_player_material_controls_play_pause_button'));
     expect(playButton, findsOneWidget);
     expect(find.ancestor(of: playButton, matching: find.byType(SafeArea)), findsOneWidget);
+  });
+
+  testWidgets('promoted controls keep their requested order and crop without interrupting playback', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var subtitlesTapped = false;
+    var downloadTapped = false;
+    final videoController = MockVideoPlayerController();
+    mockController = BetterPlayerMockController(
+      BetterPlayerConfiguration(
+        controlsConfiguration: BetterPlayerControlsConfiguration(
+          enablePip: false,
+          showQualitiesButton: true,
+          showSubtitlesButton: true,
+          onSubtitlesTap: () => subtitlesTapped = true,
+          enableDownloadButton: true,
+          onDownloadTap: () => downloadTapped = true,
+          enableCrop: true,
+          enableEpisodeSelection: true,
+          onEpisodeListTap: () {},
+        ),
+      ),
+    );
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    const orderedKeys = <Key>[
+      Key('better_player_quality_button'),
+      Key('better_player_subtitles_button'),
+      Key('better_player_download_button'),
+      Key('better_player_crop_button'),
+      Key('better_player_episode_button'),
+      Key('better_player_fullscreen_button'),
+    ];
+    final horizontalPositions = orderedKeys.map((key) => tester.getCenter(find.byKey(key)).dx).toList();
+    expect(horizontalPositions, orderedEquals(horizontalPositions.toList()..sort()));
+
+    tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_subtitles_button'))).onPressed!();
+    await tester.pump();
+    expect(subtitlesTapped, isTrue);
+
+    tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_download_button'))).onPressed!();
+    await tester.pump();
+    expect(downloadTapped, isTrue);
+
+    tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_crop_button'))).onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('Crop & fit'), findsOneWidget);
+    await tester.tap(find.text('Crop to fill'));
+    await tester.pumpAndSettle();
+    expect(mockController.getFit(), BoxFit.cover);
+    expect(videoController.value.isPlaying, isTrue);
   });
 }
 

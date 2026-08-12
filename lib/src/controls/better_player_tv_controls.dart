@@ -490,6 +490,38 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _openMenu('Video quality', items, nested: nested);
   }
 
+  void _openCropMenu({bool nested = false}) {
+    final current = widget.controller.getFit();
+    _openMenu('Crop & fit', <BetterPlayerTvMenuItem>[
+      BetterPlayerTvMenuItem(
+        label: 'Fit',
+        subtitle: 'Show the entire video',
+        icon: PhosphorIcons.arrowsIn(),
+        selected: current == BoxFit.contain,
+        onSelected: () => _selectCropMode(BoxFit.contain),
+      ),
+      BetterPlayerTvMenuItem(
+        label: 'Crop to fill',
+        subtitle: 'Fill the screen and trim overflowing edges',
+        icon: PhosphorIcons.crop(),
+        selected: current == BoxFit.cover,
+        onSelected: () => _selectCropMode(BoxFit.cover),
+      ),
+      BetterPlayerTvMenuItem(
+        label: 'Stretch',
+        subtitle: 'Fill the screen without cropping',
+        icon: PhosphorIcons.arrowsOut(),
+        selected: current == BoxFit.fill,
+        onSelected: () => _selectCropMode(BoxFit.fill),
+      ),
+    ], nested: nested);
+  }
+
+  void _selectCropMode(BoxFit fit) {
+    widget.controller.setOverriddenFit(fit);
+    _closeMenu();
+  }
+
   String _subtitleLabel() {
     final source = widget.controller.betterPlayerSubtitlesSource;
     if (source == null || source.type == BetterPlayerSubtitlesSourceType.none) {
@@ -669,6 +701,13 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                     icon: PhosphorIcons.highDefinition(),
                     accentColor: _accent,
                     onPressed: _openQualityMenu,
+                  ),
+                if (_configuration.enableCrop)
+                  _TvControlButton(
+                    label: 'Crop & fit',
+                    icon: _configuration.cropIcon,
+                    accentColor: _accent,
+                    onPressed: _openCropMenu,
                   ),
                 if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
                   _TvControlButton(

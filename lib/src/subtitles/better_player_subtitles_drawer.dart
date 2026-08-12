@@ -52,6 +52,7 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
     }
 
     widget.betterPlayerController.videoPlayerController!.addListener(_updateState);
+    widget.betterPlayerController.subtitleOffsetListenable.addListener(_updateSubtitleOffset);
 
     _outerTextStyle = TextStyle(
       fontSize: _configuration!.fontSize,
@@ -74,8 +75,13 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
   @override
   void dispose() {
     widget.betterPlayerController.videoPlayerController!.removeListener(_updateState);
+    widget.betterPlayerController.subtitleOffsetListenable.removeListener(_updateSubtitleOffset);
     _visibilityStreamSubscription.cancel();
     super.dispose();
+  }
+
+  void _updateSubtitleOffset() {
+    if (mounted) setState(() {});
   }
 
   ///Called when player state has changed, i.e. new player position, etc.
@@ -126,7 +132,9 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
       return null;
     }
 
-    final Duration position = _latestValue!.position;
+    // Moving the cue timeline backwards delays subtitles; moving it forwards
+    // shows them earlier.
+    final Duration position = _latestValue!.position - widget.betterPlayerController.subtitleOffset;
     for (final BetterPlayerSubtitle subtitle in widget.betterPlayerController.subtitlesLines) {
       if (subtitle.start! <= position && subtitle.end! >= position) {
         return subtitle;

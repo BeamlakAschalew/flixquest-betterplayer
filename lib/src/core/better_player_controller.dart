@@ -8,6 +8,7 @@ import 'package:better_player_plus/src/subtitles/better_player_subtitles_factory
 import 'package:better_player_plus/src/video_player/video_player.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
 import 'package:collection/collection.dart' show IterableExtension;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -92,6 +93,30 @@ class BetterPlayerController {
 
   ///Subtitles lines for current data source.
   List<BetterPlayerSubtitle> subtitlesLines = [];
+
+  ///The delay applied to subtitle cues.
+  ///
+  ///A positive value displays subtitles later; a negative value displays
+  ///them earlier. The value is scoped to this controller so it survives track
+  ///and provider changes during the same playback session.
+  final ValueNotifier<Duration> _subtitleOffsetNotifier = ValueNotifier<Duration>(Duration.zero);
+
+  Duration get subtitleOffset => _subtitleOffsetNotifier.value;
+
+  ValueListenable<Duration> get subtitleOffsetListenable => _subtitleOffsetNotifier;
+
+  ///Updates subtitle timing and notifies subtitle renderers immediately,
+  ///including while playback is paused.
+  void setSubtitleOffset(Duration offset) {
+    const maximumOffset = Duration(minutes: 1);
+    final clampedMilliseconds = offset.inMilliseconds.clamp(
+      -maximumOffset.inMilliseconds,
+      maximumOffset.inMilliseconds,
+    );
+    final nextOffset = Duration(milliseconds: clampedMilliseconds);
+    if (_subtitleOffsetNotifier.value == nextOffset) return;
+    _subtitleOffsetNotifier.value = nextOffset;
+  }
 
   ///Invalidates an older network subtitle request when the user selects a
   ///different track or the player replaces its data source.
@@ -1400,6 +1425,7 @@ class BetterPlayerController {
       _cancelNetworkRecovery(clearSavedPosition: true);
       _nextVideoTimeStreamController.close();
       _controlsVisibilityStreamController.close();
+      _subtitleOffsetNotifier.dispose();
       _videoEventStreamSubscription?.cancel();
       _disposed = true;
       _controllerEventStreamController.close();

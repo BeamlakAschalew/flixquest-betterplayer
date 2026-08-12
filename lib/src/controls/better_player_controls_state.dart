@@ -60,14 +60,14 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
           subtitle: '${betterPlayerController!.videoPlayerController?.value.speed ?? 1}×',
           onTap: _showSpeedChooserWidget,
         ),
-      if (betterPlayerControlsConfiguration.enableSubtitles)
+      if (betterPlayerControlsConfiguration.enableSubtitles && !betterPlayerControlsConfiguration.showSubtitlesButton)
         _PlayerMenuItem(
           icon: betterPlayerControlsConfiguration.subtitlesIcon,
           title: translations.overflowMenuSubtitles,
           subtitle: _selectedSubtitleLabel(),
           onTap: _showSubtitlesSelectionWidget,
         ),
-      if (betterPlayerControlsConfiguration.enableQualities)
+      if (betterPlayerControlsConfiguration.enableQualities && !betterPlayerControlsConfiguration.showQualitiesButton)
         _PlayerMenuItem(
           icon: betterPlayerControlsConfiguration.qualitiesIcon,
           title: translations.overflowMenuQuality,
@@ -103,6 +103,67 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
               ),
             )
             .toList(),
+      ),
+    );
+  }
+
+  ///Shows the package subtitle selector from a dedicated player control.
+  void showSubtitlesSelection() {
+    cancelAndRestartTimer();
+    _showSubtitlesSelectionWidget();
+  }
+
+  ///Shows the package quality selector from a dedicated player control.
+  void showQualitiesSelection() {
+    cancelAndRestartTimer();
+    _showQualitiesSelectionWidget();
+  }
+
+  ///Shows video layout choices without interrupting playback.
+  void showCropSelection() {
+    cancelAndRestartTimer();
+    final controller = betterPlayerController!;
+    final current = controller.getFit();
+    final modes = <({BoxFit fit, IconData icon, String title, String subtitle})>[
+      (
+        fit: BoxFit.contain,
+        icon: PhosphorIcons.arrowsIn(),
+        title: 'Fit',
+        subtitle: 'Show the entire video with its original proportions',
+      ),
+      (
+        fit: BoxFit.cover,
+        icon: PhosphorIcons.crop(),
+        title: 'Crop to fill',
+        subtitle: 'Fill the screen and trim only the overflowing edges',
+      ),
+      (
+        fit: BoxFit.fill,
+        icon: PhosphorIcons.arrowsOut(),
+        title: 'Stretch',
+        subtitle: 'Fill the screen without cropping',
+      ),
+    ];
+    final selected = modes.firstWhere((mode) => mode.fit == current, orElse: () => modes.first);
+    _showSheet(
+      icon: betterPlayerControlsConfiguration.cropIcon,
+      title: 'Crop & fit',
+      subtitle: selected.title,
+      child: _selectionList(
+        modes
+            .map(
+              (mode) => BetterPlayerSelectionTile(
+                icon: mode.icon,
+                title: mode.title,
+                subtitle: mode.subtitle,
+                selected: mode.fit == current,
+                onTap: () {
+                  _closeSheet();
+                  controller.setOverriddenFit(mode.fit);
+                },
+              ),
+            )
+            .toList(growable: false),
       ),
     );
   }

@@ -143,6 +143,19 @@ void main() {
       }
     });
 
+    test('subtitle offset is observable and clamped to a safe range', () {
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+      final observed = <Duration>[];
+      controller.subtitleOffsetListenable.addListener(() => observed.add(controller.subtitleOffset));
+
+      controller.setSubtitleOffset(const Duration(milliseconds: -1250));
+      controller.setSubtitleOffset(const Duration(minutes: 2));
+
+      expect(observed, <Duration>[const Duration(milliseconds: -1250), const Duration(minutes: 1)]);
+      expect(controller.subtitleOffset, const Duration(minutes: 1));
+      controller.dispose();
+    });
+
     test('play should change isPlaying flag', () async {
       final BetterPlayerController betterPlayerController = BetterPlayerTestUtils.setupBetterPlayerMockController();
       final videoPlayerController = BetterPlayerTestUtils.setupMockVideoPlayerControler();

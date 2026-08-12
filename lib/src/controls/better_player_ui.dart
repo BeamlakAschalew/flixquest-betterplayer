@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -174,7 +176,7 @@ class BetterPlayerIconSurface extends StatelessWidget {
   }
 }
 
-class BetterPlayerSelectionTile extends StatelessWidget {
+class BetterPlayerSelectionTile extends StatefulWidget {
   const BetterPlayerSelectionTile({
     required this.icon,
     required this.title,
@@ -191,25 +193,43 @@ class BetterPlayerSelectionTile extends StatelessWidget {
   final String? subtitle;
   final bool selected;
   final bool enabled;
-  final VoidCallback? onTap;
+  final FutureOr<void> Function()? onTap;
   final Widget? trailing;
+
+  @override
+  State<BetterPlayerSelectionTile> createState() => _BetterPlayerSelectionTileState();
+}
+
+class _BetterPlayerSelectionTileState extends State<BetterPlayerSelectionTile> {
+  bool _loading = false;
+
+  Future<void> _handleTap() async {
+    final onTap = widget.onTap;
+    if (_loading || onTap == null) return;
+    setState(() => _loading = true);
+    try {
+      await onTap();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: selected ? colors.primary.withValues(alpha: .1) : Colors.transparent,
+      color: widget.selected ? colors.primary.withValues(alpha: .1) : Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: enabled ? onTap : null,
+        onTap: widget.enabled && !_loading ? _handleTap : null,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 64),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
-                BetterPlayerIconSurface(icon: icon, selected: selected, color: colors.primary),
+                BetterPlayerIconSurface(icon: widget.icon, selected: widget.selected, color: colors.primary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -217,22 +237,22 @@ class BetterPlayerSelectionTile extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        title,
+                        widget.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                          color: enabled
-                              ? selected
+                          fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w600,
+                          color: widget.enabled
+                              ? widget.selected
                                     ? colors.primary
                                     : colors.onSurface
                               : colors.onSurface.withValues(alpha: .38),
                         ),
                       ),
-                      if (subtitle?.isNotEmpty == true) ...[
+                      if (widget.subtitle?.isNotEmpty == true) ...[
                         const SizedBox(height: 3),
                         Text(
-                          subtitle!,
+                          widget.subtitle!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
@@ -242,11 +262,20 @@ class BetterPlayerSelectionTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                trailing ??
-                    Icon(
-                      selected ? PhosphorIcons.checkCircle(PhosphorIconsStyle.fill) : PhosphorIcons.caretRight(),
-                      color: selected ? colors.primary : colors.onSurfaceVariant,
-                    ),
+                if (_loading)
+                  const SizedBox.square(
+                    key: Key('better_player_selection_progress'),
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  )
+                else
+                  widget.trailing ??
+                      Icon(
+                        widget.selected
+                            ? PhosphorIcons.checkCircle(PhosphorIconsStyle.fill)
+                            : PhosphorIcons.caretRight(),
+                        color: widget.selected ? colors.primary : colors.onSurfaceVariant,
+                      ),
               ],
             ),
           ),

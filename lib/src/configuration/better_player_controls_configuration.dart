@@ -41,7 +41,13 @@ class BetterPlayerControlsConfiguration {
     this.enablePlaybackSpeed = true,
     this.playbackSpeeds = const [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
     this.enableSubtitles = true,
+    this.showSubtitlesButton = false,
+    this.onSubtitlesTap,
     this.enableQualities = true,
+    this.showQualitiesButton = false,
+    this.enableDownloadButton = false,
+    this.onDownloadTap,
+    this.enableCrop = false,
     this.enablePip = true,
     this.enableCast = false,
     this.enableRetry = true,
@@ -51,6 +57,8 @@ class BetterPlayerControlsConfiguration {
     this.playbackSpeedIcon = PhosphorIconsRegular.gauge,
     this.qualitiesIcon = PhosphorIconsRegular.monitorPlay,
     this.subtitlesIcon = PhosphorIconsRegular.closedCaptioning,
+    this.downloadIcon = PhosphorIconsRegular.downloadSimple,
+    this.cropIcon = PhosphorIconsRegular.crop,
     this.audioTracksIcon = PhosphorIconsRegular.waveform,
     this.overflowMenuIconsColor = Colors.black,
     this.forwardSkipTimeInMilliseconds = 10000,
@@ -192,8 +200,27 @@ class BetterPlayerControlsConfiguration {
   ///Flag used to show/hide subtitles
   final bool enableSubtitles;
 
+  ///Shows subtitles as a dedicated control instead of an overflow menu item.
+  final bool showSubtitlesButton;
+
+  ///Optional callback for the dedicated subtitles control. When omitted, the
+  ///built-in subtitle selector is shown.
+  final VoidCallback? onSubtitlesTap;
+
   ///Flag used to show/hide qualities
   final bool enableQualities;
+
+  ///Shows video quality as a dedicated control instead of an overflow item.
+  final bool showQualitiesButton;
+
+  ///Shows a dedicated download control.
+  final bool enableDownloadButton;
+
+  ///Callback invoked by the dedicated download control.
+  final VoidCallback? onDownloadTap;
+
+  ///Shows a dedicated video crop control with fit, crop, and stretch modes.
+  final bool enableCrop;
 
   ///Flag used to show/hide PiP mode
   final bool enablePip;
@@ -221,6 +248,12 @@ class BetterPlayerControlsConfiguration {
 
   ///Icon of the subtitles menu item from overflow menu
   final IconData subtitlesIcon;
+
+  ///Icon of the dedicated download control.
+  final IconData downloadIcon;
+
+  ///Icon of the dedicated crop control.
+  final IconData cropIcon;
 
   ///Icon of the qualities menu item from overflow menu
   final IconData qualitiesIcon;

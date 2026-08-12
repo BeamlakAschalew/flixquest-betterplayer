@@ -319,8 +319,42 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             children: [
               if (_configuration.enableMute) _muteButton(compact),
               const Spacer(),
+              if (_configuration.enableQualities && _configuration.showQualitiesButton)
+                _featureButton(
+                  key: const Key('better_player_quality_button'),
+                  icon: _configuration.qualitiesIcon,
+                  label: 'Quality',
+                  compact: compact,
+                  onPressed: showQualitiesSelection,
+                ),
+              if (_configuration.enableSubtitles && _configuration.showSubtitlesButton)
+                _featureButton(
+                  key: const Key('better_player_subtitles_button'),
+                  icon: _configuration.subtitlesIcon,
+                  label: 'Subtitles',
+                  compact: compact,
+                  onPressed: _onSubtitlesPressed,
+                ),
+              if (_configuration.enableDownloadButton)
+                _featureButton(
+                  key: const Key('better_player_download_button'),
+                  icon: _configuration.downloadIcon,
+                  label: 'Download',
+                  compact: compact,
+                  onPressed: _configuration.onDownloadTap == null ? null : _onDownloadPressed,
+                ),
+              if (_configuration.enableCrop)
+                _featureButton(
+                  key: const Key('better_player_crop_button'),
+                  icon: _configuration.cropIcon,
+                  label: 'Crop & fit',
+                  compact: compact,
+                  selected: _betterPlayerController!.getFit() != BoxFit.contain,
+                  onPressed: showCropSelection,
+                ),
               if (_configuration.enableEpisodeSelection)
                 _featureButton(
+                  key: const Key('better_player_episode_button'),
                   icon: PhosphorIcons.listBullets(),
                   label: 'Episodes',
                   compact: compact,
@@ -328,6 +362,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                 ),
               if (_configuration.enableMovieRecommendations)
                 _featureButton(
+                  key: const Key('better_player_recommendations_button'),
                   icon: PhosphorIcons.filmSlate(),
                   label: 'Recommendations',
                   compact: compact,
@@ -335,6 +370,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                 ),
               if (_configuration.enableFullscreen)
                 BetterPlayerControlButton(
+                  key: const Key('better_player_fullscreen_button'),
                   icon: _betterPlayerController!.isFullScreen
                       ? _configuration.fullscreenDisableIcon
                       : _configuration.fullscreenEnableIcon,
@@ -372,20 +408,39 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   }
 
   Widget _featureButton({
+    Key? key,
     required IconData icon,
     required String label,
     required bool compact,
     required VoidCallback? onPressed,
+    bool selected = false,
   }) => Padding(
     padding: const EdgeInsetsDirectional.only(end: 6),
     child: BetterPlayerControlButton(
+      key: key,
       icon: icon,
       label: label,
       iconColor: _configuration.iconsColor,
       size: compact ? 42 : 48,
+      selected: selected,
       onPressed: onPressed,
     ),
   );
+
+  void _onSubtitlesPressed() {
+    final callback = _configuration.onSubtitlesTap;
+    if (callback == null) {
+      showSubtitlesSelection();
+      return;
+    }
+    cancelAndRestartTimer();
+    callback();
+  }
+
+  void _onDownloadPressed() {
+    cancelAndRestartTimer();
+    _configuration.onDownloadTap?.call();
+  }
 
   Widget _muteButton(bool compact) => BetterPlayerControlButton(
     icon: (_latestValue?.volume ?? 0) > 0 ? _configuration.unMuteIcon : _configuration.muteIcon,
