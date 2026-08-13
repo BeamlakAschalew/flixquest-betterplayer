@@ -115,6 +115,40 @@ void main() {
     expect(videoController.value.isPlaying, isTrue);
   });
 
+  testWidgets('top overlay blocks transport controls', (WidgetTester tester) async {
+    var overlayTaps = 0;
+    final videoController = MockVideoPlayerController();
+    mockController = BetterPlayerMockController(
+      BetterPlayerConfiguration(
+        overlayOnTop: true,
+        overlay: GestureDetector(
+          key: const Key('modal_player_overlay'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => overlayTaps++,
+        ),
+        controlsConfiguration: const BetterPlayerControlsConfiguration(
+          showControlsOnInitialize: true,
+        ),
+      ),
+    );
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(
+      BetterPlayerDataSource.network('https://example.com/video.mp4'),
+    );
+    videoController.value = VideoPlayerValue(
+      duration: const Duration(minutes: 2),
+      isPlaying: true,
+    );
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tapAt(tester.getCenter(find.byType(BetterPlayer)));
+    await tester.pump();
+
+    expect(overlayTaps, 1);
+    expect(videoController.value.isPlaying, isTrue);
+  });
+
   testWidgets('fullscreen scrim fills unsafe area while controls remain safe', (WidgetTester tester) async {
     final videoController = MockVideoPlayerController();
     mockController.videoPlayerController = videoController;

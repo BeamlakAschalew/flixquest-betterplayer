@@ -16,6 +16,7 @@ class BetterPlayerConfiguration {
     this.showPlaceholderUntilPlay = false,
     this.placeholderOnTop = true,
     this.overlay,
+    this.overlayOnTop = false,
     this.errorBuilder,
     this.allowedScreenSleep = true,
     this.fullScreenAspectRatio,
@@ -76,6 +77,12 @@ class BetterPlayerConfiguration {
 
   /// A widget which is placed between the video and the controls
   final Widget? overlay;
+
+  /// Places [overlay] above the controls when true.
+  ///
+  /// This is useful for modal player states, such as a custom fatal-error
+  /// surface, which must both cover and block the transport controls.
+  final bool overlayOnTop;
 
   /// Defines if the player will start in fullscreen when play is pressed
   final bool fullScreenByDefault;
@@ -164,6 +171,7 @@ class BetterPlayerConfiguration {
     bool? showPlaceholderUntilPlay,
     bool? placeholderOnTop,
     Widget? overlay,
+    bool? overlayOnTop,
     bool? showControlsOnInitialize,
     Widget Function(BuildContext context, String? errorMessage)? errorBuilder,
     bool? allowedScreenSleep,
@@ -194,6 +202,7 @@ class BetterPlayerConfiguration {
     showPlaceholderUntilPlay: showPlaceholderUntilPlay ?? this.showPlaceholderUntilPlay,
     placeholderOnTop: placeholderOnTop ?? this.placeholderOnTop,
     overlay: overlay ?? this.overlay,
+    overlayOnTop: overlayOnTop ?? this.overlayOnTop,
     errorBuilder: errorBuilder ?? this.errorBuilder,
     allowedScreenSleep: allowedScreenSleep ?? this.allowedScreenSleep,
     fullScreenAspectRatio: fullScreenAspectRatio ?? this.fullScreenAspectRatio,
