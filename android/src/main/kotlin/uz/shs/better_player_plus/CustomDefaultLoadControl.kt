@@ -41,6 +41,10 @@ internal class CustomDefaultLoadControl {
     @JvmField
     val retainBackBufferFromKeyframe: Boolean
 
+    /** Continue loading to the time threshold even when the byte target is met. */
+    @JvmField
+    val prioritizeTimeOverSizeThresholds: Boolean
+
     constructor() {
         minBufferMs = DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
         maxBufferMs = DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
@@ -49,6 +53,7 @@ internal class CustomDefaultLoadControl {
             DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
         backBufferDurationMs = 120_000
         retainBackBufferFromKeyframe = true
+        prioritizeTimeOverSizeThresholds = true
     }
 
     constructor(
@@ -57,7 +62,8 @@ internal class CustomDefaultLoadControl {
         bufferForPlaybackMs: Int?,
         bufferForPlaybackAfterRebufferMs: Int?,
         backBufferDurationMs: Int?,
-        retainBackBufferFromKeyframe: Boolean?
+        retainBackBufferFromKeyframe: Boolean?,
+        prioritizeTimeOverSizeThresholds: Boolean?
     ) {
         this.minBufferMs = minBufferMs ?: DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
         this.maxBufferMs = maxBufferMs ?: DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
@@ -67,5 +73,6 @@ internal class CustomDefaultLoadControl {
             ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
         this.backBufferDurationMs = backBufferDurationMs ?: 120_000
         this.retainBackBufferFromKeyframe = retainBackBufferFromKeyframe ?: true
+        this.prioritizeTimeOverSizeThresholds = prioritizeTimeOverSizeThresholds ?: true
     }
 }

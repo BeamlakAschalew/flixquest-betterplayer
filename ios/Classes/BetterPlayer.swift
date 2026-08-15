@@ -37,6 +37,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     private var sequenceContentStartPosition: Int = 0
     private var sequenceContentStartApplied: Bool = false
     private var sequencePreRollEndedSent: Bool = false
+    private var currentSourceIsLive: Bool = false
 
     private var pipController: AVPictureInPictureController?
     private var restoreUIOnPipStop: ((Bool) -> Void)?
@@ -46,7 +47,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         super.init()
         self.player.actionAtItemEnd = .none
         if #available(iOS 10.0, *) {
-            self.player.automaticallyWaitsToMinimizeStalling = false
+            self.player.automaticallyWaitsToMinimizeStalling = true
         }
         self.observersAdded = false
         self.isInitialized = false
@@ -175,23 +176,23 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     public func setDataSourceAsset(_ assetPath: String, key: String?, certificateUrl: String?, licenseUrl: String?, cacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int) {
         if let path = Bundle.main.path(forResource: assetPath, ofType: nil) {
             let url = URL(fileURLWithPath: path)
-            setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: [:], useCache: false, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: nil)
+            setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: [:], useCache: false, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: nil, isLive: false)
         }
     }
 
-    public func setDataSourceURL(_ url: URL, key: String?, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, videoExtension: String?) {
+    public func setDataSourceURL(_ url: URL, key: String?, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, videoExtension: String?, isLive: Bool) {
         self.overriddenDuration = 0
-        let item = makePlayerItem(url, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, videoExtension: videoExtension)
+        let item = makePlayerItem(url, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, videoExtension: videoExtension, isLive: isLive)
         if #available(iOS 10.0, *), overriddenDuration > 0 {
             self.overriddenDuration = overriddenDuration
         }
-        setDataSourcePlayerItem(item, key: key)
+        setDataSourcePlayerItem(item, key: key, isLive: isLive)
     }
 
-    public func setDataSourceSequence(preRollURL: URL, preRollHeaders: [AnyHashable: Any], preRollUseCache: Bool, preRollCacheKey: String?, preRollVideoExtension: String?, contentURL: URL, contentKey: String?, contentCertificateUrl: String?, contentLicenseUrl: String?, contentHeaders: [AnyHashable: Any], contentUseCache: Bool, contentCacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, contentVideoExtension: String?, contentStartPosition: Int) {
+    public func setDataSourceSequence(preRollURL: URL, preRollHeaders: [AnyHashable: Any], preRollUseCache: Bool, preRollCacheKey: String?, preRollVideoExtension: String?, contentURL: URL, contentKey: String?, contentCertificateUrl: String?, contentLicenseUrl: String?, contentHeaders: [AnyHashable: Any], contentUseCache: Bool, contentCacheKey: String?, cacheManager: CacheManager, overriddenDuration: Int, contentVideoExtension: String?, contentStartPosition: Int, contentIsLive: Bool) {
         self.overriddenDuration = overriddenDuration
-        let preRollItem = makePlayerItem(preRollURL, certificateUrl: nil, licenseUrl: nil, headers: preRollHeaders, useCache: preRollUseCache, cacheKey: preRollCacheKey, cacheManager: cacheManager, videoExtension: preRollVideoExtension)
-        let contentItem = makePlayerItem(contentURL, certificateUrl: contentCertificateUrl, licenseUrl: contentLicenseUrl, headers: contentHeaders, useCache: contentUseCache, cacheKey: contentCacheKey, cacheManager: cacheManager, videoExtension: contentVideoExtension)
+        let preRollItem = makePlayerItem(preRollURL, certificateUrl: nil, licenseUrl: nil, headers: preRollHeaders, useCache: preRollUseCache, cacheKey: preRollCacheKey, cacheManager: cacheManager, videoExtension: preRollVideoExtension, isLive: false)
+        let contentItem = makePlayerItem(contentURL, certificateUrl: contentCertificateUrl, licenseUrl: contentLicenseUrl, headers: contentHeaders, useCache: contentUseCache, cacheKey: contentCacheKey, cacheManager: cacheManager, videoExtension: contentVideoExtension, isLive: contentIsLive)
 
         removeObservers()
         self.key = contentKey
@@ -203,6 +204,10 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         self.sequenceContentStartPosition = max(0, contentStartPosition)
         self.sequenceContentStartApplied = false
         self.sequencePreRollEndedSent = false
+        self.currentSourceIsLive = contentIsLive
+        if #available(iOS 10.0, *) {
+            self.player.automaticallyWaitsToMinimizeStalling = contentIsLive
+        }
         if let queue = player as? AVQueuePlayer {
             queue.pause()
             queue.removeAllItems()
@@ -213,32 +218,45 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         addObservers(preRollItem)
     }
 
-    private func makePlayerItem(_ url: URL, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, videoExtension: String?) -> AVPlayerItem {
+    private func makePlayerItem(_ url: URL, certificateUrl: String?, licenseUrl: String?, headers: [AnyHashable: Any], useCache: Bool, cacheKey: String?, cacheManager: CacheManager, videoExtension: String?, isLive: Bool) -> AVPlayerItem {
         var finalHeaders = headers
         if finalHeaders["dummy"] == nil {} // keep dictionary type stable
+        let item: AVPlayerItem
         if useCache {
-            return cacheManager.getCachingPlayerItemForNormalPlayback(url, cacheKey: cacheKey, videoExtension: videoExtension, headers: finalHeaders as NSDictionary as! [NSObject: AnyObject]) ?? AVPlayerItem(url: url)
+            item = cacheManager.getCachingPlayerItemForNormalPlayback(url, cacheKey: cacheKey, videoExtension: videoExtension, headers: finalHeaders as NSDictionary as! [NSObject: AnyObject]) ?? AVPlayerItem(url: url)
+        } else {
+            let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": finalHeaders])
+            if let certificateUrl = certificateUrl, !certificateUrl.isEmpty,
+               let certURL = URL(string: certificateUrl) {
+                let licURL = licenseUrl.flatMap { URL(string: $0) }
+                let delegate = BetterPlayerEzDrmAssetsLoaderDelegate(certURL, withLicenseURL: licURL)
+                self.loaderDelegate = delegate
+                let qos = DispatchQoS.QoSClass.default
+                let streamQueue = DispatchQueue(label: "streamQueue", qos: DispatchQoS(qosClass: qos, relativePriority: -1), attributes: [])
+                asset.resourceLoader.setDelegate(delegate, queue: streamQueue)
+            }
+            item = AVPlayerItem(asset: asset)
         }
-        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": finalHeaders])
-        if let certificateUrl = certificateUrl, !certificateUrl.isEmpty,
-           let certURL = URL(string: certificateUrl) {
-            let licURL = licenseUrl.flatMap { URL(string: $0) }
-            let delegate = BetterPlayerEzDrmAssetsLoaderDelegate(certURL, withLicenseURL: licURL)
-            self.loaderDelegate = delegate
-            let qos = DispatchQoS.QoSClass.default
-            let streamQueue = DispatchQueue(label: "streamQueue", qos: DispatchQoS(qosClass: qos, relativePriority: -1), attributes: [])
-            asset.resourceLoader.setDelegate(delegate, queue: streamQueue)
+        if #available(iOS 10.0, *) {
+            item.preferredForwardBufferDuration = isLive ? 60.0 : 0.0
         }
-        return AVPlayerItem(asset: asset)
+        if #available(iOS 9.0, *) {
+            item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
+        }
+        return item
     }
 
-    private func setDataSourcePlayerItem(_ item: AVPlayerItem, key: String?) {
+    private func setDataSourcePlayerItem(_ item: AVPlayerItem, key: String?, isLive: Bool) {
         removeObservers()
         sequenceContentItem = nil
         sequenceContentStartPosition = 0
         sequenceContentStartApplied = false
         sequencePreRollEndedSent = false
         self.key = key
+        self.currentSourceIsLive = isLive
+        if #available(iOS 10.0, *) {
+            self.player.automaticallyWaitsToMinimizeStalling = isLive
+        }
         self.stalledCount = 0
         self.isStalledCheckStarted = false
         self.playerRate = 1
@@ -380,7 +398,11 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         if !observersAdded, let current = player.currentItem { addObservers(current) }
         if isPlaying {
             if #available(iOS 10.0, *) {
-                player.playImmediately(atRate: 1.0)
+                if currentSourceIsLive {
+                    player.play()
+                } else {
+                    player.playImmediately(atRate: 1.0)
+                }
                 player.rate = playerRate
             } else {
                 player.play()

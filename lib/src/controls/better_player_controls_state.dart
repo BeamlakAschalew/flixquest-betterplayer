@@ -285,24 +285,29 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
         ),
       );
     }
-    if (tracks.isEmpty) {
-      betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
-        final selected = name == betterPlayerController!.betterPlayerResolutionName;
-        final detectedDetails = selected ? _detectedQualityDetails() : null;
-        items.add(
-          BetterPlayerSelectionTile(
-            icon: selected ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill) : PhosphorIcons.monitorPlay(),
-            title: name,
-            subtitle: BetterPlayerUtils.resolutionHeightFromLabel(name) == null ? detectedDetails : null,
-            selected: selected,
-            onTap: () {
-              _closeSheet();
-              betterPlayerController!.setResolution(url, name: name);
-            },
-          ),
-        );
-      });
-    }
+    betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+      final selected = name == betterPlayerController!.betterPlayerResolutionName;
+      final detectedDetails = selected ? _detectedQualityDetails() : null;
+      final displayName = betterPlayerController!.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
+      final description = betterPlayerController!.betterPlayerDataSource?.resolutionDescriptions?[name];
+      final subtitleParts = <String>[
+        if (description?.trim().isNotEmpty == true) description!.trim(),
+        if (BetterPlayerUtils.resolutionHeightFromLabel(displayName) == null && detectedDetails != null)
+          detectedDetails,
+      ];
+      items.add(
+        BetterPlayerSelectionTile(
+          icon: selected ? PhosphorIcons.monitorPlay(PhosphorIconsStyle.fill) : PhosphorIcons.monitorPlay(),
+          title: displayName,
+          subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
+          selected: selected,
+          onTap: () {
+            _closeSheet();
+            betterPlayerController!.setResolution(url, name: name);
+          },
+        ),
+      );
+    });
     _showSheet(
       icon: betterPlayerControlsConfiguration.qualitiesIcon,
       title: betterPlayerController!.translations.overflowMenuQuality,
@@ -369,10 +374,12 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     );
     final resolutionName = betterPlayerController!.betterPlayerResolutionName;
     if (resolutionName?.trim().isNotEmpty == true) {
-      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(resolutionName) == null) {
-        return '${detectedHeight}p • ${resolutionName!.trim()}';
+      final displayName =
+          betterPlayerController!.betterPlayerDataSource?.resolutionDisplayNames?[resolutionName] ?? resolutionName!;
+      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(displayName) == null) {
+        return '${displayName.trim()} • ${detectedHeight}p';
       }
-      return resolutionName!.trim();
+      return displayName.trim();
     }
     final track = betterPlayerController!.betterPlayerAsmsTrack;
     if (track == null || (track.height == 0 && track.width == 0 && track.bitrate == 0)) {

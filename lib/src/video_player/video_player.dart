@@ -321,6 +321,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     String? activityName,
     String? clearKey,
     String? videoExtension,
+    bool isLive = false,
     DataSource? preRollDataSource,
     Duration? contentStartPosition,
   }) => _setDataSource(
@@ -345,6 +346,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       activityName: activityName,
       clearKey: clearKey,
       videoExtension: videoExtension,
+      isLive: isLive,
       preRollDataSource: preRollDataSource,
       contentStartPosition: contentStartPosition,
     ),

@@ -8,6 +8,7 @@ class BetterPlayerBufferingConfiguration {
     this.bufferForPlaybackAfterRebufferMs = defaultBufferForPlaybackAfterRebufferMs,
     this.backBufferDurationMs = defaultBackBufferDurationMs,
     this.retainBackBufferFromKeyframe = defaultRetainBackBufferFromKeyframe,
+    this.prioritizeTimeOverSizeThresholds = defaultPrioritizeTimeOverSizeThresholds,
   });
 
   ///Constants values are from the offical exoplayer documentation
@@ -18,6 +19,7 @@ class BetterPlayerBufferingConfiguration {
   static const defaultBufferForPlaybackAfterRebufferMs = 6000;
   static const defaultBackBufferDurationMs = 120000;
   static const defaultRetainBackBufferFromKeyframe = true;
+  static const defaultPrioritizeTimeOverSizeThresholds = true;
 
   /// The default minimum duration of media that the player will attempt to
   /// ensure is buffered at all times, in milliseconds.
@@ -43,4 +45,8 @@ class BetterPlayerBufferingConfiguration {
   /// Whether the back buffer may extend to the keyframe preceding its nominal
   /// start. Disabling this gives memory-constrained devices a firmer bound.
   final bool retainBackBufferFromKeyframe;
+
+  /// Whether loading should continue until the time-based buffer target is
+  /// reached even when the allocator's byte target has already been met.
+  final bool prioritizeTimeOverSizeThresholds;
 }

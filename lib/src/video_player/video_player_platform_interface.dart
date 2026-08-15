@@ -220,6 +220,7 @@ class DataSource {
     this.activityName,
     this.clearKey,
     this.videoExtension,
+    this.isLive = false,
     this.preRollDataSource,
     this.contentStartPosition,
   }) : assert(uri == null || asset == null);
@@ -305,6 +306,9 @@ class DataSource {
   final String? clearKey;
 
   final String? videoExtension;
+
+  /// Whether the source is live, enabling native live-edge buffering policy.
+  final bool isLive;
 
   /// Optional item played immediately before this source in the same native
   /// player timeline.

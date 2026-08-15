@@ -51,6 +51,51 @@ void main() {
     expect(find.byKey(const Key('better_player_selection_progress')), findsNothing);
   });
 
+  testWidgets('quality menu keeps external resolutions when adaptive tracks exist', (WidgetTester tester) async {
+    final videoController = MockVideoPlayerController();
+    mockController = BetterPlayerMockController(
+      const BetterPlayerConfiguration(
+        controlsConfiguration: BetterPlayerControlsConfiguration(showQualitiesButton: true),
+      ),
+    );
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(
+      BetterPlayerDataSource(
+        BetterPlayerDataSourceType.network,
+        'https://example.com/720.mp4',
+        resolutions: const {
+          '1080p · ShowBox 2': 'https://example.com/1080.m3u8',
+          '720p · ShowBox 1': 'https://example.com/720.m3u8',
+          '360p · ShowBox 1': 'https://example.com/360.m3u8',
+        },
+        selectedResolution: '720p · ShowBox 1',
+        resolutionDisplayNames: const {
+          '1080p · ShowBox 2': '1080p',
+          '720p · ShowBox 1': '720p',
+          '360p · ShowBox 1': '360p',
+        },
+        resolutionDescriptions: const {
+          '1080p · ShowBox 2': 'ShowBox 2',
+          '720p · ShowBox 1': 'ShowBox 1',
+          '360p · ShowBox 1': 'ShowBox 1',
+        },
+      ),
+    );
+    mockController.betterPlayerAsmsTracks.add(const BetterPlayerAsmsTrack('', 1280, 720, 1500000, 30, '', ''));
+    videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byKey(const Key('better_player_quality_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1080p'), findsOneWidget);
+    expect(find.text('720p'), findsWidgets);
+    expect(find.text('360p'), findsOneWidget);
+    expect(find.text('ShowBox 2'), findsOneWidget);
+    expect(find.text('1080p · ShowBox 2'), findsNothing);
+  });
+
   testWidgets('buffering controls can seek and pause without tapping the overlay', (WidgetTester tester) async {
     final videoController = MockVideoPlayerController();
     mockController.videoPlayerController = videoController;
@@ -126,19 +171,12 @@ void main() {
           behavior: HitTestBehavior.opaque,
           onTap: () => overlayTaps++,
         ),
-        controlsConfiguration: const BetterPlayerControlsConfiguration(
-          showControlsOnInitialize: true,
-        ),
+        controlsConfiguration: const BetterPlayerControlsConfiguration(showControlsOnInitialize: true),
       ),
     );
     mockController.videoPlayerController = videoController;
-    await mockController.setupDataSource(
-      BetterPlayerDataSource.network('https://example.com/video.mp4'),
-    );
-    videoController.value = VideoPlayerValue(
-      duration: const Duration(minutes: 2),
-      isPlaying: true,
-    );
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
 
     await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
     await tester.pump(const Duration(milliseconds: 250));

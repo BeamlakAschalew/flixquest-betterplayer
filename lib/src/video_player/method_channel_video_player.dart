@@ -31,6 +31,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
         'bufferForPlaybackAfterRebufferMs': bufferingConfiguration.bufferForPlaybackAfterRebufferMs,
         'backBufferDurationMs': bufferingConfiguration.backBufferDurationMs,
         'retainBackBufferFromKeyframe': bufferingConfiguration.retainBackBufferFromKeyframe,
+        'prioritizeTimeOverSizeThresholds': bufferingConfiguration.prioritizeTimeOverSizeThresholds,
       });
 
       response = responseLinkedHashMap != null ? Map<String, dynamic>.from(responseLinkedHashMap) : null;
@@ -87,6 +88,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           'activityName': dataSource.activityName,
           'clearKey': dataSource.clearKey,
           'videoExtension': dataSource.videoExtension,
+          'isLive': dataSource.isLive,
         };
       case DataSourceType.file:
         dataSourceDescription = <String, dynamic>{

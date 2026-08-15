@@ -46,6 +46,35 @@ void main() {
     expect(controller.betterPlayerSubtitlesSourceList, contains(same(subtitle)));
   });
 
+  test('resolution selection applies its format and request headers', () async {
+    const hlsUrl = 'https://example.com/720.m3u8';
+    const dashUrl = 'https://example.com/1080.mpd';
+    final controller = BetterPlayerMockController(const BetterPlayerConfiguration())
+      ..videoPlayerController = MockVideoPlayerController();
+
+    await controller.setupDataSource(
+      BetterPlayerDataSource(
+        BetterPlayerDataSourceType.network,
+        hlsUrl,
+        resolutions: const {'720p': hlsUrl, '1080p': dashUrl},
+        selectedResolution: '720p',
+        videoFormat: BetterPlayerVideoFormat.hls,
+        headers: const {'Referer': 'https://hls.example/'},
+        resolutionVideoFormats: const {'720p': BetterPlayerVideoFormat.hls, '1080p': BetterPlayerVideoFormat.dash},
+        resolutionHeaders: const {
+          '720p': {'Referer': 'https://hls.example/'},
+          '1080p': {'Referer': 'https://dash.example/'},
+        },
+      ),
+    );
+
+    await controller.setResolution(dashUrl, name: '1080p');
+
+    expect(controller.betterPlayerDataSource!.url, dashUrl);
+    expect(controller.betterPlayerDataSource!.videoFormat, BetterPlayerVideoFormat.dash);
+    expect(controller.betterPlayerDataSource!.headers, {'Referer': 'https://dash.example/'});
+  });
+
   test('detects and normalizes runtime video dimensions', () {
     expect(BetterPlayerUtils.detectedVideoHeight(const Size(1920, 1080)), 1080);
     expect(BetterPlayerUtils.detectedVideoHeight(const Size(1920, 1088)), 1080);

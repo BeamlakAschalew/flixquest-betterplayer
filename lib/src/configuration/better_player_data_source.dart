@@ -24,6 +24,10 @@ class BetterPlayerDataSource {
     this.asmsTrackNames,
     this.resolutions,
     this.selectedResolution,
+    this.resolutionVideoFormats,
+    this.resolutionHeaders,
+    this.resolutionDisplayNames,
+    this.resolutionDescriptions,
     this.cacheConfiguration,
     this.notificationConfiguration = const BetterPlayerNotificationConfiguration(showNotification: false),
     this.overriddenDuration,
@@ -50,6 +54,10 @@ class BetterPlayerDataSource {
     bool? useAsmsTracks,
     bool? useAsmsAudioTracks,
     Map<String, String>? qualities,
+    Map<String, BetterPlayerVideoFormat?>? qualityVideoFormats,
+    Map<String, Map<String, String>>? qualityHeaders,
+    Map<String, String>? qualityDisplayNames,
+    Map<String, String>? qualityDescriptions,
     BetterPlayerCacheConfiguration? cacheConfiguration,
     BetterPlayerNotificationConfiguration notificationConfiguration = const BetterPlayerNotificationConfiguration(
       showNotification: false,
@@ -70,6 +78,10 @@ class BetterPlayerDataSource {
     useAsmsTracks: useAsmsTracks,
     useAsmsAudioTracks: useAsmsAudioTracks,
     resolutions: qualities,
+    resolutionVideoFormats: qualityVideoFormats,
+    resolutionHeaders: qualityHeaders,
+    resolutionDisplayNames: qualityDisplayNames,
+    resolutionDescriptions: qualityDescriptions,
     cacheConfiguration: cacheConfiguration,
     notificationConfiguration: notificationConfiguration,
     overriddenDuration: overriddenDuration,
@@ -165,8 +177,7 @@ class BetterPlayerDataSource {
   ///If empty, then better player will choose name based on track parameters
   final List<String>? asmsTrackNames;
 
-  ///Optional, alternative resolutions for non-hls/dash video. Used to setup
-  ///different qualities for video.
+  ///Optional alternative URLs used to provide different qualities or servers.
   ///Data should be in given format:
   ///{"360p": "url", "540p": "url2" }
   final Map<String, String>? resolutions;
@@ -175,6 +186,20 @@ class BetterPlayerDataSource {
   ///separate from the URL is important when multiple qualities share a master
   ///playlist URL.
   final String? selectedResolution;
+
+  ///Format hint associated with each entry in [resolutions]. This allows a
+  ///quality switch to cross HLS, DASH, and progressive sources safely.
+  final Map<String, BetterPlayerVideoFormat?>? resolutionVideoFormats;
+
+  ///Request headers associated with each entry in [resolutions].
+  final Map<String, Map<String, String>>? resolutionHeaders;
+
+  ///User-facing quality labels associated with the internal [resolutions]
+  ///keys. For example, multiple unique source keys can all display as `720p`.
+  final Map<String, String>? resolutionDisplayNames;
+
+  ///Secondary labels associated with [resolutions], typically server names.
+  final Map<String, String>? resolutionDescriptions;
 
   ///Optional cache configuration, used only for network data sources
   final BetterPlayerCacheConfiguration? cacheConfiguration;
@@ -222,6 +247,10 @@ class BetterPlayerDataSource {
     bool? useAsmsAudioTracks,
     Map<String, String>? resolutions,
     String? selectedResolution,
+    Map<String, BetterPlayerVideoFormat?>? resolutionVideoFormats,
+    Map<String, Map<String, String>>? resolutionHeaders,
+    Map<String, String>? resolutionDisplayNames,
+    Map<String, String>? resolutionDescriptions,
     BetterPlayerCacheConfiguration? cacheConfiguration,
     BetterPlayerNotificationConfiguration? notificationConfiguration = const BetterPlayerNotificationConfiguration(
       showNotification: false,
@@ -233,6 +262,7 @@ class BetterPlayerDataSource {
     Widget? placeholder,
     BetterPlayerBufferingConfiguration? bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
     BetterPlayerCastConfiguration? castConfiguration,
+    bool clearVideoFormat = false,
   }) => BetterPlayerDataSource(
     type ?? this.type,
     url ?? this.url,
@@ -245,10 +275,14 @@ class BetterPlayerDataSource {
     useAsmsAudioTracks: useAsmsAudioTracks ?? this.useAsmsAudioTracks,
     resolutions: resolutions ?? this.resolutions,
     selectedResolution: selectedResolution ?? this.selectedResolution,
+    resolutionVideoFormats: resolutionVideoFormats ?? this.resolutionVideoFormats,
+    resolutionHeaders: resolutionHeaders ?? this.resolutionHeaders,
+    resolutionDisplayNames: resolutionDisplayNames ?? this.resolutionDisplayNames,
+    resolutionDescriptions: resolutionDescriptions ?? this.resolutionDescriptions,
     cacheConfiguration: cacheConfiguration ?? this.cacheConfiguration,
     notificationConfiguration: notificationConfiguration ?? this.notificationConfiguration,
     overriddenDuration: overriddenDuration ?? this.overriddenDuration,
-    videoFormat: videoFormat ?? this.videoFormat,
+    videoFormat: clearVideoFormat ? null : videoFormat ?? this.videoFormat,
     videoExtension: videoExtension ?? this.videoExtension,
     drmConfiguration: drmConfiguration ?? this.drmConfiguration,
     placeholder: placeholder ?? this.placeholder,

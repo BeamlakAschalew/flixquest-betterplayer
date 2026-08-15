@@ -194,7 +194,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                         call.argument(BUFFER_FOR_PLAYBACK_MS),
                         call.argument(BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS),
                         call.argument(BACK_BUFFER_DURATION_MS),
-                        call.argument(RETAIN_BACK_BUFFER_FROM_KEYFRAME)
+                        call.argument(RETAIN_BACK_BUFFER_FROM_KEYFRAME),
+                        call.argument(PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS)
                     )
                 }
                 val player = BetterPlayer(
@@ -382,7 +383,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 0L,
                 overriddenDuration.toLong(),
                 null,
-                null, null, null
+                null, null, null,
+                false
             )
         } else {
             val useCache = getParameter(dataSource, USE_CACHE_PARAMETER, false)
@@ -394,6 +396,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             val uri = getParameter(dataSource, URI_PARAMETER, "")
             val cacheKey = getParameter<String?>(dataSource, CACHE_KEY_PARAMETER, null)
             val formatHint = getParameter<String?>(dataSource, FORMAT_HINT_PARAMETER, null)
+            val isLive = getParameter(dataSource, IS_LIVE_PARAMETER, false)
             val licenseUrl = getParameter<String?>(dataSource, LICENSE_URL_PARAMETER, null)
             val clearKey = getParameter<String?>(dataSource, DRM_CLEARKEY_PARAMETER, null)
             val drmHeaders: Map<String, String> =
@@ -421,6 +424,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 drmHeaders,
                 cacheKey,
                 clearKey,
+                isLive,
                 preRollDataSource,
                 contentStartPosition.toLong()
             )
@@ -843,6 +847,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val PACKAGE_PARAMETER = "package"
         private const val URI_PARAMETER = "uri"
         private const val FORMAT_HINT_PARAMETER = "formatHint"
+        private const val IS_LIVE_PARAMETER = "isLive"
         private const val TEXTURE_ID_PARAMETER = "textureId"
         private const val LOOPING_PARAMETER = "looping"
         private const val VOLUME_PARAMETER = "volume"
@@ -876,6 +881,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = "bufferForPlaybackAfterRebufferMs"
         const val BACK_BUFFER_DURATION_MS = "backBufferDurationMs"
         const val RETAIN_BACK_BUFFER_FROM_KEYFRAME = "retainBackBufferFromKeyframe"
+        const val PRIORITIZE_TIME_OVER_SIZE_THRESHOLDS = "prioritizeTimeOverSizeThresholds"
         const val CACHE_KEY_PARAMETER = "cacheKey"
         private const val INIT_METHOD = "init"
         private const val CREATE_METHOD = "create"

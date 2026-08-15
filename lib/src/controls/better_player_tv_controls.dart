@@ -42,6 +42,12 @@ class BetterPlayerTvControls extends StatefulWidget {
 class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   late final FocusNode _rootFocus;
   late final FocusNode _playFocus;
+  final Map<String, FocusNode> _buttonFocusNodes = <String, FocusNode>{};
+  final Map<String, GlobalKey> _buttonKeys = <String, GlobalKey>{};
+  List<String> _buttonIds = const <String>[];
+  List<FocusNode> _buttonOrder = const <FocusNode>[];
+  final ScrollController _buttonScrollController = ScrollController();
+  final GlobalKey _buttonViewportKey = GlobalKey();
   Timer? _hideTimer;
   VideoPlayerValue _value = VideoPlayerValue.uninitialized();
   _TvMenuData? _menu;
@@ -110,6 +116,54 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     if (value != null && mounted) setState(() => _value = value);
   }
 
+  FocusNode _buttonNode(String id) =>
+      _buttonFocusNodes.putIfAbsent(id, () => FocusNode(debugLabel: 'BetterPlayer TV $id'));
+
+  GlobalKey _buttonKey(String id) => _buttonKeys.putIfAbsent(id, GlobalKey.new);
+
+  KeyEventResult _handleButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final direction = event.logicalKey == LogicalKeyboardKey.arrowRight
+        ? 1
+        : event.logicalKey == LogicalKeyboardKey.arrowLeft
+        ? -1
+        : 0;
+    if (direction == 0) return KeyEventResult.ignored;
+    _restartHideTimer();
+    final focusedNode = FocusManager.instance.primaryFocus;
+    final index = _buttonOrder.indexOf(focusedNode ?? node);
+    final targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= _buttonOrder.length) {
+      return KeyEventResult.handled;
+    }
+    final target = _buttonOrder[targetIndex];
+    target.requestFocus();
+    _revealButton(_buttonIds[targetIndex]);
+    return KeyEventResult.handled;
+  }
+
+  void _revealButton(String id) {
+    if (!mounted || !_buttonScrollController.hasClients) return;
+    final targetBox = _buttonKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
+    final viewportBox = _buttonViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (targetBox == null || viewportBox == null) return;
+    final targetCenter = targetBox.localToGlobal(targetBox.size.center(Offset.zero), ancestor: viewportBox).dx;
+    final nextOffset = (_buttonScrollController.offset + targetCenter - viewportBox.size.width / 2).clamp(
+      _buttonScrollController.position.minScrollExtent,
+      _buttonScrollController.position.maxScrollExtent,
+    );
+    if ((nextOffset - _buttonScrollController.offset).abs() < 1) return;
+    unawaited(
+      _buttonScrollController.animateTo(
+        nextOffset,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
@@ -117,6 +171,10 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _attachedVideoController?.removeListener(_onVideoValue);
     _rootFocus.dispose();
     _playFocus.dispose();
+    _buttonScrollController.dispose();
+    for (final node in _buttonFocusNodes.values) {
+      if (!identical(node, _playFocus)) node.dispose();
+    }
     if (identical(widget.controlsController?._state, this)) {
       widget.controlsController?._state = null;
     }
@@ -324,15 +382,35 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           label: item.title,
           icon: item.icon,
           showsNext: true,
-          onSelected: () {
+          onSelected: () async {
             final returnFocus = _menuReturnFocus;
             _closeMenu(restoreFocus: false);
             _overlayReturnFocus = returnFocus;
-            item.onClicked();
+            final result = item.onClicked();
+            if (result is Future<dynamic>) {
+              _hideTimer?.cancel();
+              try {
+                await result;
+              } finally {
+                _restoreOverlayFocus();
+              }
+            }
           },
         ),
     ];
     _openMenu('Player settings', items);
+  }
+
+  void _restoreOverlayFocus() {
+    if (!mounted || _menu != null) return;
+    final target = _overlayReturnFocus;
+    _overlayReturnFocus = null;
+    _setVisibility(true);
+    _requestControlFocus(target);
+    if (target != null) {
+      final index = _buttonOrder.indexOf(target);
+      if (index >= 0) _revealButton(_buttonIds[index]);
+    }
   }
 
   void _openSpeedMenu({bool nested = false}) {
@@ -456,25 +534,30 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       );
     }
-    if (tracks.isEmpty) {
-      widget.controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
-        final selected = name == widget.controller.betterPlayerResolutionName;
-        items.add(
-          BetterPlayerTvMenuItem(
-            label: name,
-            subtitle: selected && BetterPlayerUtils.resolutionHeightFromLabel(name) == null
-                ? _detectedQualityDetails()
-                : null,
-            icon: PhosphorIcons.monitorPlay(),
-            selected: selected,
-            onSelected: () async {
-              await widget.controller.setResolution(url, name: name);
-              if (mounted) _closeMenu();
-            },
-          ),
-        );
-      });
-    }
+    widget.controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+      final selected = name == widget.controller.betterPlayerResolutionName;
+      final displayName = widget.controller.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
+      final description = widget.controller.betterPlayerDataSource?.resolutionDescriptions?[name];
+      final detectedDetails = selected && BetterPlayerUtils.resolutionHeightFromLabel(displayName) == null
+          ? _detectedQualityDetails()
+          : null;
+      final subtitleParts = <String>[
+        if (description?.trim().isNotEmpty == true) description!.trim(),
+        if (detectedDetails != null) detectedDetails,
+      ];
+      items.add(
+        BetterPlayerTvMenuItem(
+          label: displayName,
+          subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
+          icon: PhosphorIcons.monitorPlay(),
+          selected: selected,
+          onSelected: () async {
+            await widget.controller.setResolution(url, name: name);
+            if (mounted) _closeMenu();
+          },
+        ),
+      );
+    });
     if (items.isEmpty) {
       items.add(
         BetterPlayerTvMenuItem(
@@ -539,10 +622,12 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final detectedHeight = BetterPlayerUtils.detectedVideoHeight(widget.controller.videoPlayerController?.value.size);
     final resolutionName = widget.controller.betterPlayerResolutionName;
     if (resolutionName?.trim().isNotEmpty == true) {
-      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(resolutionName) == null) {
-        return '${detectedHeight}p • ${resolutionName!.trim()}';
+      final displayName =
+          widget.controller.betterPlayerDataSource?.resolutionDisplayNames?[resolutionName] ?? resolutionName!;
+      if (detectedHeight != null && BetterPlayerUtils.resolutionHeightFromLabel(displayName) == null) {
+        return '${displayName.trim()} • ${detectedHeight}p';
       }
-      return resolutionName!.trim();
+      return displayName.trim();
     }
     final track = widget.controller.betterPlayerAsmsTrack;
     if (track == null || (track.height ?? 0) == 0) {
@@ -610,6 +695,22 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   }
 
   Widget _buildControls() {
+    final buttonIds = <String>[
+      'back',
+      'rewind',
+      'play',
+      'forward',
+      if (_configuration.enableSubtitles) 'subtitles',
+      if (_configuration.enableAudioTracks) 'audio',
+      if (_configuration.enableQualities) 'quality',
+      if (_configuration.enableCrop) 'crop',
+      if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null) 'episodes',
+      if (_configuration.enableMovieRecommendations && _configuration.onMovieRecommendationsTap != null)
+        'recommendations',
+      'settings',
+    ];
+    _buttonIds = buttonIds;
+    _buttonOrder = [for (final id in buttonIds) id == 'play' ? _playFocus : _buttonNode(id)];
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -650,86 +751,135 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               },
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                _TvControlButton(
-                  label: 'Back',
-                  icon: PhosphorIcons.caretLeft(),
-                  accentColor: _accent,
-                  onPressed: widget.onExit ?? () => Navigator.of(context).maybePop(),
+            LayoutBuilder(
+              builder: (context, constraints) => SizedBox(
+                key: _buttonViewportKey,
+                width: constraints.maxWidth,
+                child: SingleChildScrollView(
+                  controller: _buttonScrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        _TvControlButton(
+                          key: _buttonKey('back'),
+                          focusNode: _buttonNode('back'),
+                          onKeyEvent: _handleButtonKey,
+                          label: 'Back',
+                          icon: PhosphorIcons.caretLeft(),
+                          accentColor: _accent,
+                          onPressed: widget.onExit ?? () => Navigator.of(context).maybePop(),
+                        ),
+                        _TvControlButton(
+                          key: _buttonKey('rewind'),
+                          focusNode: _buttonNode('rewind'),
+                          onKeyEvent: _handleButtonKey,
+                          label: 'Rewind',
+                          icon: PhosphorIcons.rewind(),
+                          accentColor: _accent,
+                          onPressed: () =>
+                              _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
+                        ),
+                        _TvControlButton(
+                          key: _buttonKey('play'),
+                          focusNode: _playFocus,
+                          onKeyEvent: _handleButtonKey,
+                          label: _value.isPlaying ? 'Pause' : 'Play',
+                          icon: _value.isPlaying
+                              ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
+                              : PhosphorIcons.play(PhosphorIconsStyle.fill),
+                          accentColor: _accent,
+                          primary: true,
+                          onPressed: _togglePlayback,
+                        ),
+                        _TvControlButton(
+                          key: _buttonKey('forward'),
+                          focusNode: _buttonNode('forward'),
+                          onKeyEvent: _handleButtonKey,
+                          label: 'Forward',
+                          icon: PhosphorIcons.fastForward(),
+                          accentColor: _accent,
+                          onPressed: () =>
+                              _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
+                        ),
+                        if (_configuration.enableSubtitles)
+                          _TvControlButton(
+                            key: _buttonKey('subtitles'),
+                            focusNode: _buttonNode('subtitles'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'Subtitles',
+                            icon: PhosphorIcons.closedCaptioning(),
+                            accentColor: _accent,
+                            onPressed: _openSubtitlesMenu,
+                          ),
+                        if (_configuration.enableAudioTracks)
+                          _TvControlButton(
+                            key: _buttonKey('audio'),
+                            focusNode: _buttonNode('audio'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'Audio',
+                            icon: PhosphorIcons.waveform(),
+                            accentColor: _accent,
+                            onPressed: _openAudioMenu,
+                          ),
+                        if (_configuration.enableQualities)
+                          _TvControlButton(
+                            key: _buttonKey('quality'),
+                            focusNode: _buttonNode('quality'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'Quality',
+                            icon: PhosphorIcons.highDefinition(),
+                            accentColor: _accent,
+                            onPressed: _openQualityMenu,
+                          ),
+                        if (_configuration.enableCrop)
+                          _TvControlButton(
+                            key: _buttonKey('crop'),
+                            focusNode: _buttonNode('crop'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'Crop & fit',
+                            icon: _configuration.cropIcon,
+                            accentColor: _accent,
+                            onPressed: _openCropMenu,
+                          ),
+                        if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
+                          _TvControlButton(
+                            key: _buttonKey('episodes'),
+                            focusNode: _buttonNode('episodes'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'Episodes',
+                            icon: PhosphorIcons.listBullets(),
+                            accentColor: _accent,
+                            onPressed: _configuration.onEpisodeListTap!,
+                          ),
+                        if (_configuration.enableMovieRecommendations &&
+                            _configuration.onMovieRecommendationsTap != null)
+                          _TvControlButton(
+                            key: _buttonKey('recommendations'),
+                            focusNode: _buttonNode('recommendations'),
+                            onKeyEvent: _handleButtonKey,
+                            label: 'More like this',
+                            icon: PhosphorIcons.sparkle(),
+                            accentColor: _accent,
+                            onPressed: _configuration.onMovieRecommendationsTap!,
+                          ),
+                        _TvControlButton(
+                          key: _buttonKey('settings'),
+                          focusNode: _buttonNode('settings'),
+                          onKeyEvent: _handleButtonKey,
+                          label: 'Settings',
+                          icon: PhosphorIcons.gear(),
+                          accentColor: _accent,
+                          onPressed: _openSettings,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                _TvControlButton(
-                  label: 'Rewind',
-                  icon: PhosphorIcons.rewind(),
-                  accentColor: _accent,
-                  onPressed: () => _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
-                ),
-                _TvControlButton(
-                  focusNode: _playFocus,
-                  label: _value.isPlaying ? 'Pause' : 'Play',
-                  icon: _value.isPlaying
-                      ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
-                      : PhosphorIcons.play(PhosphorIconsStyle.fill),
-                  accentColor: _accent,
-                  primary: true,
-                  onPressed: _togglePlayback,
-                ),
-                _TvControlButton(
-                  label: 'Forward',
-                  icon: PhosphorIcons.fastForward(),
-                  accentColor: _accent,
-                  onPressed: () => _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
-                ),
-                if (_configuration.enableSubtitles)
-                  _TvControlButton(
-                    label: 'Subtitles',
-                    icon: PhosphorIcons.closedCaptioning(),
-                    accentColor: _accent,
-                    onPressed: _openSubtitlesMenu,
-                  ),
-                if (_configuration.enableAudioTracks)
-                  _TvControlButton(
-                    label: 'Audio',
-                    icon: PhosphorIcons.waveform(),
-                    accentColor: _accent,
-                    onPressed: _openAudioMenu,
-                  ),
-                if (_configuration.enableQualities)
-                  _TvControlButton(
-                    label: 'Quality',
-                    icon: PhosphorIcons.highDefinition(),
-                    accentColor: _accent,
-                    onPressed: _openQualityMenu,
-                  ),
-                if (_configuration.enableCrop)
-                  _TvControlButton(
-                    label: 'Crop & fit',
-                    icon: _configuration.cropIcon,
-                    accentColor: _accent,
-                    onPressed: _openCropMenu,
-                  ),
-                if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
-                  _TvControlButton(
-                    label: 'Episodes',
-                    icon: PhosphorIcons.listBullets(),
-                    accentColor: _accent,
-                    onPressed: _configuration.onEpisodeListTap!,
-                  ),
-                if (_configuration.enableMovieRecommendations && _configuration.onMovieRecommendationsTap != null)
-                  _TvControlButton(
-                    label: 'More like this',
-                    icon: PhosphorIcons.sparkle(),
-                    accentColor: _accent,
-                    onPressed: _configuration.onMovieRecommendationsTap!,
-                  ),
-                _TvControlButton(
-                  label: 'Settings',
-                  icon: PhosphorIcons.gear(),
-                  accentColor: _accent,
-                  onPressed: _openSettings,
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -780,8 +930,10 @@ class _TvControlButton extends StatefulWidget {
     required this.accentColor,
     required this.onPressed,
     this.focusNode,
+    this.onKeyEvent,
     this.primary = false,
     this.autofocus = false,
+    super.key,
   });
 
   final String label;
@@ -789,6 +941,7 @@ class _TvControlButton extends StatefulWidget {
   final Color accentColor;
   final VoidCallback onPressed;
   final FocusNode? focusNode;
+  final KeyEventResult Function(FocusNode node, KeyEvent event)? onKeyEvent;
   final bool primary;
   final bool autofocus;
 
@@ -806,50 +959,65 @@ class _TvControlButtonState extends State<_TvControlButton> {
       child: Semantics(
         button: true,
         label: widget.label,
-        child: FocusableActionDetector(
-          focusNode: widget.focusNode,
-          autofocus: widget.autofocus,
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          shortcuts: const <ShortcutActivator, Intent>{
-            SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-            SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
-            SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
-          },
-          actions: <Type, Action<Intent>>{
-            ActivateIntent: CallbackAction<ActivateIntent>(
-              onInvoke: (_) {
-                widget.onPressed();
-                return null;
-              },
-            ),
-          },
-          child: GestureDetector(
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 130),
-              constraints: const BoxConstraints(minWidth: 76),
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-              decoration: BoxDecoration(
-                color: widget.primary
-                    ? widget.accentColor
-                    : _focused
-                    ? const Color(0xff30312f)
-                    : Colors.black45,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: _focused ? Colors.white : Colors.transparent, width: 3),
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: widget.onKeyEvent,
+          child: FocusableActionDetector(
+            focusNode: widget.focusNode,
+            autofocus: widget.autofocus,
+            onFocusChange: (focused) {
+              setState(() => _focused = focused);
+              if (focused) {
+                Scrollable.ensureVisible(
+                  context,
+                  alignment: 0.5,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            },
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+            },
+            actions: <Type, Action<Intent>>{
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  widget.onPressed();
+                  return null;
+                },
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(widget.icon, color: Colors.white, size: 25),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.label,
-                    maxLines: 1,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
-                ],
+            },
+            child: GestureDetector(
+              onTap: widget.onPressed,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 130),
+                constraints: const BoxConstraints(minWidth: 76),
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                decoration: BoxDecoration(
+                  color: widget.primary
+                      ? widget.accentColor
+                      : _focused
+                      ? const Color(0xff30312f)
+                      : Colors.black45,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: _focused ? Colors.white : Colors.transparent, width: 3),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(widget.icon, color: Colors.white, size: 25),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.label,
+                      maxLines: 1,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

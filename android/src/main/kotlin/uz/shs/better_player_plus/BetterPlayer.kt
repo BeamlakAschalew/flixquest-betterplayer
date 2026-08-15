@@ -85,6 +85,11 @@ import androidx.core.net.toUri
 private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 30_000L
 private const val SHORT_SEGMENT_RETRY_COUNT = 3
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
+private const val LIVE_TARGET_OFFSET_MS = 30_000L
+private const val LIVE_MIN_OFFSET_MS = 15_000L
+private const val LIVE_MAX_OFFSET_MS = 60_000L
+private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
+private const val LIVE_MAX_PLAYBACK_SPEED = 1.03f
 
 /**
  * Retries ordinary loads persistently, but exposes a short adaptive media
@@ -183,6 +188,9 @@ internal class BetterPlayer(
             this.customDefaultLoadControl.backBufferDurationMs,
             this.customDefaultLoadControl.retainBackBufferFromKeyframe
         )
+        loadBuilder.setPrioritizeTimeOverSizeThresholds(
+            this.customDefaultLoadControl.prioritizeTimeOverSizeThresholds
+        )
         loadControl = loadBuilder.build()
         exoPlayer = ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
@@ -209,6 +217,7 @@ internal class BetterPlayer(
         drmHeaders: Map<String, String>?,
         cacheKey: String?,
         clearKey: String?,
+        isLive: Boolean = false,
         preRollDataSource: Map<String, Any?>? = null,
         contentStartPositionMs: Long = 0L
     ) {
@@ -273,7 +282,7 @@ internal class BetterPlayer(
             ?.removePrefix(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX)
             ?.takeIf { cacheKey.startsWith(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX) }
             ?.let { downloadId -> buildFlixQuestOfflineMediaSource(context, downloadId) }
-            ?: buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
+            ?: buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context, isLive)
         val contentMediaSource = if (overriddenDuration != 0L) {
             val clippingMediaSource = ClippingMediaSource(
                 mediaSource,
@@ -521,7 +530,8 @@ internal class BetterPlayer(
         mediaDataSourceFactory: DataSource.Factory,
         formatHint: String?,
         cacheKey: String?,
-        context: Context
+        context: Context,
+        isLive: Boolean = false
     ): MediaSource {
         val type = if (formatHint == null) {
             // Provider proxy URLs frequently have extensionless paths (for
@@ -542,6 +552,17 @@ internal class BetterPlayer(
         mediaItemBuilder.setUri(uri)
         if (!cacheKey.isNullOrEmpty()) {
             mediaItemBuilder.setCustomCacheKey(cacheKey)
+        }
+        if (isLive) {
+            mediaItemBuilder.setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(LIVE_TARGET_OFFSET_MS)
+                    .setMinOffsetMs(LIVE_MIN_OFFSET_MS)
+                    .setMaxOffsetMs(LIVE_MAX_OFFSET_MS)
+                    .setMinPlaybackSpeed(LIVE_MIN_PLAYBACK_SPEED)
+                    .setMaxPlaybackSpeed(LIVE_MAX_PLAYBACK_SPEED)
+                    .build()
+            )
         }
         val mediaItem = mediaItemBuilder.build()
         var drmSessionManagerProvider: DrmSessionManagerProvider? = null
@@ -572,6 +593,7 @@ internal class BetterPlayer(
 
             C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(mediaDataSourceFactory)
                 .apply {
+                    setAllowChunklessPreparation(true)
                     setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
                     if (drmSessionManagerProvider != null) {
                         setDrmSessionManagerProvider(drmSessionManagerProvider)

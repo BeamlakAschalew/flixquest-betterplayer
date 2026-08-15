@@ -289,6 +289,7 @@ extension SwiftBetterPlayerPlugin {
             let cacheKey = dataSource["cacheKey"] as? String
             let maxCacheSize = dataSource["maxCacheSize"] as? NSNumber
             let videoExtension = dataSource["videoExtension"] as? String
+            let isLive = (dataSource["isLive"] as? NSNumber)?.boolValue ?? false
             let overriddenDuration = (dataSource["overriddenDuration"] as? NSNumber)?.intValue ?? 0
 
             let useCache = (dataSource["useCache"] as? NSNumber)?.boolValue ?? false
@@ -327,10 +328,11 @@ extension SwiftBetterPlayerPlugin {
                         cacheManager: cacheManager,
                         overriddenDuration: overriddenDuration,
                         contentVideoExtension: videoExtension,
-                        contentStartPosition: contentStartPosition
+                        contentStartPosition: contentStartPosition,
+                        contentIsLive: isLive
                     )
                 } else {
-                    player.setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: videoExtension)
+                    player.setDataSourceURL(url, key: key, certificateUrl: certificateUrl, licenseUrl: licenseUrl, headers: headers, useCache: useCache, cacheKey: cacheKey, cacheManager: cacheManager, overriddenDuration: overriddenDuration, videoExtension: videoExtension, isLive: isLive)
                 }
             } else {
                 result(FlutterMethodNotImplemented)

@@ -565,6 +565,7 @@ class BetterPlayerController {
           activityName: _betterPlayerDataSource?.notificationConfiguration?.activityName,
           clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
           videoExtension: _betterPlayerDataSource!.videoExtension,
+          isLive: _betterPlayerDataSource?.liveStream ?? false,
           preRollDataSource: preRollDataSource == null
               ? null
               : DataSource(
@@ -1052,8 +1053,18 @@ class BetterPlayerController {
             .where((entry) => entry.value == url)
             .map((entry) => entry.key)
             .singleOrNull;
+    final resolutionFormats = betterPlayerDataSource!.resolutionVideoFormats;
+    final hasResolutionFormat = resolutionName != null && resolutionFormats?.containsKey(resolutionName) == true;
+    final resolutionHeaders = betterPlayerDataSource!.resolutionHeaders;
+    final hasResolutionHeaders = resolutionName != null && resolutionHeaders?.containsKey(resolutionName) == true;
     await _setupDataSourceWithSubtitle(
-      betterPlayerDataSource!.copyWith(url: url, selectedResolution: resolutionName),
+      betterPlayerDataSource!.copyWith(
+        url: url,
+        selectedResolution: resolutionName,
+        videoFormat: hasResolutionFormat ? resolutionFormats![resolutionName] : null,
+        clearVideoFormat: hasResolutionFormat && resolutionFormats![resolutionName] == null,
+        headers: hasResolutionHeaders ? resolutionHeaders![resolutionName] : null,
+      ),
       subtitlesSourceToRestore: subtitlesSourceToRestore,
     );
     _betterPlayerResolutionName = resolutionName;
