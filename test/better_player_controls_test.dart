@@ -140,6 +140,66 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
+  testWidgets('double taps seek by the configured duration on player edges', (WidgetTester tester) async {
+    final videoController = MockVideoPlayerController();
+    mockController = BetterPlayerMockController(
+      const BetterPlayerConfiguration(
+        controlsConfiguration: BetterPlayerControlsConfiguration(
+          backwardSkipTimeInMilliseconds: 7000,
+          forwardSkipTimeInMilliseconds: 15000,
+          gestureConfiguration: BetterPlayerGestureConfiguration(
+            enableVolumeSwipe: false,
+            enableBrightnessSwipe: false,
+            enableSeekSwipe: false,
+            enableDoubleTapSeek: true,
+          ),
+        ),
+      ),
+    );
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(
+      duration: const Duration(minutes: 2),
+      position: const Duration(seconds: 30),
+      isPlaying: true,
+    );
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final playerRect = tester.getRect(find.byType(BetterPlayer));
+    Future<void> doubleTapAt(Offset position) async {
+      await tester.tapAt(position);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(position);
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+
+    await doubleTapAt(playerRect.center);
+    expect(videoController.lastSeekPosition, isNull);
+
+    await doubleTapAt(Offset(playerRect.left + playerRect.width * .85, playerRect.center.dy));
+    expect(videoController.lastSeekPosition, const Duration(seconds: 45));
+    expect(find.text('+15s'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 250));
+    await doubleTapAt(Offset(playerRect.left + playerRect.width * .15, playerRect.center.dy));
+    expect(videoController.lastSeekPosition, const Duration(seconds: 38));
+    expect(find.text('-7s'), findsOneWidget);
+
+    mockController.setControlsVisibility(false);
+    await tester.pump(const Duration(milliseconds: 300));
+    final skipForwardSurface = find.descendant(
+      of: find.byKey(const Key('better_player_material_controls_skip_forward_button')),
+      matching: find.byType(InkResponse),
+    );
+    expect(skipForwardSurface.hitTestable(), findsNothing);
+
+    await doubleTapAt(Offset(playerRect.left + playerRect.width * .85, playerRect.center.dy));
+    expect(videoController.lastSeekPosition, const Duration(seconds: 53));
+    expect(skipForwardSurface.hitTestable(), findsNothing);
+  });
+
   testWidgets('initial loading exposes a functional play button', (WidgetTester tester) async {
     final videoController = MockVideoPlayerController();
     mockController.videoPlayerController = videoController;

@@ -231,6 +231,7 @@ class BetterPlayerController {
   int _networkRecoveryAttempts = 0;
   static const Duration _initialNetworkRecoveryDelay = Duration(seconds: 1);
   static const Duration _networkRecoveryInterval = Duration(seconds: 5);
+  static const Duration _liveNetworkRecoveryDelay = Duration(seconds: 30);
 
   ///Flag which holds information about player visibility
   bool _isPlayerVisible = true;
@@ -1296,7 +1297,14 @@ class BetterPlayerController {
         _networkRecoveryTimer?.isActive == true) {
       return;
     }
-    final delay = _networkRecoveryAttempts == 0 ? _initialNetworkRecoveryDelay : _networkRecoveryInterval;
+    final Duration delay;
+    if (_betterPlayerDataSource?.liveStream == true) {
+      delay = _liveNetworkRecoveryDelay;
+    } else if (_networkRecoveryAttempts == 0) {
+      delay = _initialNetworkRecoveryDelay;
+    } else {
+      delay = _networkRecoveryInterval;
+    }
     _networkRecoveryTimer = Timer(delay, () {
       _networkRecoveryTimer = null;
       unawaited(_attemptNetworkRecovery());

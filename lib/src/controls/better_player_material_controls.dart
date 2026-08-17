@@ -67,7 +67,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     _initializeSystemLevels();
     final gestures = _configuration.gestureConfiguration;
     final gesturesEnabled =
-        (gestures.enableVolumeSwipe || gestures.enableBrightnessSwipe || gestures.enableSeekSwipe) &&
+        (gestures.enableVolumeSwipe ||
+            gestures.enableBrightnessSwipe ||
+            gestures.enableSeekSwipe ||
+            gestures.enableDoubleTapSeek) &&
         _betterPlayerController?.controlsEnabled == true;
 
     Widget content = LayoutBuilder(
@@ -97,10 +100,12 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         BetterPlayerMultipleGestureDetector.of(context)?.onTap?.call();
         controlsNotVisible ? cancelAndRestartTimer() : changePlayerControlsNotVisible(true);
       },
-      onDoubleTap: () {
-        BetterPlayerMultipleGestureDetector.of(context)?.onDoubleTap?.call();
-        cancelAndRestartTimer();
-      },
+      onDoubleTap: gestures.enableDoubleTapSeek
+          ? null
+          : () {
+              BetterPlayerMultipleGestureDetector.of(context)?.onDoubleTap?.call();
+              cancelAndRestartTimer();
+            },
       onLongPress: () => BetterPlayerMultipleGestureDetector.of(context)?.onLongPress?.call(),
       child: content,
     );
@@ -110,7 +115,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         configuration: gestures,
         currentVolume: _deviceVolume,
         currentBrightness: _brightness,
+        backwardDoubleTapSeek: Duration(milliseconds: _configuration.backwardSkipTimeInMilliseconds),
+        forwardDoubleTapSeek: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
         controlsVisible: !controlsNotVisible,
+        isFullScreen: _betterPlayerController?.isFullScreen == true,
         onVolumeChanged: (value) {
           setState(() => _deviceVolume = value);
           BetterPlayerVolumeManager.setVolume(value);

@@ -85,9 +85,9 @@ import androidx.core.net.toUri
 private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 30_000L
 private const val SHORT_SEGMENT_RETRY_COUNT = 3
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
-private const val LIVE_TARGET_OFFSET_MS = 30_000L
-private const val LIVE_MIN_OFFSET_MS = 15_000L
-private const val LIVE_MAX_OFFSET_MS = 60_000L
+private const val LIVE_TARGET_OFFSET_MS = 90_000L
+private const val LIVE_MIN_OFFSET_MS = 45_000L
+private const val LIVE_MAX_OFFSET_MS = 180_000L
 private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
 private const val LIVE_MAX_PLAYBACK_SPEED = 1.03f
 

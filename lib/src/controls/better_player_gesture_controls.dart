@@ -10,12 +10,15 @@ class BetterPlayerGestureConfiguration {
     this.enableVolumeSwipe = true,
     this.enableBrightnessSwipe = true,
     this.enableSeekSwipe = true,
+    this.enableDoubleTapSeek = false,
     this.volumeSwipeSensitivity = 0.5,
     this.brightnessSwipeSensitivity = 0.5,
     this.seekSwipeSensitivity = 1.0,
     this.minimumSwipeDistance = 10.0,
     this.feedbackDuration = const Duration(milliseconds: 800),
     this.swipeAreaWidthPercentage = 0.2, // Reduced from 0.35 to 0.2 (20% each side)
+    this.doubleTapSeekAreaWidthPercentage = 0.35,
+    this.doubleTapSeekAreaWidthPercentageNonFullscreen = 0.2,
   });
 
   /// Enable volume control via vertical swipe on right side
@@ -26,6 +29,9 @@ class BetterPlayerGestureConfiguration {
 
   /// Enable seek control via horizontal swipe
   final bool enableSeekSwipe;
+
+  /// Enable double-tap seeking on the left and right edges.
+  final bool enableDoubleTapSeek;
 
   /// Volume swipe sensitivity (0.1 - 2.0)
   final double volumeSwipeSensitivity;
@@ -44,6 +50,15 @@ class BetterPlayerGestureConfiguration {
 
   /// Width percentage of left/right swipe areas (0.2 - 0.5)
   final double swipeAreaWidthPercentage;
+
+  /// Width of each double-tap seek edge as a fraction of the player width.
+  final double doubleTapSeekAreaWidthPercentage;
+
+  /// Width of each double-tap seek edge when the player is not fullscreen.
+  ///
+  /// Inline players are much smaller than the fullscreen surface, so a smaller
+  /// zone avoids accidentally triggering seeks across most of the player width.
+  final double doubleTapSeekAreaWidthPercentageNonFullscreen;
 }
 
 /// Types of gesture feedback
@@ -59,7 +74,10 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     required this.onSeek,
     required this.currentVolume,
     required this.currentBrightness,
+    this.backwardDoubleTapSeek = const Duration(seconds: 10),
+    this.forwardDoubleTapSeek = const Duration(seconds: 10),
     this.controlsVisible = true, // Whether controls are currently visible
+    this.isFullScreen = false, // Whether the player is in fullscreen mode
     this.onTap, // Callback to show controls overlay on tap
     super.key,
   });
@@ -71,7 +89,10 @@ class BetterPlayerGestureHandler extends StatefulWidget {
   final Function(Duration position) onSeek;
   final double currentVolume;
   final double currentBrightness;
+  final Duration backwardDoubleTapSeek;
+  final Duration forwardDoubleTapSeek;
   final bool controlsVisible;
+  final bool isFullScreen;
   final VoidCallback? onTap;
 
   @override
@@ -85,6 +106,8 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
   Offset? _dragStartPosition;
   double _initialValue = 0.0;
   Timer? _feedbackTimer;
+  Offset? _lastPointerPosition;
+  Size _viewportSize = Size.zero;
 
   // Track if we've moved enough to be considered a drag (not a tap)
   bool _hasMovedEnough = false;
@@ -241,6 +264,40 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     });
   }
 
+  void _onDoubleTapSeek() {
+    if (!widget.configuration.enableDoubleTapSeek) return;
+
+    final position = _lastPointerPosition;
+    final size = _viewportSize;
+    if (position == null || size.isEmpty) return;
+
+    final edgeFraction = (widget.isFullScreen
+            ? widget.configuration.doubleTapSeekAreaWidthPercentage
+            : widget.configuration.doubleTapSeekAreaWidthPercentageNonFullscreen)
+        .clamp(0.15, 0.5);
+    final backward = position.dx <= size.width * edgeFraction;
+    final forward = position.dx >= size.width * (1 - edgeFraction);
+    if (!backward && !forward) return;
+
+    const topSafeZone = 80.0;
+    const bottomSafeZone = 100.0;
+    if (size.height > topSafeZone + bottomSafeZone &&
+        (position.dy < topSafeZone || position.dy > size.height - bottomSafeZone)) {
+      return;
+    }
+
+    final seekDuration = forward ? widget.forwardDoubleTapSeek : widget.backwardDoubleTapSeek;
+    if (seekDuration <= Duration.zero) return;
+
+    setState(() {
+      _isGestureActive = true;
+      _currentGesture = forward ? GestureFeedbackType.seekForward : GestureFeedbackType.seekBackward;
+      _gestureValue = seekDuration.inMilliseconds / 1000;
+    });
+    widget.onSeek(forward ? seekDuration : -seekDuration);
+    _hideFeedbackAfterDelay();
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -251,7 +308,7 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     const double topSafeZone = 80.0;
     const double bottomSafeZone = 100.0;
 
-    return Stack(
+    final content = Stack(
       children: [
         // Original child (controls) - put FIRST so gesture zones can overlay
         widget.child,
@@ -321,10 +378,34 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
         if (_isGestureActive && _currentGesture != null) _buildFeedbackOverlay(),
       ],
     );
+
+    if (!widget.configuration.enableDoubleTapSeek) return content;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewportSize = constraints.biggest;
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onDoubleTap: _onDoubleTapSeek,
+          child: Listener(
+            onPointerDown: (event) {
+              _lastPointerPosition = event.localPosition;
+            },
+            child: content,
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildFeedbackOverlay() {
-    return Center(child: _buildFeedbackContent());
+    final gesture = _currentGesture;
+    final alignment = gesture == GestureFeedbackType.seekForward
+        ? const Alignment(.66, 0)
+        : gesture == GestureFeedbackType.seekBackward
+        ? const Alignment(-.66, 0)
+        : Alignment.center;
+    return Align(alignment: alignment, child: _buildFeedbackContent());
   }
 
   Widget _buildFeedbackContent() {
