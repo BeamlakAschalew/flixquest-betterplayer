@@ -238,7 +238,8 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
             item = AVPlayerItem(asset: asset)
         }
         if #available(iOS 10.0, *) {
-            item.preferredForwardBufferDuration = isLive ? 60.0 : 0.0
+            // Let AVPlayer derive the live buffer from the playlist window.
+            item.preferredForwardBufferDuration = 0.0
         }
         if #available(iOS 9.0, *) {
             item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive

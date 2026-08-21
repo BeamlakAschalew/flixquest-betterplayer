@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui' show ImageFilter;
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:better_player_plus/src/configuration/better_player_controller_event.dart';
 import 'package:better_player_plus/src/controls/better_player_cupertino_controls.dart';
@@ -89,11 +90,14 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
       child: AspectRatio(aspectRatio: aspectRatio, child: _buildPlayerWithControls(betterPlayerController, context)),
     );
 
-    if (betterPlayerController.betterPlayerConfiguration.expandToFill) {
-      return Center(child: innerContainer);
-    } else {
-      return innerContainer;
+    final player = betterPlayerController.betterPlayerConfiguration.expandToFill
+        ? Center(child: innerContainer)
+        : innerContainer;
+    if (!Platform.isAndroid ||
+        !betterPlayerController.betterPlayerConfiguration.enableAmbientGlow) {
+      return player;
     }
+    return Stack(fit: StackFit.expand, children: <Widget>[_BetterPlayerAmbientGlow(betterPlayerController), player]);
   }
 
   Container _buildPlayerWithControls(BetterPlayerController betterPlayerController, BuildContext context) {
@@ -182,6 +186,113 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
   void onFullScreenChanged(bool state) {
     playerOrientationStreamController.add(state);
   }
+}
+
+class _BetterPlayerAmbientGlow extends StatelessWidget {
+  const _BetterPlayerAmbientGlow(this.betterPlayerController);
+
+  static const double _blurSigma = 28;
+  static const double _opacity = 0.68;
+  static const double _overscanScale = 1.12;
+  static const Duration _fadeDuration = Duration(milliseconds: 240);
+
+  final BetterPlayerController betterPlayerController;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = betterPlayerController.videoPlayerController;
+    if (!Platform.isAndroid || controller == null) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          final sourceSize = _rotatedSourceSize(value.size, betterPlayerController.betterPlayerConfiguration.rotation);
+          final canRender =
+              betterPlayerController.hasCurrentDataSourceStarted &&
+              value.initialized &&
+              !value.hasError &&
+              sourceSize != null;
+
+          return AnimatedSwitcher(
+            duration: _fadeDuration,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+            child: canRender && betterPlayerController.ambientGlowEnabled
+                ? KeyedSubtree(
+                    key: const ValueKey<String>('better-player-ambient-glow'),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => _buildGlow(constraints.biggest, sourceSize, controller),
+                    ),
+                  )
+                : const SizedBox.expand(key: ValueKey<String>('better-player-ambient-glow-off')),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGlow(Size surfaceSize, Size sourceSize, VideoPlayerController controller) {
+    if (surfaceSize.isEmpty || !surfaceSize.isFinite || sourceSize.isEmpty) {
+      return const SizedBox.expand();
+    }
+
+    final fittedSizes = applyBoxFit(betterPlayerController.getFit(), sourceSize, surfaceSize);
+    final videoRect = Alignment.center.inscribe(fittedSizes.destination, Offset.zero & surfaceSize);
+    final leftGutter = videoRect.left.clamp(0.0, surfaceSize.width).toDouble();
+    final rightGutterStart = videoRect.right.clamp(0.0, surfaceSize.width).toDouble();
+    if (leftGutter <= 0.5 && rightGutterStart >= surfaceSize.width - 0.5) {
+      return const SizedBox.expand();
+    }
+
+    return ClipPath(
+      clipper: _HorizontalGutterClipper(leftGutter: leftGutter, rightGutterStart: rightGutterStart),
+      child: Opacity(
+        opacity: _opacity,
+        child: ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
+          child: Transform.scale(
+            scale: _overscanScale,
+            child: SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: max(1, sourceSize.width),
+                  height: max(1, sourceSize.height),
+                  child: VideoPlayer(controller),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Size? _rotatedSourceSize(Size? size, double rotation) {
+    if (size == null || size.isEmpty || !size.isFinite) return null;
+    final normalizedRotation = rotation.abs().round() % 180;
+    return normalizedRotation == 90 ? Size(size.height, size.width) : size;
+  }
+}
+
+class _HorizontalGutterClipper extends CustomClipper<Path> {
+  const _HorizontalGutterClipper({required this.leftGutter, required this.rightGutterStart});
+
+  final double leftGutter;
+  final double rightGutterStart;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..addRect(Rect.fromLTWH(0, 0, leftGutter, size.height))
+    ..addRect(Rect.fromLTRB(rightGutterStart, 0, size.width, size.height));
+
+  @override
+  bool shouldReclip(_HorizontalGutterClipper oldClipper) =>
+      leftGutter != oldClipper.leftGutter || rightGutterStart != oldClipper.rightGutterStart;
 }
 
 ///Widget used to set the proper box fit of the video. Default fit is 'fill'.

@@ -85,9 +85,6 @@ import androidx.core.net.toUri
 private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 30_000L
 private const val SHORT_SEGMENT_RETRY_COUNT = 3
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
-private const val LIVE_TARGET_OFFSET_MS = 90_000L
-private const val LIVE_MIN_OFFSET_MS = 45_000L
-private const val LIVE_MAX_OFFSET_MS = 180_000L
 private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
 private const val LIVE_MAX_PLAYBACK_SPEED = 1.03f
 
@@ -278,10 +275,15 @@ internal class BetterPlayer(
         } else {
             dataSourceFactory = DefaultDataSource.Factory(context)
         }
-        val mediaSource = cacheKey
-            ?.removePrefix(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX)
-            ?.takeIf { cacheKey.startsWith(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX) }
-            ?.let { downloadId -> buildFlixQuestOfflineMediaSource(context, downloadId) }
+        val offlineMediaSource = if (!isLive) {
+            cacheKey
+                ?.removePrefix(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX)
+                ?.takeIf { cacheKey.startsWith(FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX) }
+                ?.let { downloadId -> buildFlixQuestOfflineMediaSource(context, downloadId) }
+        } else {
+            null
+        }
+        val mediaSource = offlineMediaSource
             ?: buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context, isLive)
         val contentMediaSource = if (overriddenDuration != 0L) {
             val clippingMediaSource = ClippingMediaSource(
@@ -554,11 +556,12 @@ internal class BetterPlayer(
             mediaItemBuilder.setCustomCacheKey(cacheKey)
         }
         if (isLive) {
+            // Preserve the playlist's own live timing metadata. Fixed offsets
+            // can seek behind a short provider window and cause periodic
+            // eviction/reconnect loops. Speed bounds still let Media3 gently
+            // correct small live-edge drift.
             mediaItemBuilder.setLiveConfiguration(
                 MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(LIVE_TARGET_OFFSET_MS)
-                    .setMinOffsetMs(LIVE_MIN_OFFSET_MS)
-                    .setMaxOffsetMs(LIVE_MAX_OFFSET_MS)
                     .setMinPlaybackSpeed(LIVE_MIN_PLAYBACK_SPEED)
                     .setMaxPlaybackSpeed(LIVE_MAX_PLAYBACK_SPEED)
                     .build()

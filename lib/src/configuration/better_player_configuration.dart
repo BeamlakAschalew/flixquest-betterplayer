@@ -42,6 +42,7 @@ class BetterPlayerConfiguration {
     this.autoDispose = true,
     this.expandToFill = true,
     this.useRootNavigator = false,
+    this.enableAmbientGlow = false,
   });
 
   /// Play the video as soon as it's displayed
@@ -161,6 +162,10 @@ class BetterPlayerConfiguration {
   ///Default value is false.
   final bool useRootNavigator;
 
+  ///Whether an Android-only blurred copy of the video should fill horizontal
+  ///pillarbox gutters behind the primary video surface.
+  final bool enableAmbientGlow;
+
   BetterPlayerConfiguration copyWith({
     double? aspectRatio,
     bool? autoPlay,
@@ -192,6 +197,7 @@ class BetterPlayerConfiguration {
     bool? autoDispose,
     bool? expandToFill,
     bool? useRootNavigator,
+    bool? enableAmbientGlow,
   }) => BetterPlayerConfiguration(
     aspectRatio: aspectRatio ?? this.aspectRatio,
     autoPlay: autoPlay ?? this.autoPlay,
@@ -223,5 +229,6 @@ class BetterPlayerConfiguration {
     autoDispose: autoDispose ?? this.autoDispose,
     expandToFill: expandToFill ?? this.expandToFill,
     useRootNavigator: useRootNavigator ?? this.useRootNavigator,
+    enableAmbientGlow: enableAmbientGlow ?? this.enableAmbientGlow,
   );
 }

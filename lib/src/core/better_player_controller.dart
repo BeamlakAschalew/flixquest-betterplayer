@@ -20,6 +20,7 @@ class BetterPlayerController {
     this.betterPlayerPlaylistConfiguration,
     BetterPlayerDataSource? betterPlayerDataSource,
   }) {
+    _ambientGlowEnabled = betterPlayerConfiguration.enableAmbientGlow;
     _betterPlayerControlsConfiguration = betterPlayerConfiguration.controlsConfiguration;
     _eventListeners.add(eventListener);
     if (betterPlayerDataSource != null) {
@@ -33,6 +34,7 @@ class BetterPlayerController {
   static const String _volumeParameter = 'volume';
   static const String _speedParameter = 'speed';
   static const String _dataSourceParameter = 'dataSource';
+  static const String _sourceKeyParameter = 'sourceKey';
   static const String _authorizationHeader = 'Authorization';
 
   ///General configuration used in controller instance.
@@ -71,6 +73,11 @@ class BetterPlayerController {
 
   ///Flag used to store full screen mode state.
   bool get isFullScreen => _isFullScreen;
+
+  late bool _ambientGlowEnabled;
+
+  ///Whether the Android ambient glow layer is currently enabled.
+  bool get ambientGlowEnabled => _ambientGlowEnabled;
 
   ///Time when last progress event was sent
   int _lastPositionSelection = 0;
@@ -229,9 +236,9 @@ class BetterPlayerController {
   Timer? _networkRecoveryTimer;
   bool _networkRecoveryInProgress = false;
   int _networkRecoveryAttempts = 0;
+  int _dataSourceSetupGeneration = 0;
   static const Duration _initialNetworkRecoveryDelay = Duration(seconds: 1);
   static const Duration _networkRecoveryInterval = Duration(seconds: 5);
-  static const Duration _liveNetworkRecoveryDelay = Duration(seconds: 30);
 
   ///Flag which holds information about player visibility
   bool _isPlayerVisible = true;
@@ -288,6 +295,7 @@ class BetterPlayerController {
     BetterPlayerDataSource? preRollDataSource,
     Duration contentStartPosition = Duration.zero,
   }) async {
+    final setupGeneration = ++_dataSourceSetupGeneration;
     _cancelNetworkRecovery(clearSavedPosition: true);
     postEvent(
       BetterPlayerEvent(
@@ -326,7 +334,9 @@ class BetterPlayerController {
       _betterPlayerSubtitlesSourceList.add(subtitlesSourceToRestore);
     }
 
-    final asmsSetup = _isDataSourceAsms(betterPlayerDataSource) ? _setupAsmsDataSource(betterPlayerDataSource) : null;
+    final asmsSetup = _isDataSourceAsms(betterPlayerDataSource)
+        ? _setupAsmsDataSource(betterPlayerDataSource, setupGeneration)
+        : null;
     Future<void>? suppliedSubtitleSetup;
     if (asmsSetup == null) {
       suppliedSubtitleSetup = _setupSubtitles();
@@ -337,13 +347,16 @@ class BetterPlayerController {
       betterPlayerDataSource,
       preRollDataSource: preRollDataSource,
       contentStartPosition: contentStartPosition,
+      setupGeneration: setupGeneration,
     );
+    if (setupGeneration != _dataSourceSetupGeneration) return;
     final castConfiguration = betterPlayerDataSource.castConfiguration;
     if (castConfiguration != null && Platform.isAndroid) {
       await videoPlayerController?.configureCast(castConfiguration.toMap());
     }
     if (asmsSetup != null) {
       await asmsSetup;
+      if (setupGeneration != _dataSourceSetupGeneration) return;
       await _setupSubtitles();
     } else {
       await suppliedSubtitleSetup;
@@ -386,18 +399,23 @@ class BetterPlayerController {
   ///Configure HLS / DASH data source based on provided data source and configuration.
   ///This method configures tracks, subtitles and audio tracks from given
   ///master playlist.
-  Future _setupAsmsDataSource(BetterPlayerDataSource source) async {
-    final String? data = await BetterPlayerAsmsUtils.getDataFromUrl(betterPlayerDataSource!.url, _getHeaders());
+  Future _setupAsmsDataSource(
+    BetterPlayerDataSource source,
+    int setupGeneration,
+  ) async {
+    final String? data = await BetterPlayerAsmsUtils.getDataFromUrl(source.url, _getHeaders(source));
+    if (setupGeneration != _dataSourceSetupGeneration) return;
     if (data != null) {
-      final BetterPlayerAsmsDataHolder response = await BetterPlayerAsmsUtils.parse(data, betterPlayerDataSource!.url);
+      final BetterPlayerAsmsDataHolder response = await BetterPlayerAsmsUtils.parse(data, source.url);
+      if (setupGeneration != _dataSourceSetupGeneration) return;
 
       /// Load tracks
-      if (_betterPlayerDataSource?.useAsmsTracks ?? false) {
+      if (source.useAsmsTracks ?? false) {
         _betterPlayerAsmsTracks = response.tracks ?? [];
       }
 
       /// Load subtitles
-      if (betterPlayerDataSource?.useAsmsSubtitles ?? false) {
+      if (source.useAsmsSubtitles ?? false) {
         final List<BetterPlayerAsmsSubtitle> asmsSubtitles = response.subtitles ?? [];
         for (final asmsSubtitle in asmsSubtitles) {
           _betterPlayerSubtitlesSourceList.add(
@@ -415,7 +433,7 @@ class BetterPlayerController {
       }
 
       ///Load audio tracks
-      if ((betterPlayerDataSource?.useAsmsAudioTracks ?? false) && _isDataSourceAsms(betterPlayerDataSource!)) {
+      if ((source.useAsmsAudioTracks ?? false) && _isDataSourceAsms(source)) {
         _betterPlayerAsmsAudioTracks = response.audios ?? [];
         _betterPlayerAsmsAudioTrack = _betterPlayerAsmsAudioTracks?.firstWhereOrNull(
           (audioTrack) => audioTrack.isDefault,
@@ -543,30 +561,36 @@ class BetterPlayerController {
     BetterPlayerDataSource betterPlayerDataSource, {
     BetterPlayerDataSource? preRollDataSource,
     Duration contentStartPosition = Duration.zero,
+    int? setupGeneration,
   }) async {
+    final isLive = betterPlayerDataSource.liveStream == true;
+    final notification = betterPlayerDataSource.notificationConfiguration;
     switch (betterPlayerDataSource.type) {
       case BetterPlayerDataSourceType.network:
         await videoPlayerController?.setNetworkDataSource(
           betterPlayerDataSource.url,
-          headers: _getHeaders(),
-          useCache: _betterPlayerDataSource!.cacheConfiguration?.useCache ?? false,
-          maxCacheSize: _betterPlayerDataSource!.cacheConfiguration?.maxCacheSize ?? 0,
-          maxCacheFileSize: _betterPlayerDataSource!.cacheConfiguration?.maxCacheFileSize ?? 0,
-          cacheKey: _betterPlayerDataSource?.cacheConfiguration?.key,
-          showNotification: _betterPlayerDataSource?.notificationConfiguration?.showNotification,
-          title: _betterPlayerDataSource?.notificationConfiguration?.title,
-          author: _betterPlayerDataSource?.notificationConfiguration?.author,
-          imageUrl: _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-          notificationChannelName: _betterPlayerDataSource?.notificationConfiguration?.notificationChannelName,
-          overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
-          formatHint: _getVideoFormat(_betterPlayerDataSource!.videoFormat),
-          licenseUrl: _betterPlayerDataSource?.drmConfiguration?.licenseUrl,
-          certificateUrl: _betterPlayerDataSource?.drmConfiguration?.certificateUrl,
-          drmHeaders: _betterPlayerDataSource?.drmConfiguration?.headers,
-          activityName: _betterPlayerDataSource?.notificationConfiguration?.activityName,
-          clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
-          videoExtension: _betterPlayerDataSource!.videoExtension,
-          isLive: _betterPlayerDataSource?.liveStream ?? false,
+          headers: _getHeaders(betterPlayerDataSource),
+          // Live manifests are mutable and must always be reloaded upstream.
+          useCache: !isLive && (betterPlayerDataSource.cacheConfiguration?.useCache ?? false),
+          maxCacheSize: betterPlayerDataSource.cacheConfiguration?.maxCacheSize ?? 0,
+          maxCacheFileSize: betterPlayerDataSource.cacheConfiguration?.maxCacheFileSize ?? 0,
+          // Android uses the FlixQuest offline cache key to select a local
+          // Media3 source. Never let a live source accidentally select it.
+          cacheKey: isLive ? null : betterPlayerDataSource.cacheConfiguration?.key,
+          showNotification: notification?.showNotification,
+          title: notification?.title,
+          author: notification?.author,
+          imageUrl: notification?.imageUrl,
+          notificationChannelName: notification?.notificationChannelName,
+          overriddenDuration: betterPlayerDataSource.overriddenDuration,
+          formatHint: _getVideoFormat(betterPlayerDataSource.videoFormat),
+          licenseUrl: betterPlayerDataSource.drmConfiguration?.licenseUrl,
+          certificateUrl: betterPlayerDataSource.drmConfiguration?.certificateUrl,
+          drmHeaders: betterPlayerDataSource.drmConfiguration?.headers,
+          activityName: notification?.activityName,
+          clearKey: betterPlayerDataSource.drmConfiguration?.clearKey,
+          videoExtension: betterPlayerDataSource.videoExtension,
+          isLive: isLive,
           preRollDataSource: preRollDataSource == null
               ? null
               : DataSource(
@@ -595,37 +619,38 @@ class BetterPlayerController {
 
         await videoPlayerController?.setFileDataSource(
           File(betterPlayerDataSource.url),
-          showNotification: _betterPlayerDataSource?.notificationConfiguration?.showNotification,
-          title: _betterPlayerDataSource?.notificationConfiguration?.title,
-          author: _betterPlayerDataSource?.notificationConfiguration?.author,
-          imageUrl: _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-          notificationChannelName: _betterPlayerDataSource?.notificationConfiguration?.notificationChannelName,
-          overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
-          activityName: _betterPlayerDataSource?.notificationConfiguration?.activityName,
-          clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
+          showNotification: notification?.showNotification,
+          title: notification?.title,
+          author: notification?.author,
+          imageUrl: notification?.imageUrl,
+          notificationChannelName: notification?.notificationChannelName,
+          overriddenDuration: betterPlayerDataSource.overriddenDuration,
+          activityName: notification?.activityName,
+          clearKey: betterPlayerDataSource.drmConfiguration?.clearKey,
         );
       case BetterPlayerDataSourceType.memory:
-        final file = await _createFile(
-          _betterPlayerDataSource!.bytes!,
-          extension: _betterPlayerDataSource!.videoExtension,
-        );
+        final file = await _createFile(betterPlayerDataSource.bytes!, extension: betterPlayerDataSource.videoExtension);
 
         if (file.existsSync()) {
           await videoPlayerController?.setFileDataSource(
             file,
-            showNotification: _betterPlayerDataSource?.notificationConfiguration?.showNotification,
-            title: _betterPlayerDataSource?.notificationConfiguration?.title,
-            author: _betterPlayerDataSource?.notificationConfiguration?.author,
-            imageUrl: _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-            notificationChannelName: _betterPlayerDataSource?.notificationConfiguration?.notificationChannelName,
-            overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
-            activityName: _betterPlayerDataSource?.notificationConfiguration?.activityName,
-            clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
+            showNotification: notification?.showNotification,
+            title: notification?.title,
+            author: notification?.author,
+            imageUrl: notification?.imageUrl,
+            notificationChannelName: notification?.notificationChannelName,
+            overriddenDuration: betterPlayerDataSource.overriddenDuration,
+            activityName: notification?.activityName,
+            clearKey: betterPlayerDataSource.drmConfiguration?.clearKey,
           );
           _tempFiles.add(file);
         } else {
           throw ArgumentError("Couldn't create file from memory.");
         }
+    }
+    if (setupGeneration != null &&
+        setupGeneration != _dataSourceSetupGeneration) {
+      return;
     }
     await _initializeVideo();
   }
@@ -857,7 +882,9 @@ class BetterPlayerController {
 
     if (currentVideoPlayerValue.hasError) {
       _videoPlayerValueOnError ??= currentVideoPlayerValue;
-      _scheduleNetworkRecovery();
+      if (_betterPlayerDataSource?.liveStream != true) {
+        _scheduleNetworkRecovery();
+      }
       _postEvent(
         BetterPlayerEvent(
           BetterPlayerEventType.exception,
@@ -1159,6 +1186,13 @@ class BetterPlayerController {
   ///used.
   BoxFit getFit() => _overriddenFit ?? betterPlayerConfiguration.fit;
 
+  ///Enable or disable the Android ambient glow without rebuilding playback.
+  void setAmbientGlowEnabled(bool enabled) {
+    if (_ambientGlowEnabled == enabled) return;
+    _ambientGlowEnabled = enabled;
+    _postControllerEvent(BetterPlayerControllerEvent.ambientGlow);
+  }
+
   ///Enable Picture in Picture (PiP) mode. [betterPlayerGlobalKey] is required
   ///to open PiP mode in iOS. When device is not supported, PiP mode won't be
   ///open.
@@ -1235,13 +1269,25 @@ class BetterPlayerController {
 
   ///Handle VideoEvent when remote controls notification / PiP is shown
   Future<void> _handleVideoEvent(VideoEvent event) async {
+    final sourceParameters = <String, dynamic>{
+      if (event.key != null) _sourceKeyParameter: event.key,
+    };
     switch (event.eventType) {
       case VideoEventType.play:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.play));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.play,
+          parameters: sourceParameters,
+        ));
       case VideoEventType.pause:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.pause));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.pause,
+          parameters: sourceParameters,
+        ));
       case VideoEventType.seek:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.seekTo));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.seekTo,
+          parameters: sourceParameters,
+        ));
       case VideoEventType.completed:
         final VideoPlayerValue? videoValue = videoPlayerController?.value;
         _postEvent(
@@ -1254,18 +1300,30 @@ class BetterPlayerController {
           ),
         );
       case VideoEventType.preRollEnded:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.preRollEnded));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.preRollEnded,
+          parameters: sourceParameters,
+        ));
       case VideoEventType.bufferingStart:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingStart));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.bufferingStart,
+          parameters: sourceParameters,
+        ));
       case VideoEventType.bufferingUpdate:
         _postEvent(
           BetterPlayerEvent(
             BetterPlayerEventType.bufferingUpdate,
-            parameters: <String, dynamic>{_bufferedParameter: event.buffered},
+            parameters: <String, dynamic>{
+              ...sourceParameters,
+              _bufferedParameter: event.buffered,
+            },
           ),
         );
       case VideoEventType.bufferingEnd:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingEnd));
+        _postEvent(BetterPlayerEvent(
+          BetterPlayerEventType.bufferingEnd,
+          parameters: sourceParameters,
+        ));
       default:
 
         ///TODO: Handle when needed
@@ -1281,10 +1339,13 @@ class BetterPlayerController {
 
   ///Retry data source if playback failed.
   Future retryDataSource() async {
+    final isLive = _betterPlayerDataSource?.liveStream == true;
     await _setupDataSource(_betterPlayerDataSource!);
     if (_videoPlayerValueOnError != null) {
-      final position = _videoPlayerValueOnError!.position;
-      await seekTo(position);
+      if (!isLive) {
+        final position = _videoPlayerValueOnError!.position;
+        await seekTo(position);
+      }
       await play();
       _videoPlayerValueOnError = null;
     }
@@ -1298,9 +1359,7 @@ class BetterPlayerController {
       return;
     }
     final Duration delay;
-    if (_betterPlayerDataSource?.liveStream == true) {
-      delay = _liveNetworkRecoveryDelay;
-    } else if (_networkRecoveryAttempts == 0) {
+    if (_networkRecoveryAttempts == 0) {
       delay = _initialNetworkRecoveryDelay;
     } else {
       delay = _networkRecoveryInterval;
@@ -1314,7 +1373,8 @@ class BetterPlayerController {
   Future<void> _attemptNetworkRecovery() async {
     if (_disposed ||
         _networkRecoveryInProgress ||
-        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network) {
+        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
+        _betterPlayerDataSource?.liveStream == true) {
       return;
     }
     _networkRecoveryInProgress = true;
@@ -1372,11 +1432,13 @@ class BetterPlayerController {
 
   ///Build headers map that will be used to setup video player controller. Apply
   ///DRM headers if available.
-  Map<String, String?> _getHeaders() {
-    final headers = betterPlayerDataSource!.headers ?? {};
-    if (betterPlayerDataSource?.drmConfiguration?.drmType == BetterPlayerDrmType.token &&
-        betterPlayerDataSource?.drmConfiguration?.token != null) {
-      headers[_authorizationHeader] = betterPlayerDataSource!.drmConfiguration!.token!;
+  Map<String, String?> _getHeaders([BetterPlayerDataSource? source]) {
+    final dataSource = source ?? _betterPlayerDataSource;
+    if (dataSource == null) return <String, String?>{};
+    final headers = <String, String?>{...?dataSource.headers};
+    if (dataSource.drmConfiguration?.drmType == BetterPlayerDrmType.token &&
+        dataSource.drmConfiguration?.token != null) {
+      headers[_authorizationHeader] = dataSource.drmConfiguration!.token!;
     }
     return headers;
   }

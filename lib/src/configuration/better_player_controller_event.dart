@@ -17,4 +17,7 @@ enum BetterPlayerControllerEvent {
 
   ///Video set fit.
   setFit,
+
+  ///Ambient glow visibility changed.
+  ambientGlow,
 }
