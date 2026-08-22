@@ -100,6 +100,7 @@ class _BetterPlayerState extends State<BetterPlayer> with WidgetsBindingObserver
     _controllerEventSubscription?.cancel();
     widget.controller.dispose();
     VisibilityDetectorController.instance.forget(Key('${widget.controller.hashCode}_key'));
+    VisibilityDetectorController.instance.forget(Key('${widget.controller.hashCode}_fullscreen_key'));
     super.dispose();
   }
 
@@ -165,7 +166,10 @@ class _BetterPlayerState extends State<BetterPlayer> with WidgetsBindingObserver
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    final controllerProvider = BetterPlayerControllerProvider(controller: widget.controller, child: _buildPlayer());
+    final controllerProvider = BetterPlayerControllerProvider(
+      controller: widget.controller,
+      child: _buildPlayer(forFullscreen: true),
+    );
 
     final routePageBuilder = _betterPlayerConfiguration.routePageBuilder;
     if (routePageBuilder == null) {
@@ -219,9 +223,20 @@ class _BetterPlayerState extends State<BetterPlayer> with WidgetsBindingObserver
     await SystemChrome.setPreferredOrientations(_betterPlayerConfiguration.deviceOrientationsAfterFullScreen);
   }
 
-  Widget _buildPlayer() => VisibilityDetector(
-    key: Key('${widget.controller.hashCode}_key'),
-    onVisibilityChanged: (VisibilityInfo info) => widget.controller.onPlayerVisibilityChanged(info.visibleFraction),
+  /// Builds the player surface wrapped in a visibility detector. The inline and
+  /// the fullscreen wrappers stay mounted on two routes and share one
+  /// controller, so every occlusion change is reported twice. Only the wrapper
+  /// which owns the current fullscreen mode may drive automatic play/pause,
+  /// otherwise the covered wrapper's zero-fraction callback can land last and
+  /// pause playback which has just started.
+  Widget _buildPlayer({bool forFullscreen = false}) => VisibilityDetector(
+    key: Key(forFullscreen ? '${widget.controller.hashCode}_fullscreen_key' : '${widget.controller.hashCode}_key'),
+    onVisibilityChanged: (VisibilityInfo info) {
+      if (widget.controller.isFullScreen != forFullscreen) {
+        return;
+      }
+      widget.controller.onPlayerVisibilityChanged(info.visibleFraction);
+    },
     child: BetterPlayerWithControls(controller: widget.controller),
   );
 

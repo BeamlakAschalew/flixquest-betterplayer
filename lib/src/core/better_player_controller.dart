@@ -399,10 +399,7 @@ class BetterPlayerController {
   ///Configure HLS / DASH data source based on provided data source and configuration.
   ///This method configures tracks, subtitles and audio tracks from given
   ///master playlist.
-  Future _setupAsmsDataSource(
-    BetterPlayerDataSource source,
-    int setupGeneration,
-  ) async {
+  Future _setupAsmsDataSource(BetterPlayerDataSource source, int setupGeneration) async {
     final String? data = await BetterPlayerAsmsUtils.getDataFromUrl(source.url, _getHeaders(source));
     if (setupGeneration != _dataSourceSetupGeneration) return;
     if (data != null) {
@@ -648,8 +645,7 @@ class BetterPlayerController {
           throw ArgumentError("Couldn't create file from memory.");
         }
     }
-    if (setupGeneration != null &&
-        setupGeneration != _dataSourceSetupGeneration) {
+    if (setupGeneration != null && setupGeneration != _dataSourceSetupGeneration) {
       return;
     }
     await _initializeVideo();
@@ -888,7 +884,10 @@ class BetterPlayerController {
       _postEvent(
         BetterPlayerEvent(
           BetterPlayerEventType.exception,
-          parameters: <String, dynamic>{'exception': currentVideoPlayerValue.errorDescription},
+          parameters: <String, dynamic>{
+            'exception': currentVideoPlayerValue.errorDescription,
+            _sourceKeyParameter: _betterPlayerDataSource?.url,
+          },
         ),
       );
     }
@@ -897,7 +896,12 @@ class BetterPlayerController {
     }
     if (currentVideoPlayerValue.initialized && !_hasCurrentDataSourceInitialized) {
       _hasCurrentDataSourceInitialized = true;
-      _postEvent(BetterPlayerEvent(BetterPlayerEventType.initialized));
+      _postEvent(
+        BetterPlayerEvent(
+          BetterPlayerEventType.initialized,
+          parameters: <String, dynamic>{_sourceKeyParameter: _betterPlayerDataSource?.url},
+        ),
+      );
     }
     if (currentVideoPlayerValue.isPip) {
       _wasInPipMode = true;
@@ -926,6 +930,7 @@ class BetterPlayerController {
           parameters: <String, dynamic>{
             _progressParameter: currentVideoPlayerValue.position,
             _durationParameter: currentVideoPlayerValue.duration,
+            _sourceKeyParameter: _betterPlayerDataSource?.url,
           },
         ),
       );
@@ -1269,25 +1274,14 @@ class BetterPlayerController {
 
   ///Handle VideoEvent when remote controls notification / PiP is shown
   Future<void> _handleVideoEvent(VideoEvent event) async {
-    final sourceParameters = <String, dynamic>{
-      if (event.key != null) _sourceKeyParameter: event.key,
-    };
+    final sourceParameters = <String, dynamic>{if (event.key != null) _sourceKeyParameter: event.key};
     switch (event.eventType) {
       case VideoEventType.play:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.play,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.play, parameters: sourceParameters));
       case VideoEventType.pause:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.pause,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.pause, parameters: sourceParameters));
       case VideoEventType.seek:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.seekTo,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.seekTo, parameters: sourceParameters));
       case VideoEventType.completed:
         final VideoPlayerValue? videoValue = videoPlayerController?.value;
         _postEvent(
@@ -1300,30 +1294,18 @@ class BetterPlayerController {
           ),
         );
       case VideoEventType.preRollEnded:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.preRollEnded,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.preRollEnded, parameters: sourceParameters));
       case VideoEventType.bufferingStart:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.bufferingStart,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingStart, parameters: sourceParameters));
       case VideoEventType.bufferingUpdate:
         _postEvent(
           BetterPlayerEvent(
             BetterPlayerEventType.bufferingUpdate,
-            parameters: <String, dynamic>{
-              ...sourceParameters,
-              _bufferedParameter: event.buffered,
-            },
+            parameters: <String, dynamic>{...sourceParameters, _bufferedParameter: event.buffered},
           ),
         );
       case VideoEventType.bufferingEnd:
-        _postEvent(BetterPlayerEvent(
-          BetterPlayerEventType.bufferingEnd,
-          parameters: sourceParameters,
-        ));
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingEnd, parameters: sourceParameters));
       default:
 
         ///TODO: Handle when needed

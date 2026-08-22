@@ -169,6 +169,7 @@ internal class BetterPlayer(
     private var lastKnownPositionMs = 0L
     private var hasPreRollSequence = false
     private var preRollEndedSent = false
+    private var completionSent = false
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
@@ -220,6 +221,7 @@ internal class BetterPlayer(
     ) {
         this.key = key
         isInitialized = false
+        completionSent = false
         lastKnownPositionMs = 0L
         pendingBrokenSegmentStartMs = null
         pendingBrokenSegmentEndMs = null
@@ -703,8 +705,9 @@ internal class BetterPlayer(
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
                         sendBufferingUpdate(true)
-                        val event: MutableMap<String, Any> = HashMap()
+                        val event: MutableMap<String, Any?> = HashMap()
                         event["event"] = "bufferingStart"
+                        event["key"] = key
                         eventSink.success(event)
                     }
 
@@ -713,16 +716,14 @@ internal class BetterPlayer(
                             isInitialized = true
                             sendInitialized()
                         }
-                        val event: MutableMap<String, Any> = HashMap()
+                        val event: MutableMap<String, Any?> = HashMap()
                         event["event"] = "bufferingEnd"
+                        event["key"] = key
                         eventSink.success(event)
                     }
 
                     Player.STATE_ENDED -> {
-                        val event: MutableMap<String, Any?> = HashMap()
-                        event["event"] = "completed"
-                        event["key"] = key
-                        eventSink.success(event)
+                        sendCompleted()
                     }
 
                     Player.STATE_IDLE -> {
@@ -744,6 +745,9 @@ internal class BetterPlayer(
                     return
                 }
                 if (skipBrokenShortSegment()) {
+                    return
+                }
+                if (completionSent) {
                     return
                 }
                 eventSink.error("VideoError", "Video player had error $error", "")
@@ -800,17 +804,46 @@ internal class BetterPlayer(
             TAG,
             "Skipping repeatedly broken adaptive segment to ${targetMs}ms"
         )
+
+        // ExoPlayer does not reliably transition to STATE_ENDED after an
+        // errored final HLS segment is skipped to the exact media duration.
+        // Finish explicitly so Flutter receives the same completion event as
+        // a clean stream, while still preparing the player at the end position.
+        if (durationMs != C.TIME_UNSET &&
+            durationMs > 0L &&
+            targetMs >= durationMs - 250L
+        ) {
+            Log.w(TAG, "Broken final segment reached the end of media")
+            player.pause()
+            player.seekTo(durationMs)
+            player.prepare()
+            sendCompleted()
+            return true
+        }
+
         player.seekTo(targetMs)
         player.prepare()
         player.playWhenReady = resumePlayback
         return true
     }
 
+    private fun sendCompleted() {
+        if (completionSent) {
+            return
+        }
+        completionSent = true
+        val event: MutableMap<String, Any?> = HashMap()
+        event["event"] = "completed"
+        event["key"] = key
+        eventSink.success(event)
+    }
+
     fun sendBufferingUpdate(isFromBufferingStart: Boolean) {
         val bufferedPosition = exoPlayer?.bufferedPosition ?: 0L
         if (isFromBufferingStart || bufferedPosition != lastSendBufferedPosition) {
-            val event: MutableMap<String, Any> = HashMap()
+            val event: MutableMap<String, Any?> = HashMap()
             event["event"] = "bufferingUpdate"
+            event["key"] = key
             val range: List<Number?> = listOf(0, bufferedPosition)
             // iOS supports a list of buffered ranges, so here is a list with a single range.
             event["values"] = listOf(range)
@@ -1079,8 +1112,9 @@ internal class BetterPlayer(
 
     private fun sendSeekToEvent(positionMs: Long) {
         exoPlayer?.seekTo(positionMs)
-        val event: MutableMap<String, Any> = HashMap()
+        val event: MutableMap<String, Any?> = HashMap()
         event["event"] = "seek"
+        event["key"] = key
         event["position"] = positionMs
         eventSink.success(event)
     }

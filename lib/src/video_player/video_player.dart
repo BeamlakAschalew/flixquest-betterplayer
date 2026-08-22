@@ -183,6 +183,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   Timer? _timer;
   bool _isDisposed = false;
   late Completer<void> _initializingCompleter;
+  String? _activeDataSourceKey;
   StreamSubscription<dynamic>? _eventSubscription;
 
   bool get _created => _creatingCompleter.isCompleted;
@@ -206,6 +207,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
 
     void eventListener(VideoEvent event) {
       if (_isDisposed) {
+        return;
+      }
+      final activeSourceKey = _activeDataSourceKey;
+      if (event.key != null &&
+          activeSourceKey != null &&
+          event.key != activeSourceKey) {
         return;
       }
       videoEventStreamController.add(event);
@@ -390,6 +397,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
 
     if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
 
+    _activeDataSourceKey = dataSourceDescription.key;
     _initializingCompleter = Completer<void>();
 
     await VideoPlayerPlatform.instance.setDataSource(_textureId, dataSourceDescription);

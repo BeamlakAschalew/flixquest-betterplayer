@@ -84,17 +84,20 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     if (aspectRatio.isNaN || aspectRatio.isInfinite || aspectRatio <= 0) {
       aspectRatio = 16 / 9;
     }
+    final ambientGlowSupported =
+        Platform.isAndroid && betterPlayerController.betterPlayerConfiguration.enableAmbientGlow;
     final innerContainer = Container(
       width: double.infinity,
-      color: betterPlayerController.betterPlayerConfiguration.controlsConfiguration.backgroundColor,
+      color: ambientGlowSupported
+          ? Colors.transparent
+          : betterPlayerController.betterPlayerConfiguration.controlsConfiguration.backgroundColor,
       child: AspectRatio(aspectRatio: aspectRatio, child: _buildPlayerWithControls(betterPlayerController, context)),
     );
 
     final player = betterPlayerController.betterPlayerConfiguration.expandToFill
         ? Center(child: innerContainer)
         : innerContainer;
-    if (!Platform.isAndroid ||
-        !betterPlayerController.betterPlayerConfiguration.enableAmbientGlow) {
+    if (!ambientGlowSupported) {
       return player;
     }
     return Stack(fit: StackFit.expand, children: <Widget>[_BetterPlayerAmbientGlow(betterPlayerController), player]);

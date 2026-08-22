@@ -323,12 +323,12 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
                 }
                 if player.timeControlStatus == .paused {
                     lastAvPlayerTimeControlStatus = player.timeControlStatus
-                    eventSink?(["event": "pause"])
+                    eventSink?(["event": "pause", "key": key as Any])
                     return
                 }
                 if player.timeControlStatus == .playing {
                     lastAvPlayerTimeControlStatus = player.timeControlStatus
-                    eventSink?(["event": "play"])
+                    eventSink?(["event": "play", "key": key as Any])
                 }
             }
 
@@ -628,7 +628,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         if let layer = playerLayerRef {
             layer.removeFromSuperlayer()
             playerLayerRef = nil
-            eventSink?(["event": "pipStop"])
+            eventSink?(["event": "pipStop", "key": key as Any])
         }
     }
 
@@ -638,7 +638,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     }
 
     public func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        eventSink?(["event": "pipStart"])
+        eventSink?(["event": "pipStart", "key": key as Any])
     }
 
     public func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
