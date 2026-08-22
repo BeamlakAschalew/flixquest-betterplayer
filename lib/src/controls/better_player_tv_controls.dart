@@ -732,6 +732,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
             ),
             const Spacer(),
+            if (_configuration.introDbSkipButtonBuilder case final builder?)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Padding(padding: const EdgeInsets.only(bottom: 8), child: builder(context)),
+              ),
             BetterPlayerTvProgressBar(
               position: _value.position,
               duration: _value.duration ?? Duration.zero,

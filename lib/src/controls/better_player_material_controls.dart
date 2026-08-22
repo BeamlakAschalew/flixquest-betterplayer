@@ -313,6 +313,14 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           if (live)
             Align(alignment: AlignmentDirectional.centerStart, child: _live())
           else ...[
+            if (_configuration.introDbSkipButtonBuilder case final builder?)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: compact ? 2 : 4),
+                  child: builder(context),
+                ),
+              ),
             if (_configuration.enableProgressText)
               Row(
                 children: [

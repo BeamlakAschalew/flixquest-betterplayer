@@ -78,6 +78,7 @@ class BetterPlayerControlsConfiguration {
     this.onMovieRecommendationsTap,
     this.enableMovieRecommendations = false,
     this.enableNextEpisodeButton = true,
+    this.introDbSkipButtonBuilder,
     this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
   });
 
@@ -314,6 +315,9 @@ class BetterPlayerControlsConfiguration {
 
   ///Enable next episode button (floating button at 85% progress for TV shows)
   final bool enableNextEpisodeButton;
+
+  /// App-provided skip action rendered inside the player controls layer.
+  final Widget Function(BuildContext context)? introDbSkipButtonBuilder;
 
   ///Gesture-based controls configuration (volume/brightness swipe)
   final BetterPlayerGestureConfiguration gestureConfiguration;
