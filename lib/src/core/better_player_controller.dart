@@ -267,8 +267,8 @@ class BetterPlayerController {
   }
 
   ///Setup new data source in Better Player.
-  Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) =>
-      _setupDataSourceWithSubtitle(betterPlayerDataSource);
+  Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource, {Duration? initialPosition}) =>
+      _setupDataSourceWithSubtitle(betterPlayerDataSource, initialPosition: initialPosition);
 
   /// Plays [preRollDataSource] and [betterPlayerDataSource] as one native
   /// sequence while retaining the same surface, controls, and fullscreen
@@ -286,6 +286,9 @@ class BetterPlayerController {
       betterPlayerDataSource,
       preRollDataSource: preRollDataSource,
       contentStartPosition: contentStartPosition,
+      // The content position is applied natively when the sequence advances.
+      // Explicit zero prevents a configured startAt from seeking the pre-roll.
+      initialPosition: Duration.zero,
     );
   }
 
@@ -294,6 +297,7 @@ class BetterPlayerController {
     BetterPlayerSubtitlesSource? subtitlesSourceToRestore,
     BetterPlayerDataSource? preRollDataSource,
     Duration contentStartPosition = Duration.zero,
+    Duration? initialPosition,
   }) async {
     final setupGeneration = ++_dataSourceSetupGeneration;
     _cancelNetworkRecovery(clearSavedPosition: true);
@@ -347,6 +351,7 @@ class BetterPlayerController {
       betterPlayerDataSource,
       preRollDataSource: preRollDataSource,
       contentStartPosition: contentStartPosition,
+      initialPosition: initialPosition,
       setupGeneration: setupGeneration,
     );
     if (setupGeneration != _dataSourceSetupGeneration) return;
@@ -558,6 +563,7 @@ class BetterPlayerController {
     BetterPlayerDataSource betterPlayerDataSource, {
     BetterPlayerDataSource? preRollDataSource,
     Duration contentStartPosition = Duration.zero,
+    Duration? initialPosition,
     int? setupGeneration,
   }) async {
     final isLive = betterPlayerDataSource.liveStream == true;
@@ -648,7 +654,7 @@ class BetterPlayerController {
     if (setupGeneration != null && setupGeneration != _dataSourceSetupGeneration) {
       return;
     }
-    await _initializeVideo();
+    await _initializeVideo(initialPosition: initialPosition);
   }
 
   ///Create file from provided list of bytes. File will be created in temporary
@@ -662,12 +668,20 @@ class BetterPlayerController {
 
   ///Initializes video based on configuration. Invoke actions which need to be
   ///run on player start.
-  Future _initializeVideo() async {
+  Future _initializeVideo({Duration? initialPosition}) async {
     setLooping(betterPlayerConfiguration.looping);
     _videoEventStreamSubscription?.cancel();
     _videoEventStreamSubscription = null;
 
     _videoEventStreamSubscription = videoPlayerController?.videoEventStreamController.stream.listen(_handleVideoEvent);
+
+    // Apply the requested position before autoplay. Seeking after play has
+    // already started causes a visible jump back to zero (or forward to a
+    // resume point) during the first seconds of playback.
+    final startAt = initialPosition ?? betterPlayerConfiguration.startAt;
+    if (startAt != null && startAt != Duration.zero) {
+      await seekTo(startAt);
+    }
 
     final fullScreenByDefault = betterPlayerConfiguration.fullScreenByDefault;
     if (betterPlayerConfiguration.autoPlay) {
@@ -687,11 +701,6 @@ class BetterPlayerController {
       if (fullScreenByDefault) {
         enterFullScreen();
       }
-    }
-
-    final startAt = betterPlayerConfiguration.startAt;
-    if (startAt != null) {
-      seekTo(startAt);
     }
   }
 
@@ -779,7 +788,11 @@ class BetterPlayerController {
     if (currentDuration == null) {
       return;
     }
-    if (moment > currentDuration) {
+    // Seeking to the exact end is also a completed playback. This commonly
+    // happens when an app-provided "skip credits" action targets the media
+    // duration, and the platform may not emit another native completion event
+    // after that seek.
+    if (moment >= currentDuration) {
       _postEvent(BetterPlayerEvent(BetterPlayerEventType.finished));
     } else {
       cancelNextVideoTimer();
@@ -1099,9 +1112,9 @@ class BetterPlayerController {
         headers: hasResolutionHeaders ? resolutionHeaders![resolutionName] : null,
       ),
       subtitlesSourceToRestore: subtitlesSourceToRestore,
+      initialPosition: position,
     );
     _betterPlayerResolutionName = resolutionName;
-    seekTo(position!);
     if (wasPlayingBeforeChange) {
       play();
     }
@@ -1322,12 +1335,9 @@ class BetterPlayerController {
   ///Retry data source if playback failed.
   Future retryDataSource() async {
     final isLive = _betterPlayerDataSource?.liveStream == true;
-    await _setupDataSource(_betterPlayerDataSource!);
+    final position = !isLive ? _videoPlayerValueOnError?.position : null;
+    await _setupDataSource(_betterPlayerDataSource!, initialPosition: position);
     if (_videoPlayerValueOnError != null) {
-      if (!isLive) {
-        final position = _videoPlayerValueOnError!.position;
-        await seekTo(position);
-      }
       await play();
       _videoPlayerValueOnError = null;
     }

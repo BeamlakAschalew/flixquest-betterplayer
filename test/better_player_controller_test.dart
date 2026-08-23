@@ -189,7 +189,7 @@ void main() {
       expect(position, const Duration(seconds: 30));
     });
 
-    test('seekTo should send event', () async {
+    test('seekTo emits finished when seeking to or beyond the end', () async {
       final BetterPlayerController betterPlayerController = BetterPlayerTestUtils.setupBetterPlayerMockController();
       final videoPlayerController = BetterPlayerTestUtils.setupMockVideoPlayerControler();
       videoPlayerController.setDuration(const Duration(seconds: 100));
@@ -205,13 +205,58 @@ void main() {
           finishEventCalls += 1;
         }
       });
-      betterPlayerController.seekTo(const Duration(seconds: 5));
-      await Future.delayed(const Duration(milliseconds: 100), () {});
+      await betterPlayerController.seekTo(const Duration(seconds: 5));
       expect(seekEventCalls, 1);
-      betterPlayerController.seekTo(const Duration(seconds: 150));
-      await Future.delayed(const Duration(milliseconds: 100), () {});
+
+      await betterPlayerController.seekTo(const Duration(seconds: 100));
       expect(seekEventCalls, 2);
       expect(finishEventCalls, 1);
+
+      await betterPlayerController.seekTo(const Duration(seconds: 150));
+      expect(seekEventCalls, 3);
+      expect(finishEventCalls, 2);
+    });
+
+    test('setup applies a resume position before autoplay', () async {
+      final videoPlayerController = MockVideoPlayerController()..setDuration(const Duration(seconds: 100));
+      final betterPlayerController = BetterPlayerMockController(const BetterPlayerConfiguration(autoPlay: true))
+        ..videoPlayerController = videoPlayerController;
+
+      await betterPlayerController.setupDataSource(
+        BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl),
+        initialPosition: const Duration(seconds: 25),
+      );
+
+      expect(videoPlayerController.playbackOperations, <String>['seek:25000', 'play']);
+    });
+
+    test('setup does not issue a redundant zero seek after autoplay', () async {
+      final videoPlayerController = MockVideoPlayerController()..setDuration(const Duration(seconds: 100));
+      final betterPlayerController = BetterPlayerMockController(const BetterPlayerConfiguration(autoPlay: true))
+        ..videoPlayerController = videoPlayerController;
+
+      await betterPlayerController.setupDataSource(
+        BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl),
+        initialPosition: Duration.zero,
+      );
+
+      expect(videoPlayerController.playbackOperations, <String>['play']);
+    });
+
+    test('pre-roll leaves the content start position to the native sequence', () async {
+      final videoPlayerController = MockVideoPlayerController()..setDuration(const Duration(seconds: 100));
+      final betterPlayerController = BetterPlayerMockController(
+        const BetterPlayerConfiguration(autoPlay: true, startAt: Duration(seconds: 5)),
+      )..videoPlayerController = videoPlayerController;
+
+      await betterPlayerController.setupDataSourceWithPreRoll(
+        preRollDataSource: BetterPlayerDataSource.network('https://example.com/pre-roll.mp4'),
+        betterPlayerDataSource: BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl),
+        contentStartPosition: const Duration(seconds: 25),
+      );
+
+      expect(videoPlayerController.lastContentStartPosition, const Duration(seconds: 25));
+      expect(videoPlayerController.playbackOperations, <String>['play']);
     });
 
     test('full screen and auto play should work', () async {

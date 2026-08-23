@@ -10,15 +10,19 @@ class MockVideoPlayerController extends VideoPlayerController {
   double volume = 0;
   double speed = 1;
   Duration? lastSeekPosition;
+  Duration? lastContentStartPosition;
+  final List<String> playbackOperations = <String>[];
 
   @override
   Future<void> play() async {
+    playbackOperations.add('play');
     value = value.copyWith(isPlaying: true);
     return;
   }
 
   @override
   Future<void> pause() async {
+    playbackOperations.add('pause');
     value = value.copyWith(isPlaying: false);
     return;
   }
@@ -38,6 +42,7 @@ class MockVideoPlayerController extends VideoPlayerController {
 
   @override
   Future<void> seekTo(Duration? position) async {
+    playbackOperations.add('seek:${position?.inMilliseconds}');
     lastSeekPosition = position;
     value = value.copyWith(position: position);
   }
@@ -79,5 +84,7 @@ class MockVideoPlayerController extends VideoPlayerController {
     bool isLive = false,
     DataSource? preRollDataSource,
     Duration? contentStartPosition,
-  }) async {}
+  }) async {
+    lastContentStartPosition = contentStartPosition;
+  }
 }
