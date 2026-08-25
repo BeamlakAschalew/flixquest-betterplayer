@@ -270,6 +270,45 @@ class BetterPlayerController {
   Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource, {Duration? initialPosition}) =>
       _setupDataSourceWithSubtitle(betterPlayerDataSource, initialPosition: initialPosition);
 
+  /// Updates resolution and subtitle metadata without reloading the native
+  /// media source. This is used for background server/size enrichment.
+  void updateDataSourceMetadata({
+    Map<String, String>? resolutions,
+    String? selectedResolution,
+    Map<String, BetterPlayerVideoFormat?>? resolutionVideoFormats,
+    Map<String, Map<String, String>>? resolutionHeaders,
+    Map<String, String>? resolutionDisplayNames,
+    Map<String, String>? resolutionDescriptions,
+    List<BetterPlayerSubtitlesSource>? subtitles,
+  }) {
+    final current = _betterPlayerDataSource;
+    if (current == null) return;
+    _betterPlayerDataSource = current.copyWith(
+      resolutions: resolutions,
+      selectedResolution: selectedResolution,
+      resolutionVideoFormats: resolutionVideoFormats,
+      resolutionHeaders: resolutionHeaders,
+      resolutionDisplayNames: resolutionDisplayNames,
+      resolutionDescriptions: resolutionDescriptions,
+      subtitles: subtitles,
+    );
+    if (selectedResolution != null) {
+      _betterPlayerResolutionName = selectedResolution;
+    }
+    if (subtitles != null) {
+      final existingKeys = <String>{
+        for (final source in _betterPlayerSubtitlesSourceList)
+          '${source.urls?.first ?? ''}|${source.name ?? ''}|${source.type}',
+      };
+      for (final source in subtitles) {
+        final key = '${source.urls?.first ?? ''}|${source.name ?? ''}|${source.type}';
+        if (existingKeys.add(key)) _betterPlayerSubtitlesSourceList.add(source);
+      }
+    }
+    _postControllerEvent(BetterPlayerControllerEvent.dataSourceMetadataChanged);
+    _postEvent(BetterPlayerEvent(BetterPlayerEventType.changedResolution));
+  }
+
   /// Plays [preRollDataSource] and [betterPlayerDataSource] as one native
   /// sequence while retaining the same surface, controls, and fullscreen
   /// route across the transition.

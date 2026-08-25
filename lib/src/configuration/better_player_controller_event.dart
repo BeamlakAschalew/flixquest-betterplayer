@@ -20,4 +20,7 @@ enum BetterPlayerControllerEvent {
 
   ///Ambient glow visibility changed.
   ambientGlow,
+
+  ///Resolution/source metadata changed without replacing the native source.
+  dataSourceMetadataChanged,
 }
