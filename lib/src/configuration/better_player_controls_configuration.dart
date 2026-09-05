@@ -79,6 +79,8 @@ class BetterPlayerControlsConfiguration {
     this.enableMovieRecommendations = false,
     this.enableNextEpisodeButton = true,
     this.introDbSkipButtonBuilder,
+    this.introDbSkipAvailable,
+    this.onIntroDbSkip,
     this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
   });
 
@@ -318,6 +320,16 @@ class BetterPlayerControlsConfiguration {
 
   /// App-provided skip action rendered inside the player controls layer.
   final Widget Function(BuildContext context)? introDbSkipButtonBuilder;
+
+  /// Whether [introDbSkipButtonBuilder] currently has something to skip.
+  /// Queried on every controls build: the skip button is kept outside the
+  /// overlay fade, so the controls need to know when it is live before giving
+  /// it screen space (and, on TV, the select key).
+  final bool Function()? introDbSkipAvailable;
+
+  /// Runs the app's skip action. Used by the TV controls to fire the persistent
+  /// skip button from the select key while the overlay is hidden.
+  final VoidCallback? onIntroDbSkip;
 
   ///Gesture-based controls configuration (volume/brightness swipe)
   final BetterPlayerGestureConfiguration gestureConfiguration;

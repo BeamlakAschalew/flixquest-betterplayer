@@ -80,13 +80,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           fit: StackFit.expand,
           children: [
             _buildTapArea(),
-            AnimatedOpacity(
-              opacity: controlsNotVisible ? 0 : 1,
-              duration: betterPlayerMotionDuration,
-              curve: Curves.easeOutCubic,
-              onEnd: _onPlayerHide,
-              child: IgnorePointer(ignoring: controlsNotVisible, child: _buildVisibleControls(compact)),
-            ),
+            _buildVisibleControls(compact),
             _buildNextVideoWidget(),
           ],
         );
@@ -140,7 +134,6 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
                 : target,
           );
         },
-        onTap: cancelAndRestartTimer,
         child: content,
       );
     }
@@ -149,32 +142,40 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
 
   Widget _buildVisibleControls(bool compact) {
     if (_betterPlayerController?.controlsEnabled != true) {
-      return _withFullscreenSafeArea(
-        Align(
-          alignment: Alignment.topRight,
-          child: Padding(padding: const EdgeInsets.all(10), child: _lockButton()),
+      return _hideWithControls(
+        _withFullscreenSafeArea(
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(padding: const EdgeInsets.all(10), child: _lockButton()),
+          ),
         ),
+        notifyOnEnd: true,
       );
     }
     return Stack(
       fit: StackFit.expand,
       children: [
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xB3000000), Color(0x26000000), Color(0x12000000), Color(0xC7000000)],
-              stops: [0, .28, .55, 1],
+        _hideWithControls(
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xB3000000), Color(0x26000000), Color(0x12000000), Color(0xC7000000)],
+                stops: [0, .28, .55, 1],
+              ),
             ),
           ),
+          notifyOnEnd: true,
         ),
         _withFullscreenSafeArea(
           Stack(
             fit: StackFit.expand,
             children: [
-              Align(alignment: Alignment.topCenter, child: _topBar(compact)),
-              Center(child: _transportControlsArea(compact)),
+              Align(alignment: Alignment.topCenter, child: _hideWithControls(_topBar(compact))),
+              Center(child: _hideWithControls(_transportControlsArea(compact))),
+              // The bottom bar gates itself: the skip button inside it has to
+              // outlive the overlay.
               Align(alignment: Alignment.bottomCenter, child: _bottomBar(compact)),
             ],
           ),
@@ -182,6 +183,21 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       ],
     );
   }
+
+  /// Fades a piece of the control surface out with the overlay. Everything the
+  /// overlay owns goes through here; the IntroDB skip button deliberately does
+  /// not, because its window closes on its own and would otherwise become
+  /// unreachable as soon as the controls auto-hide.
+  ///
+  /// [notifyOnEnd] marks the one instance that reports the finished transition,
+  /// so the controller still sees a single visibility change.
+  Widget _hideWithControls(Widget child, {bool notifyOnEnd = false}) => AnimatedOpacity(
+    opacity: controlsNotVisible ? 0 : 1,
+    duration: betterPlayerMotionDuration,
+    curve: Curves.easeOutCubic,
+    onEnd: notifyOnEnd ? _onPlayerHide : null,
+    child: IgnorePointer(ignoring: controlsNotVisible, child: child),
+  );
 
   Widget _withFullscreenSafeArea(Widget child) =>
       _betterPlayerController?.isFullScreen == true ? SafeArea(child: child) : child;
@@ -310,97 +326,117 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (live)
-            Align(alignment: AlignmentDirectional.centerStart, child: _live())
-          else ...[
-            if (_configuration.introDbSkipButtonBuilder case final builder?)
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: compact ? 2 : 4),
-                  child: builder(context),
-                ),
-              ),
-            if (_configuration.enableProgressText)
-              Row(
-                children: [
-                  Text(BetterPlayerUtils.formatDuration(_latestValue?.position ?? Duration.zero), style: _timeStyle),
-                  const Spacer(),
-                  Text(_durationLabel(), style: _timeStyle),
-                ],
-              ),
-            if (_configuration.enableProgressBar) SizedBox(height: compact ? 22 : 28, child: _progressBar()),
-          ],
-          Row(
-            children: [
-              if (_configuration.enableMute) _muteButton(compact),
-              const Spacer(),
-              if (_configuration.enableQualities && _configuration.showQualitiesButton)
-                _featureButton(
-                  key: const Key('better_player_quality_button'),
-                  icon: _configuration.qualitiesIcon,
-                  label: 'Quality',
-                  compact: compact,
-                  onPressed: showQualitiesSelection,
-                ),
-              if (_configuration.enableSubtitles && _configuration.showSubtitlesButton)
-                _featureButton(
-                  key: const Key('better_player_subtitles_button'),
-                  icon: _configuration.subtitlesIcon,
-                  label: 'Subtitles',
-                  compact: compact,
-                  onPressed: _onSubtitlesPressed,
-                ),
-              if (_configuration.enableDownloadButton)
-                _featureButton(
-                  key: const Key('better_player_download_button'),
-                  icon: _configuration.downloadIcon,
-                  label: 'Download',
-                  compact: compact,
-                  onPressed: _configuration.onDownloadTap == null ? null : _onDownloadPressed,
-                ),
-              if (_configuration.enableCrop)
-                _featureButton(
-                  key: const Key('better_player_crop_button'),
-                  icon: _configuration.cropIcon,
-                  label: 'Crop & fit',
-                  compact: compact,
-                  selected: _betterPlayerController!.getFit() != BoxFit.contain,
-                  onPressed: showCropSelection,
-                ),
-              if (_configuration.enableEpisodeSelection)
-                _featureButton(
-                  key: const Key('better_player_episode_button'),
-                  icon: PhosphorIcons.listBullets(),
-                  label: 'Episodes',
-                  compact: compact,
-                  onPressed: _configuration.onEpisodeListTap,
-                ),
-              if (_configuration.enableMovieRecommendations)
-                _featureButton(
-                  key: const Key('better_player_recommendations_button'),
-                  icon: PhosphorIcons.filmSlate(),
-                  label: 'Recommendations',
-                  compact: compact,
-                  onPressed: _configuration.onMovieRecommendationsTap,
-                ),
-              if (_configuration.enableFullscreen)
-                BetterPlayerControlButton(
-                  key: const Key('better_player_fullscreen_button'),
-                  icon: _betterPlayerController!.isFullScreen
-                      ? _configuration.fullscreenDisableIcon
-                      : _configuration.fullscreenEnableIcon,
-                  label: _betterPlayerController!.isFullScreen ? 'Exit fullscreen' : 'Enter fullscreen',
-                  iconColor: _configuration.iconsColor,
-                  size: compact ? 42 : 48,
-                  onPressed: _onExpandCollapse,
-                ),
-            ],
-          ),
+          // Left out of the fade, and kept above the rest of the bar so the
+          // button holds the same spot whether or not the overlay is showing.
+          if (!live) _buildIntroDbSkipSlot(compact),
+          _hideWithControls(_bottomBarBody(compact, live: live)),
         ],
       ),
     );
   }
+
+  /// The app's IntroDB skip action. A skip window closes on its own, so the
+  /// button stays outside the overlay fade and remains tappable once the
+  /// controls auto-hide. The faded bar underneath still occupies its space,
+  /// which is what keeps the button from moving between the two states.
+  Widget _buildIntroDbSkipSlot(bool compact) {
+    final builder = _configuration.introDbSkipButtonBuilder;
+    if (builder == null || _configuration.introDbSkipAvailable?.call() == false) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: compact ? 2 : 4),
+        child: builder(context),
+      ),
+    );
+  }
+
+  Widget _bottomBarBody(bool compact, {required bool live}) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (live)
+        Align(alignment: AlignmentDirectional.centerStart, child: _live())
+      else ...[
+        if (_configuration.enableProgressText)
+          Row(
+            children: [
+              Text(BetterPlayerUtils.formatDuration(_latestValue?.position ?? Duration.zero), style: _timeStyle),
+              const Spacer(),
+              Text(_durationLabel(), style: _timeStyle),
+            ],
+          ),
+        if (_configuration.enableProgressBar) SizedBox(height: compact ? 22 : 28, child: _progressBar()),
+      ],
+      Row(
+        children: [
+          if (_configuration.enableMute) _muteButton(compact),
+          const Spacer(),
+          if (_configuration.enableQualities && _configuration.showQualitiesButton)
+            _featureButton(
+              key: const Key('better_player_quality_button'),
+              icon: _configuration.qualitiesIcon,
+              label: 'Quality',
+              compact: compact,
+              onPressed: showQualitiesSelection,
+            ),
+          if (_configuration.enableSubtitles && _configuration.showSubtitlesButton)
+            _featureButton(
+              key: const Key('better_player_subtitles_button'),
+              icon: _configuration.subtitlesIcon,
+              label: 'Subtitles',
+              compact: compact,
+              onPressed: _onSubtitlesPressed,
+            ),
+          if (_configuration.enableDownloadButton)
+            _featureButton(
+              key: const Key('better_player_download_button'),
+              icon: _configuration.downloadIcon,
+              label: 'Download',
+              compact: compact,
+              onPressed: _configuration.onDownloadTap == null ? null : _onDownloadPressed,
+            ),
+          if (_configuration.enableCrop)
+            _featureButton(
+              key: const Key('better_player_crop_button'),
+              icon: _configuration.cropIcon,
+              label: 'Crop & fit',
+              compact: compact,
+              selected: _betterPlayerController!.getFit() != BoxFit.contain,
+              onPressed: showCropSelection,
+            ),
+          if (_configuration.enableEpisodeSelection)
+            _featureButton(
+              key: const Key('better_player_episode_button'),
+              icon: PhosphorIcons.listBullets(),
+              label: 'Episodes',
+              compact: compact,
+              onPressed: _configuration.onEpisodeListTap,
+            ),
+          if (_configuration.enableMovieRecommendations)
+            _featureButton(
+              key: const Key('better_player_recommendations_button'),
+              icon: PhosphorIcons.filmSlate(),
+              label: 'Recommendations',
+              compact: compact,
+              onPressed: _configuration.onMovieRecommendationsTap,
+            ),
+          if (_configuration.enableFullscreen)
+            BetterPlayerControlButton(
+              key: const Key('better_player_fullscreen_button'),
+              icon: _betterPlayerController!.isFullScreen
+                  ? _configuration.fullscreenDisableIcon
+                  : _configuration.fullscreenEnableIcon,
+              label: _betterPlayerController!.isFullScreen ? 'Exit fullscreen' : 'Enter fullscreen',
+              iconColor: _configuration.iconsColor,
+              size: compact ? 42 : 48,
+              onPressed: _onExpandCollapse,
+            ),
+        ],
+      ),
+    ],
+  );
 
   TextStyle get _timeStyle => TextStyle(
     color: _configuration.textColor,

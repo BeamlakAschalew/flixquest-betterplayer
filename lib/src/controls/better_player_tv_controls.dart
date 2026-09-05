@@ -198,6 +198,13 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       return KeyEventResult.handled;
     }
 
+    if (!_visible && _isActivate(key) && _configuration.introDbSkipAvailable?.call() == true) {
+      final onSkip = _configuration.onIntroDbSkip;
+      if (onSkip != null) {
+        onSkip();
+        return KeyEventResult.handled;
+      }
+    }
     if (!_visible && _isActivate(key)) {
       _setVisibility(true);
       _togglePlayback();
@@ -666,18 +673,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            IgnorePointer(
-              ignoring: !_visible,
-              child: ExcludeFocus(
-                excluding: !_visible,
-                child: AnimatedOpacity(
-                  opacity: _visible ? 1 : 0,
-                  duration: const Duration(milliseconds: 160),
-                  curve: Curves.easeOut,
-                  child: _buildControls(),
-                ),
-              ),
-            ),
+            _buildControls(),
             if (_value.isBuffering) Center(child: CircularProgressIndicator(color: _accent)),
             if (_value.hasError) _buildError(),
             if (_menu case final menu?)
@@ -711,182 +707,240 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     ];
     _buttonIds = buttonIds;
     _buttonOrder = [for (final id in buttonIds) id == 'play' ? _playFocus : _buttonNode(id)];
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Color(0x8a000000), Color(0x08000000), Color(0xe8000000)],
-          stops: <double>[0, 0.42, 1],
-        ),
-      ),
-      child: SafeArea(
-        minimum: const EdgeInsets.all(30),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              _configuration.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
-            ),
-            const Spacer(),
-            if (_configuration.introDbSkipButtonBuilder case final builder?)
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Padding(padding: const EdgeInsets.only(bottom: 8), child: builder(context)),
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        _hideWithControls(
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0x8a000000), Color(0x08000000), Color(0xe8000000)],
+                stops: <double>[0, 0.42, 1],
               ),
-            BetterPlayerTvProgressBar(
-              position: _value.position,
-              duration: _value.duration ?? Duration.zero,
-              buffered: _bufferedEnd,
-              seekStep: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
-              playedColor: _accent,
-              bufferedColor: _configuration.progressBarBufferedColor,
-              backgroundColor: _configuration.progressBarBackgroundColor,
-              onSeek: widget.controller.seekTo,
-              onEditingChanged: (editing) {
-                _timelineEditing = editing;
-                if (editing) {
-                  _hideTimer?.cancel();
-                } else {
-                  _restartHideTimer();
-                }
-              },
             ),
-            const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) => SizedBox(
-                key: _buttonViewportKey,
-                width: constraints.maxWidth,
-                child: SingleChildScrollView(
-                  controller: _buttonScrollController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
+          ),
+        ),
+        SafeArea(
+          minimum: const EdgeInsets.all(30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _hideWithControls(
+                Text(
+                  _configuration.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const Spacer(),
+              // Outside the fade: the skip window closes on its own, so the
+              // button has to survive the overlay's auto-hide. The faded
+              // timeline below still holds its space, so the button stays put.
+              if (_configuration.introDbSkipButtonBuilder case final builder?)
+                _buildIntroDbSkipSlot(builder),
+              _hideWithControls(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+          BetterPlayerTvProgressBar(
+            position: _value.position,
+            duration: _value.duration ?? Duration.zero,
+            buffered: _bufferedEnd,
+            seekStep: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
+            playedColor: _accent,
+            bufferedColor: _configuration.progressBarBufferedColor,
+            backgroundColor: _configuration.progressBarBackgroundColor,
+            onSeek: widget.controller.seekTo,
+            onEditingChanged: (editing) {
+              _timelineEditing = editing;
+              if (editing) {
+                _hideTimer?.cancel();
+              } else {
+                _restartHideTimer();
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) => SizedBox(
+              key: _buttonViewportKey,
+              width: constraints.maxWidth,
+              child: SingleChildScrollView(
+                controller: _buttonScrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      _TvControlButton(
+                        key: _buttonKey('back'),
+                        focusNode: _buttonNode('back'),
+                        onKeyEvent: _handleButtonKey,
+                        label: 'Back',
+                        icon: PhosphorIcons.caretLeft(),
+                        accentColor: _accent,
+                        onPressed: widget.onExit ?? () => Navigator.of(context).maybePop(),
+                      ),
+                      _TvControlButton(
+                        key: _buttonKey('rewind'),
+                        focusNode: _buttonNode('rewind'),
+                        onKeyEvent: _handleButtonKey,
+                        label: 'Rewind',
+                        icon: PhosphorIcons.rewind(),
+                        accentColor: _accent,
+                        onPressed: () =>
+                            _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
+                      ),
+                      _TvControlButton(
+                        key: _buttonKey('play'),
+                        focusNode: _playFocus,
+                        onKeyEvent: _handleButtonKey,
+                        label: _value.isPlaying ? 'Pause' : 'Play',
+                        icon: _value.isPlaying
+                            ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
+                            : PhosphorIcons.play(PhosphorIconsStyle.fill),
+                        accentColor: _accent,
+                        primary: true,
+                        onPressed: _togglePlayback,
+                      ),
+                      _TvControlButton(
+                        key: _buttonKey('forward'),
+                        focusNode: _buttonNode('forward'),
+                        onKeyEvent: _handleButtonKey,
+                        label: 'Forward',
+                        icon: PhosphorIcons.fastForward(),
+                        accentColor: _accent,
+                        onPressed: () =>
+                            _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
+                      ),
+                      if (_configuration.enableSubtitles)
                         _TvControlButton(
-                          key: _buttonKey('back'),
-                          focusNode: _buttonNode('back'),
+                          key: _buttonKey('subtitles'),
+                          focusNode: _buttonNode('subtitles'),
                           onKeyEvent: _handleButtonKey,
-                          label: 'Back',
-                          icon: PhosphorIcons.caretLeft(),
+                          label: 'Subtitles',
+                          icon: PhosphorIcons.closedCaptioning(),
                           accentColor: _accent,
-                          onPressed: widget.onExit ?? () => Navigator.of(context).maybePop(),
+                          onPressed: _openSubtitlesMenu,
                         ),
+                      if (_configuration.enableAudioTracks)
                         _TvControlButton(
-                          key: _buttonKey('rewind'),
-                          focusNode: _buttonNode('rewind'),
+                          key: _buttonKey('audio'),
+                          focusNode: _buttonNode('audio'),
                           onKeyEvent: _handleButtonKey,
-                          label: 'Rewind',
-                          icon: PhosphorIcons.rewind(),
+                          label: 'Audio',
+                          icon: PhosphorIcons.waveform(),
                           accentColor: _accent,
-                          onPressed: () =>
-                              _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
+                          onPressed: _openAudioMenu,
                         ),
+                      if (_configuration.enableQualities)
                         _TvControlButton(
-                          key: _buttonKey('play'),
-                          focusNode: _playFocus,
+                          key: _buttonKey('quality'),
+                          focusNode: _buttonNode('quality'),
                           onKeyEvent: _handleButtonKey,
-                          label: _value.isPlaying ? 'Pause' : 'Play',
-                          icon: _value.isPlaying
-                              ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
-                              : PhosphorIcons.play(PhosphorIconsStyle.fill),
+                          label: 'Quality',
+                          icon: PhosphorIcons.highDefinition(),
                           accentColor: _accent,
-                          primary: true,
-                          onPressed: _togglePlayback,
+                          onPressed: _openQualityMenu,
                         ),
+                      if (_configuration.enableCrop)
                         _TvControlButton(
-                          key: _buttonKey('forward'),
-                          focusNode: _buttonNode('forward'),
+                          key: _buttonKey('crop'),
+                          focusNode: _buttonNode('crop'),
                           onKeyEvent: _handleButtonKey,
-                          label: 'Forward',
-                          icon: PhosphorIcons.fastForward(),
+                          label: 'Crop & fit',
+                          icon: _configuration.cropIcon,
                           accentColor: _accent,
-                          onPressed: () =>
-                              _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
+                          onPressed: _openCropMenu,
                         ),
-                        if (_configuration.enableSubtitles)
-                          _TvControlButton(
-                            key: _buttonKey('subtitles'),
-                            focusNode: _buttonNode('subtitles'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'Subtitles',
-                            icon: PhosphorIcons.closedCaptioning(),
-                            accentColor: _accent,
-                            onPressed: _openSubtitlesMenu,
-                          ),
-                        if (_configuration.enableAudioTracks)
-                          _TvControlButton(
-                            key: _buttonKey('audio'),
-                            focusNode: _buttonNode('audio'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'Audio',
-                            icon: PhosphorIcons.waveform(),
-                            accentColor: _accent,
-                            onPressed: _openAudioMenu,
-                          ),
-                        if (_configuration.enableQualities)
-                          _TvControlButton(
-                            key: _buttonKey('quality'),
-                            focusNode: _buttonNode('quality'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'Quality',
-                            icon: PhosphorIcons.highDefinition(),
-                            accentColor: _accent,
-                            onPressed: _openQualityMenu,
-                          ),
-                        if (_configuration.enableCrop)
-                          _TvControlButton(
-                            key: _buttonKey('crop'),
-                            focusNode: _buttonNode('crop'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'Crop & fit',
-                            icon: _configuration.cropIcon,
-                            accentColor: _accent,
-                            onPressed: _openCropMenu,
-                          ),
-                        if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
-                          _TvControlButton(
-                            key: _buttonKey('episodes'),
-                            focusNode: _buttonNode('episodes'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'Episodes',
-                            icon: PhosphorIcons.listBullets(),
-                            accentColor: _accent,
-                            onPressed: _configuration.onEpisodeListTap!,
-                          ),
-                        if (_configuration.enableMovieRecommendations &&
-                            _configuration.onMovieRecommendationsTap != null)
-                          _TvControlButton(
-                            key: _buttonKey('recommendations'),
-                            focusNode: _buttonNode('recommendations'),
-                            onKeyEvent: _handleButtonKey,
-                            label: 'More like this',
-                            icon: PhosphorIcons.sparkle(),
-                            accentColor: _accent,
-                            onPressed: _configuration.onMovieRecommendationsTap!,
-                          ),
+                      if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
                         _TvControlButton(
-                          key: _buttonKey('settings'),
-                          focusNode: _buttonNode('settings'),
+                          key: _buttonKey('episodes'),
+                          focusNode: _buttonNode('episodes'),
                           onKeyEvent: _handleButtonKey,
-                          label: 'Settings',
-                          icon: PhosphorIcons.gear(),
+                          label: 'Episodes',
+                          icon: PhosphorIcons.listBullets(),
                           accentColor: _accent,
-                          onPressed: _openSettings,
+                          onPressed: _configuration.onEpisodeListTap!,
                         ),
-                      ],
-                    ),
+                      if (_configuration.enableMovieRecommendations &&
+                          _configuration.onMovieRecommendationsTap != null)
+                        _TvControlButton(
+                          key: _buttonKey('recommendations'),
+                          focusNode: _buttonNode('recommendations'),
+                          onKeyEvent: _handleButtonKey,
+                          label: 'More like this',
+                          icon: PhosphorIcons.sparkle(),
+                          accentColor: _accent,
+                          onPressed: _configuration.onMovieRecommendationsTap!,
+                        ),
+                      _TvControlButton(
+                        key: _buttonKey('settings'),
+                        focusNode: _buttonNode('settings'),
+                        onKeyEvent: _handleButtonKey,
+                        label: 'Settings',
+                        icon: PhosphorIcons.gear(),
+                        accentColor: _accent,
+                        onPressed: _openSettings,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
+          ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Fades a piece of the control surface with the overlay, and takes it out of
+  /// the focus tree while it is gone.
+  Widget _hideWithControls(Widget child) => IgnorePointer(
+    ignoring: !_visible,
+    child: ExcludeFocus(
+      excluding: !_visible,
+      child: AnimatedOpacity(
+        opacity: _visible ? 1 : 0,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: child,
+      ),
+    ),
+  );
+
+  /// The app's IntroDB skip action, kept on screen after the overlay hides.
+  /// While it is the only thing showing, the select key fires it instead of
+  /// waking the controls, which is what the focus-style ring signals.
+  Widget _buildIntroDbSkipSlot(Widget Function(BuildContext context) builder) {
+    if (_configuration.introDbSkipAvailable?.call() == false) {
+      return const SizedBox.shrink();
+    }
+    final armed = !_visible && _configuration.onIntroDbSkip != null;
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: armed ? Colors.white : Colors.transparent, width: 3),
+          ),
+          child: builder(context),
         ),
       ),
     );

@@ -78,7 +78,6 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     this.forwardDoubleTapSeek = const Duration(seconds: 10),
     this.controlsVisible = true, // Whether controls are currently visible
     this.isFullScreen = false, // Whether the player is in fullscreen mode
-    this.onTap, // Callback to show controls overlay on tap
     super.key,
   });
 
@@ -93,7 +92,6 @@ class BetterPlayerGestureHandler extends StatefulWidget {
   final Duration forwardDoubleTapSeek;
   final bool controlsVisible;
   final bool isFullScreen;
-  final VoidCallback? onTap;
 
   @override
   State<BetterPlayerGestureHandler> createState() => _BetterPlayerGestureHandlerState();
@@ -310,7 +308,10 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
 
     final content = Stack(
       children: [
-        // Original child (controls) - put FIRST so gesture zones can overlay
+        // Original child (controls) - put FIRST so the gesture zones and the
+        // feedback pill paint over it. The zones are translucent to hit tests,
+        // so a tap still reaches whatever the controls leave on screen while
+        // they are hidden (the tap area, or the IntroDB skip button).
         widget.child,
 
         // Left side - Brightness control (only active when controls are hidden)
@@ -321,15 +322,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque, // Capture all events in this area
-              onTap: () {
-                // Forward tap to show controls overlay
-                widget.onTap?.call();
-              },
+              behavior: HitTestBehavior.translucent, // Swipes only; taps fall through
               onVerticalDragStart: (details) => _onVerticalDragStart(details, true),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, true, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
-              child: Container(color: Colors.transparent),
+              child: const SizedBox.expand(),
             ),
           ),
 
@@ -341,15 +338,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: bottomSafeZone, // Don't cover bottom bar
             width: swipeAreaWidth,
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque, // Capture all events in this area
-              onTap: () {
-                // Forward tap to show controls overlay
-                widget.onTap?.call();
-              },
+              behavior: HitTestBehavior.translucent, // Swipes only; taps fall through
               onVerticalDragStart: (details) => _onVerticalDragStart(details, false),
               onVerticalDragUpdate: (details) => _onVerticalDragUpdate(details, false, size.height),
               onVerticalDragEnd: _onVerticalDragEnd,
-              child: Container(color: Colors.transparent),
+              child: const SizedBox.expand(),
             ),
           ),
 
@@ -362,15 +355,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
             bottom: 20, // Small strip near bottom
             height: 60, // Small height to not interfere with buttons
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque, // Capture all events in this area
-              onTap: () {
-                // Forward tap to show controls overlay
-                widget.onTap?.call();
-              },
+              behavior: HitTestBehavior.translucent, // Swipes only; taps fall through
               onHorizontalDragStart: _onHorizontalDragStart,
               onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, size.width),
               onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: Container(color: Colors.transparent),
+              child: const SizedBox.expand(),
             ),
           ),
 
