@@ -129,6 +129,25 @@ class BetterPlayerController {
   ///different track or the player replaces its data source.
   int _subtitleLoadGeneration = 0;
 
+  ///How many sources one selection tries before it gives up. Providers hand out
+  ///plenty of duplicate tracks for the same language and every dead link costs a
+  ///request, so a sweep is bounded instead of walking them all.
+  static const int _maxSubtitleAttempts = 6;
+
+  ///Sources that were asked for cues and came back with none, either because the
+  ///host refused the request or because the body held nothing readable. Kept for
+  ///the lifetime of the data source so neither automatic selection nor the user
+  ///spends another wait on a track that is already known to be dead.
+  final Set<BetterPlayerSubtitlesSource> _failedSubtitlesSources = {};
+
+  ///Sources known to yield no cues. See [subtitlesSourceHasFailed].
+  Set<BetterPlayerSubtitlesSource> get failedSubtitlesSources => Set.unmodifiable(_failedSubtitlesSources);
+
+  ///True when [subtitlesSource] already failed to produce cues for the current
+  ///data source. A caller can offer another track instead of repeating the wait.
+  bool subtitlesSourceHasFailed(BetterPlayerSubtitlesSource subtitlesSource) =>
+      _failedSubtitlesSources.contains(subtitlesSource);
+
   ///List of tracks available for current data source. Used only for HLS / DASH.
   List<BetterPlayerAsmsTrack> _betterPlayerAsmsTracks = [];
 
@@ -353,6 +372,7 @@ class BetterPlayerController {
     _betterPlayerResolutionName = betterPlayerDataSource.selectedResolution;
     _subtitleLoadGeneration++;
     _betterPlayerSubtitlesSourceList.clear();
+    _failedSubtitlesSources.clear();
     _betterPlayerSubtitlesSource = subtitlesSourceToRestore;
     subtitlesLines.clear();
 
@@ -406,7 +426,7 @@ class BetterPlayerController {
       await suppliedSubtitleSetup;
     }
     if (subtitlesSourceToRestore != null) {
-      await setupSubtitleSource(subtitlesSourceToRestore);
+      await _setupSubtitleSourceSafely(subtitlesSourceToRestore, sourceInitialize: false);
     }
     setTrack(BetterPlayerAsmsTrack.defaultTrack());
   }
@@ -425,12 +445,147 @@ class BetterPlayerController {
       return;
     }
 
-    final defaultSubtitle = _betterPlayerSubtitlesSourceList.firstWhereOrNull(
-      (element) => element.selectedByDefault ?? false,
-    );
+    // The supplied list is ordered by the user's language preference, so the
+    // sources flagged selectedByDefault are the preferred candidates in the
+    // order they should be tried. A single dead link used to leave playback
+    // with no subtitles at all, so walk them until one actually yields cues.
+    final preferredSources = _betterPlayerSubtitlesSourceList
+        .where(
+          (element) =>
+              (element.selectedByDefault ?? false) &&
+              element.type != BetterPlayerSubtitlesSourceType.none &&
+              !_failedSubtitlesSources.contains(element),
+        )
+        .toList();
 
-    ///Setup subtitles (none is default)
-    await setupSubtitleSource(defaultSubtitle ?? _betterPlayerSubtitlesSourceList.last, sourceInitialize: true);
+    if (preferredSources.isEmpty) {
+      // Every preferred source having failed already is not the same as none
+      // being flagged: the first case means subtitles are off, the second keeps
+      // the historical behaviour of applying the last entry in the list.
+      final anyPreferred = _betterPlayerSubtitlesSourceList.any(
+        (element) => (element.selectedByDefault ?? false) && element.type != BetterPlayerSubtitlesSourceType.none,
+      );
+      final chosen = anyPreferred ? _noneSubtitlesSource() : _betterPlayerSubtitlesSourceList.last;
+      await _setupSubtitleSourceSafely(chosen);
+      return;
+    }
+
+    final attempts = preferredSources.length < _maxSubtitleAttempts
+        ? preferredSources.length
+        : _maxSubtitleAttempts;
+
+    for (var index = 0; index < attempts; index++) {
+      final candidate = preferredSources[index];
+      var failed = false;
+      try {
+        await setupSubtitleSource(
+          candidate,
+          sourceInitialize: true,
+          // Only the last candidate is worth a second request: while others are
+          // left, moving on finds cues sooner than retrying a dead url.
+          allowRetry: index == attempts - 1,
+        );
+      } catch (_) {
+        failed = true;
+      }
+
+      if (_disposed) return;
+      if (!identical(_betterPlayerSubtitlesSource, candidate)) return;
+      if (!failed) {
+        // Segmented tracks fetch their cues just in time while playing, so an
+        // empty cue list right after selection is expected rather than a failure.
+        if (candidate.asmsIsSegmented ?? false) return;
+        if (subtitlesLines.isNotEmpty) return;
+      }
+    }
+
+    await _setupSubtitleSourceSafely(_noneSubtitlesSource());
+  }
+
+  ///Applies [subtitlesSource] on the user's behalf and, when it turns out to
+  ///hold no cues, moves on to [fallbacks] - or, without them, to the other
+  ///tracks offered for the same language - before turning subtitles off.
+  ///Returns the source that ended up selected.
+  ///
+  ///Providers hand out several tracks per language and any of them can be a dead
+  ///link. Leaving one selected shows an empty caption track that looks like it
+  ///is working, so a failing pick moves on instead of reporting an error.
+  ///
+  ///A caller that groups the tracks itself passes [fallbacks] in the order it
+  ///wants them tried; the default order is the one the source list came in.
+  Future<BetterPlayerSubtitlesSource> selectSubtitlesSource(
+    BetterPlayerSubtitlesSource subtitlesSource, {
+    List<BetterPlayerSubtitlesSource>? fallbacks,
+  }) async {
+    final candidates = <BetterPlayerSubtitlesSource>[
+      // A source already known to be dead is not worth another request; its
+      // alternatives are all that is left to try.
+      if (!_failedSubtitlesSources.contains(subtitlesSource)) subtitlesSource,
+      ...(fallbacks ?? _sameLanguageAlternatives(subtitlesSource)).where(
+        (element) => !_failedSubtitlesSources.contains(element),
+      ),
+    ];
+
+    for (final candidate in candidates) {
+      try {
+        await setupSubtitleSource(candidate);
+      } catch (exception) {
+        BetterPlayerUtils.log(exception.toString());
+      }
+      if (_disposed) return candidate;
+      // The user picked something else while this one was loading; their newer
+      // choice wins.
+      if (!identical(_betterPlayerSubtitlesSource, candidate)) {
+        return _betterPlayerSubtitlesSource ?? candidate;
+      }
+      if (!_failedSubtitlesSources.contains(candidate)) return candidate;
+    }
+
+    final off = _noneSubtitlesSource();
+    await _setupSubtitleSourceSafely(off, sourceInitialize: false);
+    return off;
+  }
+
+  ///Other network tracks offered for the same language as [subtitlesSource],
+  ///skipping the ones already known to be dead. Bounded because every attempt
+  ///costs a request. A subtitle file the user added takes no part: substituting
+  ///it, or standing in for it, would be a surprise.
+  List<BetterPlayerSubtitlesSource> _sameLanguageAlternatives(BetterPlayerSubtitlesSource subtitlesSource) {
+    if (subtitlesSource.type != BetterPlayerSubtitlesSourceType.network) {
+      return const [];
+    }
+    final language = subtitlesSource.name?.trim().toLowerCase();
+    final alternatives = <BetterPlayerSubtitlesSource>[];
+    for (final element in _betterPlayerSubtitlesSourceList) {
+      if (alternatives.length >= _maxSubtitleAttempts) break;
+      if (identical(element, subtitlesSource)) continue;
+      if (element.type != BetterPlayerSubtitlesSourceType.network) continue;
+      if (element.name?.trim().toLowerCase() != language) continue;
+      if (_failedSubtitlesSources.contains(element)) continue;
+      alternatives.add(element);
+    }
+    return alternatives;
+  }
+
+  ///The entry that turns subtitles off. [_setupSubtitles] makes sure one is in
+  ///the list, so the last entry is only reached if a caller emptied it.
+  BetterPlayerSubtitlesSource _noneSubtitlesSource() =>
+      _betterPlayerSubtitlesSourceList.firstWhereOrNull(
+        (element) => element.type == BetterPlayerSubtitlesSourceType.none,
+      ) ??
+      _betterPlayerSubtitlesSourceList.last;
+
+  ///Applies a subtitle source without letting a failing source take the
+  ///surrounding data source setup - and with it playback - down.
+  Future<void> _setupSubtitleSourceSafely(
+    BetterPlayerSubtitlesSource subtitlesSource, {
+    bool sourceInitialize = true,
+  }) async {
+    try {
+      await setupSubtitleSource(subtitlesSource, sourceInitialize: sourceInitialize);
+    } catch (exception) {
+      BetterPlayerUtils.log(exception.toString());
+    }
   }
 
   ///Check if given [betterPlayerDataSource] is HLS / DASH-type data source.
@@ -486,7 +641,15 @@ class BetterPlayerController {
   ///Setup subtitles to be displayed from given subtitle source.
   ///If subtitles source is segmented then don't load videos at start. Videos
   ///will load with just in time policy.
-  Future<void> setupSubtitleSource(BetterPlayerSubtitlesSource subtitlesSource, {bool sourceInitialize = false}) async {
+  ///[allowRetry] retries a network source once when the first attempt comes back
+  ///empty or failing. Automatic selection turns it off while it still has other
+  ///candidates left, because trying a different track beats asking a dead url
+  ///twice.
+  Future<void> setupSubtitleSource(
+    BetterPlayerSubtitlesSource subtitlesSource, {
+    bool sourceInitialize = false,
+    bool allowRetry = true,
+  }) async {
     final loadGeneration = ++_subtitleLoadGeneration;
     _betterPlayerSubtitlesSource = subtitlesSource;
     subtitlesLines.clear();
@@ -497,31 +660,65 @@ class BetterPlayerController {
       if (subtitlesSource.asmsIsSegmented ?? false) {
         return;
       }
-      var subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
-      if (_disposed ||
-          loadGeneration != _subtitleLoadGeneration ||
-          !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
-        return;
-      }
-      if (sourceInitialize &&
-          subtitlesParsed.isEmpty &&
-          subtitlesSource.type == BetterPlayerSubtitlesSourceType.network) {
-        await Future<void>.delayed(const Duration(milliseconds: 400));
-        if (_disposed ||
-            loadGeneration != _subtitleLoadGeneration ||
-            !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
-          return;
-        }
+
+      var subtitlesParsed = <BetterPlayerSubtitle>[];
+      Object? loadError;
+      StackTrace? loadStackTrace;
+      try {
         subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
-        if (_disposed ||
-            loadGeneration != _subtitleLoadGeneration ||
-            !identical(_betterPlayerSubtitlesSource, subtitlesSource)) {
-          return;
+      } catch (exception, stackTrace) {
+        loadError = exception;
+        loadStackTrace = stackTrace;
+      }
+      if (_subtitleLoadAborted(loadGeneration, subtitlesSource)) return;
+
+      // A subtitle host that is briefly unavailable is common enough to be worth
+      // one immediate retry; only after that does the source count as dead.
+      if (sourceInitialize &&
+          allowRetry &&
+          subtitlesSource.type == BetterPlayerSubtitlesSourceType.network &&
+          (loadError != null || subtitlesParsed.isEmpty)) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (_subtitleLoadAborted(loadGeneration, subtitlesSource)) return;
+        loadError = null;
+        loadStackTrace = null;
+        try {
+          subtitlesParsed = await BetterPlayerSubtitlesFactory.parseSubtitles(subtitlesSource);
+        } catch (exception, stackTrace) {
+          loadError = exception;
+          loadStackTrace = stackTrace;
         }
+        if (_subtitleLoadAborted(loadGeneration, subtitlesSource)) return;
+      }
+
+      if (loadError != null) {
+        // Report the now empty track before handing the failure to the caller,
+        // which decides whether to try another source or surface an error.
+        _failedSubtitlesSources.add(subtitlesSource);
+        _notifySubtitlesChanged(sourceInitialize: sourceInitialize);
+        Error.throwWithStackTrace(loadError, loadStackTrace ?? StackTrace.current);
+      }
+      // A readable response with no cues in it is just as useless to a viewer as
+      // a refused one, so it counts as a failed source too.
+      if (subtitlesParsed.isEmpty) {
+        _failedSubtitlesSources.add(subtitlesSource);
+      } else {
+        _failedSubtitlesSources.remove(subtitlesSource);
       }
       subtitlesLines.addAll(subtitlesParsed);
     }
 
+    _notifySubtitlesChanged(sourceInitialize: sourceInitialize);
+  }
+
+  ///True when the subtitle load that started at [loadGeneration] no longer owns
+  ///the selection, so its result has to be dropped instead of applied.
+  bool _subtitleLoadAborted(int loadGeneration, BetterPlayerSubtitlesSource subtitlesSource) =>
+      _disposed ||
+      loadGeneration != _subtitleLoadGeneration ||
+      !identical(_betterPlayerSubtitlesSource, subtitlesSource);
+
+  void _notifySubtitlesChanged({required bool sourceInitialize}) {
     _postEvent(BetterPlayerEvent(BetterPlayerEventType.changedSubtitles));
     if (!_disposed && !sourceInitialize) {
       _postControllerEvent(BetterPlayerControllerEvent.changeSubtitles);
@@ -576,6 +773,7 @@ class BetterPlayerController {
       _asmsSegmentsLoading = false;
     } on Exception catch (exception) {
       BetterPlayerUtils.log('Load ASMS subtitle segments failed: $exception');
+      _asmsSegmentsLoading = false;
     }
   }
 

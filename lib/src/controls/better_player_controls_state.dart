@@ -243,7 +243,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
             subtitle: typeLabel,
             selected: isSelected,
             onTap: () async {
-              await betterPlayerController!.setupSubtitleSource(source);
+              await betterPlayerController!.selectSubtitlesSource(source);
               if (mounted) _closeSheet();
             },
           );

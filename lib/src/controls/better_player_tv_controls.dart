@@ -470,7 +470,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               icon: off ? PhosphorIcons.subtitlesSlash() : PhosphorIcons.closedCaptioning(),
               selected: isSelected,
               onSelected: () async {
-                await widget.controller.setupSubtitleSource(source);
+                await widget.controller.selectSubtitlesSource(source);
                 if (mounted) _closeMenu();
               },
             );

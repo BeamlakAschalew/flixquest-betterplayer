@@ -38,9 +38,13 @@ class BetterPlayerSubtitlesFactory {
     return [];
   }
 
+  ///Throws [BetterPlayerSubtitlesLoadException] when a url answers with an
+  ///error status or the request fails. An error page parses to zero cues and is
+  ///otherwise indistinguishable from an empty subtitle track, so the failure has
+  ///to be reported instead of returned as an empty list.
   static Future<List<BetterPlayerSubtitle>> _parseSubtitlesFromNetwork(BetterPlayerSubtitlesSource source) async {
+    final client = HttpClient();
     try {
-      final client = HttpClient();
       final List<BetterPlayerSubtitle> subtitles = [];
       for (final String? url in source.urls!) {
         final request = await client.getUrl(Uri.parse(url!));
@@ -52,17 +56,32 @@ class BetterPlayerSubtitlesFactory {
         });
         final response = await request.close();
         final data = await response.transform(const Utf8Decoder()).join();
-        final cacheList = _parseString(data);
-        subtitles.addAll(cacheList);
+        final statusCode = response.statusCode;
+        if (statusCode < 200 || statusCode >= 300) {
+          throw BetterPlayerSubtitlesLoadException(
+            'Subtitle host rejected the request',
+            url: url,
+            statusCode: statusCode,
+          );
+        }
+        subtitles.addAll(_parseString(data));
       }
-      client.close();
 
       BetterPlayerUtils.log('Parsed total subtitles: ${subtitles.length}');
       return subtitles;
+    } on BetterPlayerSubtitlesLoadException catch (exception) {
+      BetterPlayerUtils.log('Failed to read subtitles from network: $exception');
+      rethrow;
     } on Exception catch (exception) {
       BetterPlayerUtils.log('Failed to read subtitles from network: $exception');
+      throw BetterPlayerSubtitlesLoadException(
+        'Subtitle download failed',
+        url: (source.urls?.isNotEmpty ?? false) ? source.urls!.first : null,
+        cause: exception,
+      );
+    } finally {
+      client.close();
     }
-    return [];
   }
 
   static List<BetterPlayerSubtitle> _parseSubtitlesFromMemory(BetterPlayerSubtitlesSource source) {
