@@ -54,14 +54,8 @@ internal object DataSourceUtils {
 
     @JvmStatic
     fun getUserAgent(headers: Map<String, String>?): String? {
-        var userAgent = System.getProperty(USER_AGENT_PROPERTY)
-        if (headers != null && headers.containsKey(USER_AGENT)) {
-            val userAgentHeader = headers[USER_AGENT]
-            if (userAgentHeader != null) {
-                userAgent = userAgentHeader
-            }
-        }
-        return userAgent
+        return headers?.entries?.firstOrNull { it.key.equals(USER_AGENT, ignoreCase = true) }?.value
+            ?: System.getProperty(USER_AGENT_PROPERTY)
     }
 
     @JvmStatic

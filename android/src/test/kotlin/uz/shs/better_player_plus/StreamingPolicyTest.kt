@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.source.chunk.MediaChunkIterator
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
@@ -105,6 +106,9 @@ class StreamingPolicyTest {
             id, Timeline.EMPTY, MediaSource.MediaPeriodId(Any()),
             0, 1_000_000, 1f, true, false, C.TIME_UNSET, C.TIME_UNSET
         )
+        control.onTracksSelected(parameters, TrackGroupArray.EMPTY, emptyArray())
+        assertEquals(0L, control.getBackBufferDurationUs(id))
+        assertFalse(control.retainBackBufferFromKeyframe(id))
         assertTrue(control.shouldContinueLoading(parameters))
         assertFalse(control.shouldStartPlayback(parameters))
         val allocations = (1..16).map { control.allocator.allocate() }
@@ -112,6 +116,7 @@ class StreamingPolicyTest {
         assertTrue(control.shouldStartPlayback(parameters))
         allocations.forEach { control.allocator.release(it) }
         assertTrue(control.shouldContinueLoading(parameters))
+        control.onStopped(id)
         control.onReleased(id)
     }
 

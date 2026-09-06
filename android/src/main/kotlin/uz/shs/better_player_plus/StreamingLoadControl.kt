@@ -3,8 +3,13 @@ package uz.shs.better_player_plus
 import android.app.ActivityManager
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.PlayerId
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.TrackGroupArray
+import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 
 /** Time-based refills with a byte ceiling, including retained back-buffer samples. */
 @UnstableApi
@@ -12,6 +17,25 @@ internal class StreamingLoadControl(
     private val delegate: LoadControl,
     private val maxBytes: Int
 ) : LoadControl by delegate {
+    // Kotlin delegation does not forward Java interface default methods. Explicitly
+    // forward Media3's lifecycle methods or they fall through to legacy stubs.
+    override fun onPrepared(playerId: PlayerId) = delegate.onPrepared(playerId)
+
+    override fun onTracksSelected(
+        parameters: LoadControl.Parameters,
+        trackGroups: TrackGroupArray,
+        trackSelections: Array<out ExoTrackSelection?>
+    ) = delegate.onTracksSelected(parameters, trackGroups, trackSelections)
+
+    override fun onStopped(playerId: PlayerId) = delegate.onStopped(playerId)
+    override fun onReleased(playerId: PlayerId) = delegate.onReleased(playerId)
+    override fun getBackBufferDurationUs(playerId: PlayerId) = delegate.getBackBufferDurationUs(playerId)
+    override fun retainBackBufferFromKeyframe(playerId: PlayerId) = delegate.retainBackBufferFromKeyframe(playerId)
+    override fun shouldContinuePreloading(
+        timeline: Timeline, mediaPeriodId: MediaSource.MediaPeriodId, bufferedDurationUs: Long
+    ) = delegate.allocator.totalBytesAllocated < maxBytes &&
+        delegate.shouldContinuePreloading(timeline, mediaPeriodId, bufferedDurationUs)
+
     override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean {
         val shouldLoad = delegate.shouldContinueLoading(parameters)
         return delegate.allocator.totalBytesAllocated < maxBytes && shouldLoad

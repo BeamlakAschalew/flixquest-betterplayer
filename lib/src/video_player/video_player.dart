@@ -188,6 +188,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   int? _textureId;
 
   Timer? _timer;
+  int _playPauseGeneration = 0;
   bool _isDisposed = false;
   late Completer<void> _initializingCompleter;
   String? _activeDataSourceKey;
@@ -217,9 +218,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         return;
       }
       final activeSourceKey = _activeDataSourceKey;
-      if (event.key != null &&
-          activeSourceKey != null &&
-          event.key != activeSourceKey) {
+      if (event.key != null && activeSourceKey != null && event.key != activeSourceKey) {
         return;
       }
       videoEventStreamController.add(event);
@@ -266,8 +265,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       if (object is PlatformException) {
         final PlatformException e = object;
         final details = e.details;
-        if (details is Map && details['key'] != null &&
-            _activeDataSourceKey != null && details['key'] != _activeDataSourceKey) return;
+        if (details is Map &&
+            details['key'] != null &&
+            _activeDataSourceKey != null &&
+            details['key'] != _activeDataSourceKey) {
+          return;
+        }
         value = value.copyWith(
           errorDescription: e.message ?? e.code,
           isErrorRecoverable: details is! Map || details['recoverable'] != false,
@@ -407,6 +410,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       return;
     }
 
+    _playPauseGeneration++;
+    _timer?.cancel();
+    _timer = null;
+
     value = VideoPlayerValue(duration: null, isLooping: value.isLooping, volume: value.volume);
 
     if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
@@ -467,9 +474,14 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     if (!_created || _isDisposed) {
       return;
     }
+    final generation = ++_playPauseGeneration;
     _timer?.cancel();
+    _timer = null;
     if (value.isPlaying) {
       await _videoPlayerPlatform.play(_textureId);
+      // Initialized events and UI commands may overlap while native play is
+      // pending. Only the latest operation may own the polling timer.
+      if (_isDisposed || generation != _playPauseGeneration || !value.isPlaying) return;
       _timer = Timer.periodic(const Duration(milliseconds: 300), (Timer timer) async {
         if (_isDisposed) {
           return;

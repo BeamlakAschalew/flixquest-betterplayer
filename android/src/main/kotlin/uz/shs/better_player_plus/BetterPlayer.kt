@@ -98,6 +98,7 @@ internal class BetterPlayer(
         context, StreamingTrackSelection.Factory(customDefaultLoadControl?.maxBufferMs ?: 120_000)
     )
     private val loadControl: LoadControl
+    private val streamingDiagnostics: StreamingDiagnostics
     private var isInitialized = false
     private var surface: Surface? = null
     private var key: String? = null
@@ -149,6 +150,8 @@ internal class BetterPlayer(
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .build()
+        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
+        exoPlayer.addAnalyticsListener(streamingDiagnostics)
         workManager = WorkManager.getInstance(context)
         workerObserverMap = HashMap()
         setupVideoPlayer(eventChannel, textureEntry, result)
@@ -176,6 +179,7 @@ internal class BetterPlayer(
     ) {
         this.key = key
         liveSource = isLive
+        streamingDiagnostics.reset()
         isInitialized = false
         completionSent = false
         lastKnownPositionMs = 0L

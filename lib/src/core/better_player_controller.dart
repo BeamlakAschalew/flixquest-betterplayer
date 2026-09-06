@@ -257,7 +257,9 @@ class BetterPlayerController {
   int _networkRecoveryAttempts = 0;
   int _dataSourceSetupGeneration = 0;
   static const List<Duration> _networkRecoveryDelays = [
-    Duration(seconds: 1), Duration(seconds: 3), Duration(seconds: 8),
+    Duration(seconds: 1),
+    Duration(seconds: 3),
+    Duration(seconds: 8),
   ];
 
   ///Flag which holds information about player visibility
@@ -471,9 +473,7 @@ class BetterPlayerController {
       return;
     }
 
-    final attempts = preferredSources.length < _maxSubtitleAttempts
-        ? preferredSources.length
-        : _maxSubtitleAttempts;
+    final attempts = preferredSources.length < _maxSubtitleAttempts ? preferredSources.length : _maxSubtitleAttempts;
 
     for (var index = 0; index < attempts; index++) {
       final candidate = preferredSources[index];
@@ -1138,17 +1138,22 @@ class BetterPlayerController {
           BetterPlayerEventType.exception,
           parameters: <String, dynamic>{
             'exception': currentVideoPlayerValue.errorDescription,
+            'recoverable': currentVideoPlayerValue.isErrorRecoverable,
             _sourceKeyParameter: _betterPlayerDataSource?.url,
           },
         ),
       );
     }
     final recoveryPosition = _videoPlayerValueOnError?.position;
-    final playbackRecovered = recoveryPosition != null && currentVideoPlayerValue.isPlaying &&
+    final playbackRecovered =
+        recoveryPosition != null &&
+        currentVideoPlayerValue.isPlaying &&
         !currentVideoPlayerValue.isBuffering &&
         currentVideoPlayerValue.position > recoveryPosition + const Duration(seconds: 1);
-    if (currentVideoPlayerValue.initialized && !currentVideoPlayerValue.hasError &&
-        !_networkRecoveryInProgress && (recoveryPosition == null || playbackRecovered)) {
+    if (currentVideoPlayerValue.initialized &&
+        !currentVideoPlayerValue.hasError &&
+        !_networkRecoveryInProgress &&
+        (recoveryPosition == null || playbackRecovered)) {
       _cancelNetworkRecovery(clearSavedPosition: true);
     }
     if (currentVideoPlayerValue.initialized && !_hasCurrentDataSourceInitialized) {
@@ -1583,10 +1588,13 @@ class BetterPlayerController {
     final isLive = _betterPlayerDataSource?.liveStream == true;
     final position = !isLive ? savedValue?.position : null;
     final resume = savedValue == null || !savedValue.initialized
-        ? betterPlayerConfiguration.autoPlay : savedValue.isPlaying;
+        ? betterPlayerConfiguration.autoPlay
+        : savedValue.isPlaying;
     await _setupDataSource(
-      _betterPlayerDataSource!, initialPosition: position,
-      setupGeneration: generation, resumePlayback: resume,
+      _betterPlayerDataSource!,
+      initialPosition: position,
+      setupGeneration: generation,
+      resumePlayback: resume,
     );
     if (_disposed || generation != _dataSourceSetupGeneration) return;
   }
@@ -1626,7 +1634,8 @@ class BetterPlayerController {
     } finally {
       _networkRecoveryInProgress = false;
       final value = videoPlayerController?.value;
-      if (!_disposed && generation == _dataSourceSetupGeneration &&
+      if (!_disposed &&
+          generation == _dataSourceSetupGeneration &&
           (value == null || value.hasError || !value.initialized)) {
         _scheduleNetworkRecovery();
       }
