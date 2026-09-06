@@ -32,6 +32,7 @@ class VideoPlayerValue {
     this.volume = 1.0,
     this.speed = 1.0,
     this.errorDescription,
+    this.isErrorRecoverable = true,
     this.isPip = false,
   });
 
@@ -78,6 +79,10 @@ class VideoPlayerValue {
   /// If [hasError] is false this is [null].
   final String? errorDescription;
 
+  /// Whether automatically reloading the same source can resolve this error.
+  /// Defaults to true for native platforms that do not yet classify failures.
+  final bool isErrorRecoverable;
+
   /// The [size] of the currently loaded video.
   ///
   /// Is null when [initialized] is false.
@@ -119,6 +124,7 @@ class VideoPlayerValue {
     bool? isBuffering,
     double? volume,
     String? errorDescription,
+    bool? isErrorRecoverable,
     double? speed,
     bool? isPip,
   }) => VideoPlayerValue(
@@ -133,6 +139,7 @@ class VideoPlayerValue {
     volume: volume ?? this.volume,
     speed: speed ?? this.speed,
     errorDescription: errorDescription ?? this.errorDescription,
+    isErrorRecoverable: isErrorRecoverable ?? this.isErrorRecoverable,
     isPip: isPip ?? this.isPip,
   );
 
@@ -255,9 +262,16 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     }
 
     void errorListener(Object object) {
+      if (_isDisposed) return;
       if (object is PlatformException) {
         final PlatformException e = object;
-        value = value.copyWith(errorDescription: e.message);
+        final details = e.details;
+        if (details is Map && details['key'] != null &&
+            _activeDataSourceKey != null && details['key'] != _activeDataSourceKey) return;
+        value = value.copyWith(
+          errorDescription: e.message ?? e.code,
+          isErrorRecoverable: details is! Map || details['recoverable'] != false,
+        );
       } else {
         value = value.copyWith(errorDescription: object.toString());
       }

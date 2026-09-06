@@ -256,8 +256,9 @@ class BetterPlayerController {
   bool _networkRecoveryInProgress = false;
   int _networkRecoveryAttempts = 0;
   int _dataSourceSetupGeneration = 0;
-  static const Duration _initialNetworkRecoveryDelay = Duration(seconds: 1);
-  static const Duration _networkRecoveryInterval = Duration(seconds: 5);
+  static const List<Duration> _networkRecoveryDelays = [
+    Duration(seconds: 1), Duration(seconds: 3), Duration(seconds: 8),
+  ];
 
   ///Flag which holds information about player visibility
   bool _isPlayerVisible = true;
@@ -802,6 +803,7 @@ class BetterPlayerController {
     Duration contentStartPosition = Duration.zero,
     Duration? initialPosition,
     int? setupGeneration,
+    bool? resumePlayback,
   }) async {
     final isLive = betterPlayerDataSource.liveStream == true;
     final notification = betterPlayerDataSource.notificationConfiguration;
@@ -891,7 +893,7 @@ class BetterPlayerController {
     if (setupGeneration != null && setupGeneration != _dataSourceSetupGeneration) {
       return;
     }
-    await _initializeVideo(initialPosition: initialPosition);
+    await _initializeVideo(initialPosition: initialPosition, resumePlayback: resumePlayback);
   }
 
   ///Create file from provided list of bytes. File will be created in temporary
@@ -905,7 +907,7 @@ class BetterPlayerController {
 
   ///Initializes video based on configuration. Invoke actions which need to be
   ///run on player start.
-  Future _initializeVideo({Duration? initialPosition}) async {
+  Future _initializeVideo({Duration? initialPosition, bool? resumePlayback}) async {
     setLooping(betterPlayerConfiguration.looping);
     _videoEventStreamSubscription?.cancel();
     _videoEventStreamSubscription = null;
@@ -921,7 +923,7 @@ class BetterPlayerController {
     }
 
     final fullScreenByDefault = betterPlayerConfiguration.fullScreenByDefault;
-    if (betterPlayerConfiguration.autoPlay) {
+    if (resumePlayback ?? betterPlayerConfiguration.autoPlay) {
       if (fullScreenByDefault && !isFullScreen) {
         enterFullScreen();
       }
@@ -1128,7 +1130,7 @@ class BetterPlayerController {
 
     if (currentVideoPlayerValue.hasError) {
       _videoPlayerValueOnError ??= currentVideoPlayerValue;
-      if (_betterPlayerDataSource?.liveStream != true) {
+      if (_betterPlayerDataSource?.liveStream != true && currentVideoPlayerValue.isErrorRecoverable) {
         _scheduleNetworkRecovery();
       }
       _postEvent(
@@ -1141,8 +1143,13 @@ class BetterPlayerController {
         ),
       );
     }
-    if (currentVideoPlayerValue.initialized && !currentVideoPlayerValue.hasError) {
-      _cancelNetworkRecovery(clearSavedPosition: !_networkRecoveryInProgress);
+    final recoveryPosition = _videoPlayerValueOnError?.position;
+    final playbackRecovered = recoveryPosition != null && currentVideoPlayerValue.isPlaying &&
+        !currentVideoPlayerValue.isBuffering &&
+        currentVideoPlayerValue.position > recoveryPosition + const Duration(seconds: 1);
+    if (currentVideoPlayerValue.initialized && !currentVideoPlayerValue.hasError &&
+        !_networkRecoveryInProgress && (recoveryPosition == null || playbackRecovered)) {
+      _cancelNetworkRecovery(clearSavedPosition: true);
     }
     if (currentVideoPlayerValue.initialized && !_hasCurrentDataSourceInitialized) {
       _hasCurrentDataSourceInitialized = true;
@@ -1571,28 +1578,29 @@ class BetterPlayerController {
 
   ///Retry data source if playback failed.
   Future retryDataSource() async {
+    final generation = _dataSourceSetupGeneration;
+    final savedValue = _videoPlayerValueOnError;
     final isLive = _betterPlayerDataSource?.liveStream == true;
-    final position = !isLive ? _videoPlayerValueOnError?.position : null;
-    await _setupDataSource(_betterPlayerDataSource!, initialPosition: position);
-    if (_videoPlayerValueOnError != null) {
-      await play();
-      _videoPlayerValueOnError = null;
-    }
+    final position = !isLive ? savedValue?.position : null;
+    final resume = savedValue == null || !savedValue.initialized
+        ? betterPlayerConfiguration.autoPlay : savedValue.isPlaying;
+    await _setupDataSource(
+      _betterPlayerDataSource!, initialPosition: position,
+      setupGeneration: generation, resumePlayback: resume,
+    );
+    if (_disposed || generation != _dataSourceSetupGeneration) return;
   }
 
   void _scheduleNetworkRecovery() {
     if (_disposed ||
         _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
+        videoPlayerController?.value.isErrorRecoverable == false ||
+        _networkRecoveryAttempts >= _networkRecoveryDelays.length ||
         _networkRecoveryInProgress ||
         _networkRecoveryTimer?.isActive == true) {
       return;
     }
-    final Duration delay;
-    if (_networkRecoveryAttempts == 0) {
-      delay = _initialNetworkRecoveryDelay;
-    } else {
-      delay = _networkRecoveryInterval;
-    }
+    final delay = _networkRecoveryDelays[_networkRecoveryAttempts];
     _networkRecoveryTimer = Timer(delay, () {
       _networkRecoveryTimer = null;
       unawaited(_attemptNetworkRecovery());
@@ -1603,20 +1611,23 @@ class BetterPlayerController {
     if (_disposed ||
         _networkRecoveryInProgress ||
         _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
+        videoPlayerController?.value.isErrorRecoverable == false ||
+        _networkRecoveryAttempts >= _networkRecoveryDelays.length ||
         _betterPlayerDataSource?.liveStream == true) {
       return;
     }
     _networkRecoveryInProgress = true;
+    final generation = _dataSourceSetupGeneration;
+    _networkRecoveryAttempts++;
     try {
       await retryDataSource();
-      _networkRecoveryAttempts = 0;
     } catch (error) {
-      _networkRecoveryAttempts++;
       BetterPlayerUtils.log('Network playback recovery failed: $error');
     } finally {
       _networkRecoveryInProgress = false;
       final value = videoPlayerController?.value;
-      if (!_disposed && (value == null || value.hasError || !value.initialized)) {
+      if (!_disposed && generation == _dataSourceSetupGeneration &&
+          (value == null || value.hasError || !value.initialized)) {
         _scheduleNetworkRecovery();
       }
     }

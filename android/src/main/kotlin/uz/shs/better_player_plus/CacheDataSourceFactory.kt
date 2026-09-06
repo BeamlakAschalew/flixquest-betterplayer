@@ -7,7 +7,6 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 
 @UnstableApi
 internal class CacheDataSourceFactory(
@@ -32,10 +31,10 @@ internal class CacheDataSourceFactory(
     }
 
     init {
-        val bandwidthMeter = DefaultBandwidthMeter.Builder(context).build()
         upstreamDataSource?.let {
             defaultDatasourceFactory = DefaultDataSource.Factory(context, upstreamDataSource)
-            defaultDatasourceFactory?.setTransferListener(bandwidthMeter)
+            // Media3 attaches the player's transfer listener through this source.
+            // An independent meter here would observe transfers without driving ABR.
         }
     }
 }
