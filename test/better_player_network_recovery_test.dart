@@ -14,15 +14,24 @@ void main() {
         .setMockMethodCallHandler(native.channel, native.handle);
   });
 
-  Future<BetterPlayerController> createPlayer() async {
+  Future<BetterPlayerController> createPlayer({bool live = false}) async {
     final controller = BetterPlayerController(
       const BetterPlayerConfiguration(autoPlay: true, handleLifecycle: false),
     );
     await controller.setupDataSource(
-      BetterPlayerDataSource.network('https://example.test/movie.mp4'),
+      BetterPlayerDataSource.network('https://example.test/movie.mp4', liveStream: live),
     );
     return controller;
   }
+
+  testWidgets('live failures leave source refresh to the app without a competing retry loop', (tester) async {
+    final controller = await createPlayer(live: true);
+    await native.fail(recoverable: true);
+    await tester.pump(const Duration(seconds: 30));
+    expect(native.loads, 1);
+    controller.dispose();
+    await tester.pump();
+  });
 
   testWidgets('permanent native errors do not automatically reload the same URL', (tester) async {
     final controller = await createPlayer();

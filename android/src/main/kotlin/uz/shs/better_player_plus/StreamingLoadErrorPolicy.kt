@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 /** Bounded local retries before the application can recover or choose another source. */
 @UnstableApi
 internal class StreamingLoadErrorPolicy(
+    private val isLive: Boolean = false,
     private val onMissingSegment: ((Long, Long) -> Boolean)? = null
 ) : DefaultLoadErrorHandlingPolicy(6) {
     override fun getRetryDelayMsFor(info: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
@@ -18,9 +19,14 @@ internal class StreamingLoadErrorPolicy(
         if (response != null && response.responseCode in listOf(400, 401, 403, 405, 416)) {
             return C.TIME_UNSET
         }
+        // A segment may not yet be published on the first 404, or may already
+        // have left the moving window. Let the app refresh after a brief retry.
+        if (isLive && response?.responseCode in listOf(404, 410) && info.errorCount >= 2) {
+            return C.TIME_UNSET
+        }
         val media = info.mediaLoadData
         val durationMs = media.mediaEndTimeMs - media.mediaStartTimeMs
-        if (response?.responseCode in listOf(404, 410) &&
+        if (!isLive && response?.responseCode in listOf(404, 410) &&
             info.errorCount >= 3 && media.dataType == C.DATA_TYPE_MEDIA &&
             media.mediaStartTimeMs != C.TIME_UNSET && media.mediaEndTimeMs != C.TIME_UNSET &&
             durationMs in 1..30_000 &&

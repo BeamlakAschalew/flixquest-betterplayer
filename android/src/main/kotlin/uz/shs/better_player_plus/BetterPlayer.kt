@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -82,7 +83,7 @@ import androidx.core.net.toUri
 
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
 private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
-private const val LIVE_MAX_PLAYBACK_SPEED = 1.03f
+private const val LIVE_MAX_PLAYBACK_SPEED = 1.01f
 
 @UnstableApi
 internal class BetterPlayer(
@@ -135,9 +136,11 @@ internal class BetterPlayer(
     private var preRollEndedSent = false
     private var completionSent = false
     private var liveSource = false
+    private val liveWindowRecovery = LiveWindowRecovery()
+    private val liveLoadErrorHandlingPolicy = StreamingLoadErrorPolicy(isLive = true)
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
-        StreamingLoadErrorPolicy(::markShortSegmentForSkipping)
+        StreamingLoadErrorPolicy(onMissingSegment = ::markShortSegmentForSkipping)
 
     init {
         loadControl = StreamingLoadControl.create(context, this.customDefaultLoadControl)
@@ -179,6 +182,7 @@ internal class BetterPlayer(
     ) {
         this.key = key
         liveSource = isLive
+        liveWindowRecovery.reset()
         streamingDiagnostics.reset()
         isInitialized = false
         completionSent = false
@@ -540,7 +544,7 @@ internal class BetterPlayer(
                 DefaultSsChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
-                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -550,7 +554,7 @@ internal class BetterPlayer(
                 DefaultDashChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
-                setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else shortSegmentLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -559,7 +563,7 @@ internal class BetterPlayer(
             C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(mediaDataSourceFactory)
                 .apply {
                     setAllowChunklessPreparation(true)
-                    setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
+                    setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else shortSegmentLoadErrorHandlingPolicy)
                     if (drmSessionManagerProvider != null) {
                         setDrmSessionManagerProvider(drmSessionManagerProvider)
                     }
@@ -569,7 +573,7 @@ internal class BetterPlayer(
                 mediaDataSourceFactory,
                 DefaultExtractorsFactory()
             ).apply {
-                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -702,6 +706,15 @@ internal class BetterPlayer(
                     player.seekToNextMediaItem()
                     player.prepare()
                     player.playWhenReady = resumePlayback
+                    return
+                }
+                if (player != null && liveWindowRecovery.shouldRecover(
+                        liveSource, error.errorCode, SystemClock.elapsedRealtime()
+                    )) {
+                    // The old position no longer exists. The manifest's default
+                    // position is valid even for a very short provider window.
+                    player.seekToDefaultPosition()
+                    player.prepare()
                     return
                 }
                 if (skipBrokenShortSegment()) {

@@ -34,6 +34,41 @@ import org.robolectric.annotation.Config
 class StreamingPolicyTest {
     private val spec = DataSpec(Uri.parse("https://example.test/segment.ts"))
 
+    @Test fun liveMissingSegmentsRefreshQuicklyAndNeverUseMovieSkipping() {
+        var skips = 0
+        val policy = StreamingLoadErrorPolicy(isLive = true) { _, _ -> skips++; true }
+        for (code in listOf(404, 410)) {
+            assertTrue(policy.getRetryDelayMsFor(errorInfo(httpError(code), 1)) >= 0)
+            assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(httpError(code), 2)))
+        }
+        assertTrue(policy.getRetryDelayMsFor(errorInfo(SocketTimeoutException(), 2)) >= 0)
+        assertEquals(0, skips)
+    }
+
+    @Test fun expiredLivePositionsRecoverLocallyWithoutAnEndlessLoop() {
+        val recovery = LiveWindowRecovery()
+        val expired = PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+        assertFalse(recovery.shouldRecover(false, expired, 0))
+        assertFalse(recovery.shouldRecover(true, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED, 0))
+        assertTrue(recovery.shouldRecover(true, expired, 0))
+        assertFalse(recovery.shouldRecover(true, expired, 1000))
+        assertTrue(recovery.shouldRecover(true, expired, 30_000))
+        recovery.reset()
+        assertTrue(recovery.shouldRecover(true, expired, 30_001))
+    }
+
+    @Test fun shortLiveWindowsCanUpgradeWithoutWaitingForTwentySecondsOfBuffer() {
+        val meter = MutableBandwidthMeter(700_000)
+        val selection = selection(meter)
+        selection.updateSelectedTrack(0, 1_000_000, 6_000_000, mutableListOf(),
+            Array(3) { MediaChunkIterator.EMPTY })
+        assertEquals(300_000, selection.selectedFormat.bitrate)
+        meter.estimate = 8_000_000
+        selection.updateSelectedTrack(0, 5_000_000, 6_000_000, mutableListOf(),
+            Array(3) { MediaChunkIterator.EMPTY })
+        assertEquals(2_000_000, selection.selectedFormat.bitrate)
+    }
+
     @Test fun temporaryFailuresNeverSkipMovieContent() {
         var skips = 0
         val policy = StreamingLoadErrorPolicy { _, _ -> skips++; true }
