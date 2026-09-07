@@ -727,7 +727,7 @@ class BetterPlayerController {
   }
 
   ///Load ASMS subtitles segments for given [position].
-  ///Segments are being loaded within range (current video position;endPosition)
+  ///Segments overlapping [current video position;endPosition) are loaded.
   ///where endPosition is based on time segment detected in HLS playlist. If
   ///time segment is not present then 5000 ms will be used. Also time segment
   ///is multiplied by 5 to increase window of duration.
@@ -747,8 +747,8 @@ class BetterPlayerController {
       final segmentsToLoad = _betterPlayerSubtitlesSource?.asmsSegments
           ?.where(
             (segment) =>
-                segment.startTime > position &&
-                segment.endTime < loadDurationEnd &&
+                segment.endTime > position &&
+                segment.startTime < loadDurationEnd &&
                 !_asmsSegmentsLoaded.contains(segment.realUrl),
           )
           .map((segment) => segment.realUrl)
