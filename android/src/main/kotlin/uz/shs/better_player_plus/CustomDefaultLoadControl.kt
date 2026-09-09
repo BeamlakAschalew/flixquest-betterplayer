@@ -1,7 +1,6 @@
 package uz.shs.better_player_plus
 
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultLoadControl
 
 @UnstableApi
 internal class CustomDefaultLoadControl {
@@ -46,13 +45,13 @@ internal class CustomDefaultLoadControl {
     val prioritizeTimeOverSizeThresholds: Boolean
 
     constructor() {
-        minBufferMs = DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
-        maxBufferMs = DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
-        bufferForPlaybackMs = DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS
+        minBufferMs = 45_000
+        maxBufferMs = 120_000
+        bufferForPlaybackMs = 1_500
         bufferForPlaybackAfterRebufferMs =
-            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
-        backBufferDurationMs = 120_000
-        retainBackBufferFromKeyframe = true
+            5_000
+        backBufferDurationMs = 15_000
+        retainBackBufferFromKeyframe = false
         prioritizeTimeOverSizeThresholds = true
     }
 
@@ -65,14 +64,14 @@ internal class CustomDefaultLoadControl {
         retainBackBufferFromKeyframe: Boolean?,
         prioritizeTimeOverSizeThresholds: Boolean?
     ) {
-        this.minBufferMs = minBufferMs ?: DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
-        this.maxBufferMs = maxBufferMs ?: DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
+        this.minBufferMs = minBufferMs ?: 45_000
+        this.maxBufferMs = maxBufferMs ?: 120_000
         this.bufferForPlaybackMs =
-            bufferForPlaybackMs ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS
+            bufferForPlaybackMs ?: 1_500
         this.bufferForPlaybackAfterRebufferMs = bufferForPlaybackAfterRebufferMs
-            ?: DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
-        this.backBufferDurationMs = backBufferDurationMs ?: 120_000
-        this.retainBackBufferFromKeyframe = retainBackBufferFromKeyframe ?: true
+            ?: 5_000
+        this.backBufferDurationMs = backBufferDurationMs ?: 15_000
+        this.retainBackBufferFromKeyframe = retainBackBufferFromKeyframe ?: false
         this.prioritizeTimeOverSizeThresholds = prioritizeTimeOverSizeThresholds ?: true
     }
 }

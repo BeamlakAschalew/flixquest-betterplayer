@@ -61,6 +61,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private var castManager: BetterPlayerCastManager? = null
     
     override fun onAttachedToEngine(binding: FlutterPluginBinding) {
+        DataSourceUtils.initialize(binding.applicationContext)
         val loader = FlutterLoader()
         flutterState = FlutterState(
             binding.applicationContext,

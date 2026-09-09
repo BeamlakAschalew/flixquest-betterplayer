@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -49,7 +50,6 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.dash.DashMediaSource
@@ -71,8 +71,7 @@ import androidx.media3.exoplayer.source.ClippingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
-import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import java.io.File
 import java.lang.Exception
 import java.lang.IllegalStateException
@@ -82,46 +81,9 @@ import kotlin.math.max
 import kotlin.math.min
 import androidx.core.net.toUri
 
-private const val MAX_SKIPPABLE_SEGMENT_DURATION_MS = 30_000L
-private const val SHORT_SEGMENT_RETRY_COUNT = 3
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
 private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
-private const val LIVE_MAX_PLAYBACK_SPEED = 1.03f
-
-/**
- * Retries ordinary loads persistently, but exposes a short adaptive media
- * segment after repeated failures so the player can seek past that exact
- * segment. Manifest and initialization loads keep the normal resilient
- * behavior. The thirty-second ceiling covers common HLS/DASH segment sizes
- * without treating unusually long media chunks as safe to skip.
- */
-private class ShortSegmentLoadErrorHandlingPolicy(
-    private val onShortSegmentExhausted: (startMs: Long, endMs: Long) -> Boolean
-) : DefaultLoadErrorHandlingPolicy(Int.MAX_VALUE) {
-    override fun getRetryDelayMsFor(
-        loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
-    ): Long {
-        val mediaLoadData = loadErrorInfo.mediaLoadData
-        val startMs = mediaLoadData.mediaStartTimeMs
-        val endMs = mediaLoadData.mediaEndTimeMs
-        val durationMs = endMs - startMs
-        val isShortMediaSegment =
-            mediaLoadData.dataType == C.DATA_TYPE_MEDIA &&
-                startMs != C.TIME_UNSET &&
-                endMs != C.TIME_UNSET &&
-                durationMs in 1..MAX_SKIPPABLE_SEGMENT_DURATION_MS
-
-        if (isShortMediaSegment) {
-            if (loadErrorInfo.errorCount >= SHORT_SEGMENT_RETRY_COUNT &&
-                onShortSegmentExhausted(startMs, endMs)
-            ) {
-                return C.TIME_UNSET
-            }
-            return min(loadErrorInfo.errorCount * 1_000L, 5_000L)
-        }
-        return super.getRetryDelayMsFor(loadErrorInfo)
-    }
-}
+private const val LIVE_MAX_PLAYBACK_SPEED = 1.01f
 
 @UnstableApi
 internal class BetterPlayer(
@@ -133,8 +95,11 @@ internal class BetterPlayer(
 ) {
     private val exoPlayer: ExoPlayer?
     private val eventSink = QueuingEventSink()
-    private val trackSelector: DefaultTrackSelector = DefaultTrackSelector(context)
+    private val trackSelector: DefaultTrackSelector = DefaultTrackSelector(
+        context, StreamingTrackSelection.Factory(customDefaultLoadControl?.maxBufferMs ?: 120_000)
+    )
     private val loadControl: LoadControl
+    private val streamingDiagnostics: StreamingDiagnostics
     private var isInitialized = false
     private var surface: Surface? = null
     private var key: String? = null
@@ -153,7 +118,7 @@ internal class BetterPlayer(
         customDefaultLoadControl ?: CustomDefaultLoadControl()
     private var lastSendBufferedPosition = 0L
     private val resilientLoadErrorHandlingPolicy =
-        DefaultLoadErrorHandlingPolicy(Int.MAX_VALUE)
+        StreamingLoadErrorPolicy()
     /**
      * LoadErrorHandlingPolicy callbacks run on ExoPlayer's playback thread,
      * while player APIs (including currentPosition) must run on the player
@@ -170,30 +135,26 @@ internal class BetterPlayer(
     private var hasPreRollSequence = false
     private var preRollEndedSent = false
     private var completionSent = false
+    private var liveSource = false
+    private val liveWindowRecovery = LiveWindowRecovery()
+    private val liveLoadErrorHandlingPolicy = StreamingLoadErrorPolicy(isLive = true)
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
-        ShortSegmentLoadErrorHandlingPolicy(::markShortSegmentForSkipping)
+        StreamingLoadErrorPolicy(onMissingSegment = ::markShortSegmentForSkipping)
 
     init {
-        val loadBuilder = DefaultLoadControl.Builder()
-        loadBuilder.setBufferDurationsMs(
-            this.customDefaultLoadControl.minBufferMs,
-            this.customDefaultLoadControl.maxBufferMs,
-            this.customDefaultLoadControl.bufferForPlaybackMs,
-            this.customDefaultLoadControl.bufferForPlaybackAfterRebufferMs
-        )
-        loadBuilder.setBackBuffer(
-            this.customDefaultLoadControl.backBufferDurationMs,
-            this.customDefaultLoadControl.retainBackBufferFromKeyframe
-        )
-        loadBuilder.setPrioritizeTimeOverSizeThresholds(
-            this.customDefaultLoadControl.prioritizeTimeOverSizeThresholds
-        )
-        loadControl = loadBuilder.build()
+        loadControl = StreamingLoadControl.create(context, this.customDefaultLoadControl)
+        val bandwidthMeter = DefaultBandwidthMeter.Builder(context)
+            .setInitialBitrateEstimate(1_000_000L)
+            .setResetOnNetworkTypeChange(true)
+            .build()
         exoPlayer = ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
+            .setBandwidthMeter(bandwidthMeter)
             .build()
+        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
+        exoPlayer.addAnalyticsListener(streamingDiagnostics)
         workManager = WorkManager.getInstance(context)
         workerObserverMap = HashMap()
         setupVideoPlayer(eventChannel, textureEntry, result)
@@ -220,6 +181,9 @@ internal class BetterPlayer(
         contentStartPositionMs: Long = 0L
     ) {
         this.key = key
+        liveSource = isLive
+        liveWindowRecovery.reset()
+        streamingDiagnostics.reset()
         isInitialized = false
         completionSent = false
         lastKnownPositionMs = 0L
@@ -580,7 +544,7 @@ internal class BetterPlayer(
                 DefaultSsChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
-                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -590,7 +554,7 @@ internal class BetterPlayer(
                 DefaultDashChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             ).apply {
-                setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else shortSegmentLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -599,7 +563,7 @@ internal class BetterPlayer(
             C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(mediaDataSourceFactory)
                 .apply {
                     setAllowChunklessPreparation(true)
-                    setLoadErrorHandlingPolicy(shortSegmentLoadErrorHandlingPolicy)
+                    setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else shortSegmentLoadErrorHandlingPolicy)
                     if (drmSessionManagerProvider != null) {
                         setDrmSessionManagerProvider(drmSessionManagerProvider)
                     }
@@ -609,7 +573,7 @@ internal class BetterPlayer(
                 mediaDataSourceFactory,
                 DefaultExtractorsFactory()
             ).apply {
-                setLoadErrorHandlingPolicy(resilientLoadErrorHandlingPolicy)
+                setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else resilientLoadErrorHandlingPolicy)
                 if (drmSessionManagerProvider != null) {
                     setDrmSessionManagerProvider(drmSessionManagerProvider)
                 }
@@ -744,13 +708,26 @@ internal class BetterPlayer(
                     player.playWhenReady = resumePlayback
                     return
                 }
+                if (player != null && liveWindowRecovery.shouldRecover(
+                        liveSource, error.errorCode, SystemClock.elapsedRealtime()
+                    )) {
+                    // The old position no longer exists. The manifest's default
+                    // position is valid even for a very short provider window.
+                    player.seekToDefaultPosition()
+                    player.prepare()
+                    return
+                }
                 if (skipBrokenShortSegment()) {
                     return
                 }
                 if (completionSent) {
                     return
                 }
-                eventSink.error("VideoError", "Video player had error $error", "")
+                eventSink.error("VideoError", "Video player had error $error", mapOf(
+                    "key" to key,
+                    "recoverable" to StreamingLoadErrorPolicy.canRecover(error),
+                    "errorCode" to error.errorCode
+                ))
             }
         })
         val reply: MutableMap<String, Any> = HashMap()
@@ -759,6 +736,7 @@ internal class BetterPlayer(
     }
 
     private fun markShortSegmentForSkipping(startMs: Long, endMs: Long): Boolean {
+        if (liveSource) return false
         if (skippedBrokenSegmentEnds.contains(endMs)) {
             return true
         }

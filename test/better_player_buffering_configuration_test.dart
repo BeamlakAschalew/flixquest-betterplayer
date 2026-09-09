@@ -7,11 +7,15 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('uses a mobile-friendly back buffer by default', () {
+  test('uses a bounded streaming reserve with fast startup', () {
     const configuration = BetterPlayerBufferingConfiguration();
 
-    expect(configuration.backBufferDurationMs, 120000);
-    expect(configuration.retainBackBufferFromKeyframe, isTrue);
+    expect(configuration.minBufferMs, 45000);
+    expect(configuration.maxBufferMs, 120000);
+    expect(configuration.bufferForPlaybackMs, 1500);
+    expect(configuration.bufferForPlaybackAfterRebufferMs, 5000);
+    expect(configuration.backBufferDurationMs, 15000);
+    expect(configuration.retainBackBufferFromKeyframe, isFalse);
     expect(configuration.prioritizeTimeOverSizeThresholds, isTrue);
   });
 

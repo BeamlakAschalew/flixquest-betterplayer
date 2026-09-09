@@ -32,6 +32,7 @@ class VideoPlayerValue {
     this.volume = 1.0,
     this.speed = 1.0,
     this.errorDescription,
+    this.isErrorRecoverable = true,
     this.isPip = false,
   });
 
@@ -78,6 +79,10 @@ class VideoPlayerValue {
   /// If [hasError] is false this is [null].
   final String? errorDescription;
 
+  /// Whether automatically reloading the same source can resolve this error.
+  /// Defaults to true for native platforms that do not yet classify failures.
+  final bool isErrorRecoverable;
+
   /// The [size] of the currently loaded video.
   ///
   /// Is null when [initialized] is false.
@@ -119,6 +124,7 @@ class VideoPlayerValue {
     bool? isBuffering,
     double? volume,
     String? errorDescription,
+    bool? isErrorRecoverable,
     double? speed,
     bool? isPip,
   }) => VideoPlayerValue(
@@ -133,6 +139,7 @@ class VideoPlayerValue {
     volume: volume ?? this.volume,
     speed: speed ?? this.speed,
     errorDescription: errorDescription ?? this.errorDescription,
+    isErrorRecoverable: isErrorRecoverable ?? this.isErrorRecoverable,
     isPip: isPip ?? this.isPip,
   );
 
@@ -181,6 +188,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   int? _textureId;
 
   Timer? _timer;
+  int _playPauseGeneration = 0;
   bool _isDisposed = false;
   late Completer<void> _initializingCompleter;
   String? _activeDataSourceKey;
@@ -210,9 +218,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         return;
       }
       final activeSourceKey = _activeDataSourceKey;
-      if (event.key != null &&
-          activeSourceKey != null &&
-          event.key != activeSourceKey) {
+      if (event.key != null && activeSourceKey != null && event.key != activeSourceKey) {
         return;
       }
       videoEventStreamController.add(event);
@@ -255,9 +261,20 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     }
 
     void errorListener(Object object) {
+      if (_isDisposed) return;
       if (object is PlatformException) {
         final PlatformException e = object;
-        value = value.copyWith(errorDescription: e.message);
+        final details = e.details;
+        if (details is Map &&
+            details['key'] != null &&
+            _activeDataSourceKey != null &&
+            details['key'] != _activeDataSourceKey) {
+          return;
+        }
+        value = value.copyWith(
+          errorDescription: e.message ?? e.code,
+          isErrorRecoverable: details is! Map || details['recoverable'] != false,
+        );
       } else {
         value = value.copyWith(errorDescription: object.toString());
       }
@@ -393,6 +410,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       return;
     }
 
+    _playPauseGeneration++;
+    _timer?.cancel();
+    _timer = null;
+
     value = VideoPlayerValue(duration: null, isLooping: value.isLooping, volume: value.volume);
 
     if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
@@ -453,9 +474,14 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     if (!_created || _isDisposed) {
       return;
     }
+    final generation = ++_playPauseGeneration;
     _timer?.cancel();
+    _timer = null;
     if (value.isPlaying) {
       await _videoPlayerPlatform.play(_textureId);
+      // Initialized events and UI commands may overlap while native play is
+      // pending. Only the latest operation may own the polling timer.
+      if (_isDisposed || generation != _playPauseGeneration || !value.isPlaying) return;
       _timer = Timer.periodic(const Duration(milliseconds: 300), (Timer timer) async {
         if (_isDisposed) {
           return;
