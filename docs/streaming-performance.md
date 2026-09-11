@@ -13,6 +13,28 @@ Movie recovery retries eligible network failures with bounded source reloads,
 preserving position and pause state. Permanent HTTP failures surface immediately.
 Timeouts do not trigger missing-segment skipping.
 
+## Backward seeks
+
+Android retains up to 60 seconds of played samples by default, including the
+keyframe preceding the retention boundary. FlixQuest requests 15 seconds on TV
+and 60 seconds on phones; low-memory Android devices cap either request at 15
+seconds. Forward and backward samples share the existing byte ceiling. Memory
+pressure can shorten retention; these durations are not a guaranteed cache.
+
+Media3 HLS seeks inside retained samples preserve the forward queue. Seeking
+outside those samples resets the queues and reloads from the seek position.
+Without the preceding keyframe, even a seek near the retention boundary can
+require that reset. FlixQuest streaming has no persistent media cache, so older
+played segments cannot be assumed to remain on disk. The previous configuration
+retained only 15 seconds on phones and none on TVs or low-memory Android devices.
+
+Adaptive bandwidth selection applies to future loads. The track selection policy
+keeps queued chunks during both quality upgrades and downgrades. A lower quality
+after an out-of-buffer seek can follow the reset and depleted buffer rather than
+cause it. Verify on a device by buffering ahead, rewinding within the retained
+window under reduced bandwidth, and checking that the buffered end is preserved.
+Also check a seek beyond the window, where a reload is expected.
+
 ## Live streams
 
 FlixQuest supplies a separate live configuration: 10-second minimum and

@@ -52,7 +52,15 @@ internal class StreamingLoadControl(
         fun create(context: Context, configuration: CustomDefaultLoadControl): LoadControl {
             val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val lowMemory = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
-            val maxBytes = memoryBudgetBytes(activityManager.memoryClass, lowMemory)
+            return create(configuration, activityManager.memoryClass, lowMemory)
+        }
+
+        internal fun create(
+            configuration: CustomDefaultLoadControl,
+            memoryClassMb: Int,
+            lowMemory: Boolean
+        ): LoadControl {
+            val maxBytes = memoryBudgetBytes(memoryClassMb, lowMemory)
             val maxBufferMs = configuration.maxBufferMs.coerceIn(1_000, if (lowMemory) 60_000 else 180_000)
             val startupMs = configuration.bufferForPlaybackMs.coerceIn(0, maxBufferMs)
             val rebufferMs = configuration.bufferForPlaybackAfterRebufferMs.coerceIn(0, maxBufferMs)
@@ -60,8 +68,8 @@ internal class StreamingLoadControl(
             val delegate = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, startupMs, rebufferMs)
                 .setBackBuffer(
-                    configuration.backBufferDurationMs.coerceIn(0, if (lowMemory) 0 else 15_000),
-                    !lowMemory && configuration.retainBackBufferFromKeyframe
+                    configuration.backBufferDurationMs.coerceIn(0, if (lowMemory) 15_000 else 60_000),
+                    configuration.backBufferDurationMs > 0 && configuration.retainBackBufferFromKeyframe
                 )
                 .setTargetBufferBytes(maxBytes)
                 .setPrioritizeTimeOverSizeThresholds(configuration.prioritizeTimeOverSizeThresholds)

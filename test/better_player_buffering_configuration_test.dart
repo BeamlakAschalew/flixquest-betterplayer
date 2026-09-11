@@ -14,8 +14,8 @@ void main() {
     expect(configuration.maxBufferMs, 120000);
     expect(configuration.bufferForPlaybackMs, 1500);
     expect(configuration.bufferForPlaybackAfterRebufferMs, 5000);
-    expect(configuration.backBufferDurationMs, 15000);
-    expect(configuration.retainBackBufferFromKeyframe, isFalse);
+    expect(configuration.backBufferDurationMs, 60000);
+    expect(configuration.retainBackBufferFromKeyframe, isTrue);
     expect(configuration.prioritizeTimeOverSizeThresholds, isTrue);
   });
 

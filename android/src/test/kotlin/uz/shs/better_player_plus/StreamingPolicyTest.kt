@@ -9,6 +9,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Timeline
 import androidx.media3.common.TrackGroup
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.ByteArrayDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -19,6 +20,7 @@ import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.source.chunk.MediaChunkIterator
+import androidx.media3.exoplayer.source.chunk.MediaChunk
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import java.io.IOException
@@ -126,6 +128,34 @@ class StreamingPolicyTest {
         selection.onRebuffer()
         update(selection, 30_000_000)
         assertEquals(300_000, selection.selectedFormat.bitrate)
+    }
+
+    @Test fun bandwidthChangesAfterRewindDoNotDiscardDownloadedChunks() {
+        val meter = MutableBandwidthMeter(8_000_000)
+        val selection = selection(meter)
+        update(selection, 30_000_000)
+        val queuedFormat = selection.selectedFormat
+        val queue = (0..4).map { index ->
+            object : MediaChunk(ByteArrayDataSource(byteArrayOf(0)), spec, queuedFormat,
+                C.SELECTION_REASON_ADAPTIVE, null,
+                index * 6_000_000L, (index + 1) * 6_000_000L, index.toLong()) {
+                override fun isLoadCompleted() = true
+                override fun cancelLoad() = Unit
+                override fun load() = Unit
+            }
+        }.toMutableList()
+        // Resume from an earlier buffered position with a collapsed estimate.
+        meter.estimate = 700_000
+        selection.updateSelectedTrack(0, 30_000_000, C.TIME_UNSET, queue,
+            Array(3) { MediaChunkIterator.EMPTY })
+        assertEquals(300_000, selection.selectedFormat.bitrate)
+        assertEquals(queue.size, selection.evaluateQueueSize(0, queue))
+        assertTrue(queue.all { it.trackFormat == queuedFormat })
+        meter.estimate = 8_000_000
+        selection.updateSelectedTrack(0, 30_000_000, C.TIME_UNSET, queue,
+            Array(3) { MediaChunkIterator.EMPTY })
+        assertEquals(2_000_000, selection.selectedFormat.bitrate)
+        assertEquals(queue.size, selection.evaluateQueueSize(0, queue))
     }
 
     @Test fun byteCeilingStopsTimePrioritizedLoadingWithoutDeadlockingStartup() {

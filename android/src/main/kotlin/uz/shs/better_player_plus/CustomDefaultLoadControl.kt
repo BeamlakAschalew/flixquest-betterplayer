@@ -50,8 +50,8 @@ internal class CustomDefaultLoadControl {
         bufferForPlaybackMs = 1_500
         bufferForPlaybackAfterRebufferMs =
             5_000
-        backBufferDurationMs = 15_000
-        retainBackBufferFromKeyframe = false
+        backBufferDurationMs = 60_000
+        retainBackBufferFromKeyframe = true
         prioritizeTimeOverSizeThresholds = true
     }
 
@@ -70,8 +70,8 @@ internal class CustomDefaultLoadControl {
             bufferForPlaybackMs ?: 1_500
         this.bufferForPlaybackAfterRebufferMs = bufferForPlaybackAfterRebufferMs
             ?: 5_000
-        this.backBufferDurationMs = backBufferDurationMs ?: 15_000
-        this.retainBackBufferFromKeyframe = retainBackBufferFromKeyframe ?: false
+        this.backBufferDurationMs = backBufferDurationMs ?: 60_000
+        this.retainBackBufferFromKeyframe = retainBackBufferFromKeyframe ?: true
         this.prioritizeTimeOverSizeThresholds = prioritizeTimeOverSizeThresholds ?: true
     }
 }
