@@ -1222,8 +1222,7 @@ class BetterPlayerController {
   ///Flag which determines whenever player data source has been initialized.
   bool? isVideoInitialized() {
     if (videoPlayerController == null) {
-      BetterPlayerUtils.log('The data source has not been initialized');
-      throw StateError('The data source has not been initialized');
+      return false;
     }
     return videoPlayerController?.value.initialized;
   }

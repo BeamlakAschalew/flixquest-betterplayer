@@ -161,7 +161,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
     final int milliseconds =
         await _channel.invokeMethod<int>('absolutePosition', <String, dynamic>{'textureId': textureId}) ?? 0;
 
-    if (milliseconds <= 0) return null;
+    // ExoPlayer reports TIME_UNSET (and can overflow when it is combined with
+    // the current position) when the stream has no absolute timeline.
+    // DateTime only accepts this bounded range, so treat invalid values as
+    // unavailable rather than allowing a platform sentinel to crash Dart.
+    if (milliseconds <= 0 || milliseconds.abs() > 8640000000000000) {
+      return null;
+    }
 
     return DateTime.fromMillisecondsSinceEpoch(milliseconds);
   }

@@ -898,10 +898,15 @@ internal class BetterPlayer(
                     val windowStartTimeMs =
                         timeline.getWindow(0, Timeline.Window()).windowStartTimeMs
                     val pos = exoPlayer.currentPosition
-                    return windowStartTimeMs + pos
+                    if (windowStartTimeMs != C.TIME_UNSET) {
+                        val absolute = windowStartTimeMs + pos
+                        if (absolute > 0L && absolute <= 8_640_000_000_000_000L) {
+                            return absolute
+                        }
+                    }
                 }
             }
-            return exoPlayer?.currentPosition ?: 0L
+            return 0L
         }
 
     private fun sendInitialized() {

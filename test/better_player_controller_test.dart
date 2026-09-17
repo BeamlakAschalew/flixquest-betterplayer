@@ -513,7 +513,7 @@ void main() {
 
     test('isVideoInitalized returns valid value', () async {
       final BetterPlayerController betterPlayerMockController = BetterPlayerTestUtils.setupBetterPlayerMockController();
-      expect(betterPlayerMockController.isVideoInitialized, throwsA(isA<StateError>()));
+      expect(betterPlayerMockController.isVideoInitialized(), false);
       final videoPlayerController = BetterPlayerTestUtils.setupMockVideoPlayerControler();
       betterPlayerMockController.videoPlayerController = videoPlayerController;
       videoPlayerController.setDuration(const Duration(seconds: 1));
