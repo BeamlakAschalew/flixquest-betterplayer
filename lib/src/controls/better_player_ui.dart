@@ -97,7 +97,7 @@ class BetterPlayerModalSheet extends StatelessWidget {
             surfaceTintColor: colors.surfaceTint,
             elevation: 3,
             clipBehavior: Clip.antiAlias,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -219,7 +219,7 @@ class _BetterPlayerSelectionTileState extends State<BetterPlayerSelectionTile> {
     final colors = Theme.of(context).colorScheme;
     return Material(
       color: widget.selected ? colors.primary.withValues(alpha: .1) : Colors.transparent,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: widget.enabled && !_loading ? _handleTap : null,
@@ -330,7 +330,7 @@ class BetterPlayerGesturePill extends StatelessWidget {
       liveRegion: true,
       label: label,
       child: DecoratedBox(
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: .72), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: .72), borderRadius: BorderRadius.circular(8)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(

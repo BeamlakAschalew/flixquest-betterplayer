@@ -10,10 +10,10 @@ class BetterPlayerMaterialClickableWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(200)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       clipBehavior: Clip.hardEdge,
       color: Colors.transparent,
-      child: InkWell(borderRadius: BorderRadius.circular(90), onTap: onTap, child: child),
+      child: InkWell(borderRadius: BorderRadius.circular(8), onTap: onTap, child: child),
     );
   }
 }

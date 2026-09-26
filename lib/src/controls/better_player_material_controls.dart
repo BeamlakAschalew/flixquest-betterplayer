@@ -543,7 +543,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   Widget _live() => DecoratedBox(
     decoration: BoxDecoration(
       color: _configuration.liveTextColor.withValues(alpha: .18),
-      borderRadius: BorderRadius.circular(99),
+      borderRadius: BorderRadius.circular(5),
     ),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -604,7 +604,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: .72),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -680,7 +680,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 84),
             child: Material(
               color: Colors.black.withValues(alpha: .76),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(8),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: _betterPlayerController!.playNextVideo,
