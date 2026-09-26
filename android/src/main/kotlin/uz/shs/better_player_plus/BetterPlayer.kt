@@ -560,7 +560,11 @@ internal class BetterPlayer(
                 }
             }.createMediaSource(mediaItem)
 
-            C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(mediaDataSourceFactory)
+            // Only HLS can carry image-disguised TS segments; every other
+            // response passes through the wrapper untouched.
+            C.CONTENT_TYPE_HLS -> HlsMediaSource.Factory(
+                DisguisedSegmentDataSource.Factory(mediaDataSourceFactory)
+            )
                 .apply {
                     setAllowChunklessPreparation(true)
                     setLoadErrorHandlingPolicy(if (isLive) liveLoadErrorHandlingPolicy else shortSegmentLoadErrorHandlingPolicy)
