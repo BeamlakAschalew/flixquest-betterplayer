@@ -164,17 +164,14 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
       autofocus: true,
       onKeyEvent: _handleKey,
       child: ColoredBox(
-        color: Colors.black54,
+        color: const Color(0x66000000),
         child: Align(
           alignment: Alignment.centerRight,
           child: Container(
-            width: 460,
+            width: 420,
             height: double.infinity,
-            decoration: const BoxDecoration(
-              color: Color(0xf5161716),
-              border: Border(left: BorderSide(color: Colors.white12)),
-            ),
-            padding: const EdgeInsets.fromLTRB(30, 30, 30, 24),
+            color: const Color(0xf2111212),
+            padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
@@ -185,7 +182,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                         widget.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -197,7 +194,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                   child: ListView.separated(
                     padding: const EdgeInsets.all(8),
                     itemCount: widget.items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 4),
                     itemBuilder: (context, index) {
                       final item = widget.items[index];
                       return _TvMenuTile(
@@ -233,7 +230,14 @@ class _TvMenuTileState extends State<_TvMenuTile> {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = widget.item.enabled ? Colors.white : Colors.white38;
+    // Focus is a white row, as everywhere else on the TV; the chosen option
+    // carries a check rather than a colour.
+    final foreground = !widget.item.enabled
+        ? Colors.white38
+        : _focused
+        ? Colors.black
+        : Colors.white;
+    final secondary = _focused ? Colors.black54 : Colors.white60;
     return Semantics(
       button: true,
       selected: widget.item.selected,
@@ -269,17 +273,16 @@ class _TvMenuTileState extends State<_TvMenuTile> {
         child: GestureDetector(
           onTap: widget.item.enabled ? widget.item.onSelected : null,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: widget.item.selected ? widget.accentColor.withValues(alpha: 0.22) : const Color(0xff262725),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _focused ? widget.accentColor : Colors.transparent, width: 3),
+              color: _focused ? const Color(0xf2ffffff) : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               children: <Widget>[
-                Icon(widget.item.icon, color: widget.item.selected ? widget.accentColor : foreground, size: 26),
-                const SizedBox(width: 16),
+                Icon(widget.item.icon, color: foreground, size: 22),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,24 +291,28 @@ class _TvMenuTileState extends State<_TvMenuTile> {
                         widget.item.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: foreground, fontSize: 19, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          color: foreground,
+                          fontSize: 17,
+                          fontWeight: widget.item.selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
                       ),
                       if (widget.item.subtitle != null) ...<Widget>[
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 2),
                         Text(
                           widget.item.subtitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white60, fontSize: 15),
+                          style: TextStyle(color: secondary, fontSize: 14),
                         ),
                       ],
                     ],
                   ),
                 ),
                 if (widget.item.selected)
-                  Icon(PhosphorIcons.checkCircle(PhosphorIconsStyle.fill), color: widget.accentColor, size: 24)
+                  Icon(PhosphorIcons.check(PhosphorIconsStyle.bold), color: foreground, size: 20)
                 else if (widget.item.showsNext)
-                  const Icon(PhosphorIconsRegular.caretRight, color: Colors.white54, size: 20),
+                  Icon(PhosphorIconsRegular.caretRight, color: secondary, size: 18),
               ],
             ),
           ),
@@ -347,15 +354,15 @@ class _TvMenuCloseButtonState extends State<_TvMenuCloseButton> {
           },
         ),
       },
-      child: Container(
-        width: 48,
-        height: 48,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
-          color: const Color(0xff292a28),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _focused ? Colors.white : Colors.transparent, width: 3),
+          color: _focused ? const Color(0xf2ffffff) : const Color(0x1fffffff),
+          shape: BoxShape.circle,
         ),
-        child: const Icon(PhosphorIconsRegular.x, color: Colors.white),
+        child: Icon(PhosphorIconsRegular.x, color: _focused ? Colors.black : Colors.white),
       ),
     );
   }

@@ -42,12 +42,10 @@ class BetterPlayerTvControls extends StatefulWidget {
 class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   late final FocusNode _rootFocus;
   late final FocusNode _playFocus;
+  late final FocusNode _timelineFocus;
+  final GlobalKey<BetterPlayerTvProgressBarState> _timeline = GlobalKey<BetterPlayerTvProgressBarState>();
   final Map<String, FocusNode> _buttonFocusNodes = <String, FocusNode>{};
-  final Map<String, GlobalKey> _buttonKeys = <String, GlobalKey>{};
-  List<String> _buttonIds = const <String>[];
   List<FocusNode> _buttonOrder = const <FocusNode>[];
-  final ScrollController _buttonScrollController = ScrollController();
-  final GlobalKey _buttonViewportKey = GlobalKey();
   Timer? _hideTimer;
   VideoPlayerValue _value = VideoPlayerValue.uninitialized();
   _TvMenuData? _menu;
@@ -67,6 +65,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     super.initState();
     _rootFocus = FocusNode(debugLabel: 'BetterPlayer TV controls root');
     _playFocus = FocusNode(debugLabel: 'BetterPlayer TV play pause');
+    _timelineFocus = FocusNode(debugLabel: 'BetterPlayer TV timeline');
     widget.controlsController?._state = this;
     _visible = _configuration.showControlsOnInitialize;
     widget.controller.addEventsListener(_onPlayerEvent);
@@ -119,8 +118,6 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   FocusNode _buttonNode(String id) =>
       _buttonFocusNodes.putIfAbsent(id, () => FocusNode(debugLabel: 'BetterPlayer TV $id'));
 
-  GlobalKey _buttonKey(String id) => _buttonKeys.putIfAbsent(id, GlobalKey.new);
-
   KeyEventResult _handleButtonKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -138,30 +135,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     if (index < 0 || targetIndex < 0 || targetIndex >= _buttonOrder.length) {
       return KeyEventResult.handled;
     }
-    final target = _buttonOrder[targetIndex];
-    target.requestFocus();
-    _revealButton(_buttonIds[targetIndex]);
+    _buttonOrder[targetIndex].requestFocus();
     return KeyEventResult.handled;
-  }
-
-  void _revealButton(String id) {
-    if (!mounted || !_buttonScrollController.hasClients) return;
-    final targetBox = _buttonKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
-    final viewportBox = _buttonViewportKey.currentContext?.findRenderObject() as RenderBox?;
-    if (targetBox == null || viewportBox == null) return;
-    final targetCenter = targetBox.localToGlobal(targetBox.size.center(Offset.zero), ancestor: viewportBox).dx;
-    final nextOffset = (_buttonScrollController.offset + targetCenter - viewportBox.size.width / 2).clamp(
-      _buttonScrollController.position.minScrollExtent,
-      _buttonScrollController.position.maxScrollExtent,
-    );
-    if ((nextOffset - _buttonScrollController.offset).abs() < 1) return;
-    unawaited(
-      _buttonScrollController.animateTo(
-        nextOffset,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-      ),
-    );
   }
 
   @override
@@ -171,7 +146,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _attachedVideoController?.removeListener(_onVideoValue);
     _rootFocus.dispose();
     _playFocus.dispose();
-    _buttonScrollController.dispose();
+    _timelineFocus.dispose();
     for (final node in _buttonFocusNodes.values) {
       if (!identical(node, _playFocus)) node.dispose();
     }
@@ -209,6 +184,21 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       _setVisibility(true);
       _togglePlayback();
       _requestPlayFocus();
+      return KeyEventResult.handled;
+    }
+    // Left and Right from a bare picture scrub straight away, the way a
+    // Netflix remote does; Up and Down only bring the controls back.
+    final seekable = !_isLive && (_value.duration ?? Duration.zero) > Duration.zero;
+    if (!_visible && seekable && (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight)) {
+      _setVisibility(true);
+      final steps = key == LogicalKeyboardKey.arrowLeft ? -1 : 1;
+      // The timeline leaves the focus tree with the controls, so it can only
+      // take focus once they are back.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _timelineFocus.requestFocus();
+        _timeline.currentState?.nudge(steps);
+      });
       return KeyEventResult.handled;
     }
     if (!_visible && _isDirectional(key)) {
@@ -294,8 +284,9 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   void _restartHideTimer() {
     _hideTimer?.cancel();
     if (!_visible || _menu != null || _timelineEditing) return;
+    // Long enough to read at a distance, short enough to get out of the way.
     final configured = _configuration.controlsHideTime;
-    final duration = configured < const Duration(seconds: 5) ? const Duration(seconds: 5) : configured;
+    final duration = configured < const Duration(seconds: 3) ? const Duration(seconds: 3) : configured;
     _hideTimer = Timer(duration, () {
       if (mounted && _menu == null && !_timelineEditing) {
         _setVisibility(false);
@@ -414,10 +405,6 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     _overlayReturnFocus = null;
     _setVisibility(true);
     _requestControlFocus(target);
-    if (target != null) {
-      final index = _buttonOrder.indexOf(target);
-      if (index >= 0) _revealButton(_buttonIds[index]);
-    }
   }
 
   void _openSpeedMenu({bool nested = false}) {
@@ -653,6 +640,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   String _number(double value) => value % 1 == 0 ? value.toStringAsFixed(0) : value.toString();
 
+  bool get _isLive => widget.controller.isLiveStream();
+
   Duration get _bufferedEnd {
     if (_value.buffered.isEmpty) return Duration.zero;
     return _value.buffered.last.end;
@@ -674,16 +663,17 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           fit: StackFit.expand,
           children: <Widget>[
             _buildControls(),
-            if (_value.isBuffering) Center(child: CircularProgressIndicator(color: _accent)),
+            if (_value.isBuffering)
+              const Center(
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                ),
+              ),
             if (_value.hasError) _buildError(),
             if (_menu case final menu?)
-              BetterPlayerTvMenu(
-                title: menu.title,
-                items: menu.items,
-                onClose: _closeMenu,
-                onBack: _handleMenuBack,
-                accentColor: _accent,
-              ),
+              BetterPlayerTvMenu(title: menu.title, items: menu.items, onClose: _closeMenu, onBack: _handleMenuBack),
           ],
         ),
       ),
@@ -691,211 +681,159 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   }
 
   Widget _buildControls() {
-    final buttonIds = <String>[
-      'back',
-      'rewind',
-      'play',
-      'forward',
-      if (_configuration.enableSubtitles) 'subtitles',
-      if (_configuration.enableAudioTracks) 'audio',
-      if (_configuration.enableQualities) 'quality',
-      if (_configuration.enableCrop) 'crop',
-      if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null) 'episodes',
-      if (_configuration.enableMovieRecommendations && _configuration.onMovieRecommendationsTap != null)
-        'recommendations',
-      'settings',
+    final live = _isLive;
+    final leading = <_TvButtonSpec>[
+      _TvButtonSpec(
+        id: 'play',
+        label: _value.isPlaying ? 'Pause' : 'Play',
+        icon: _value.isPlaying
+            ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
+            : PhosphorIcons.play(PhosphorIconsStyle.fill),
+        onPressed: _togglePlayback,
+      ),
+      if (!live) ...<_TvButtonSpec>[
+        _TvButtonSpec(
+          id: 'rewind',
+          label: 'Back ${_configuration.backwardSkipTimeInMilliseconds ~/ 1000}s',
+          icon: PhosphorIcons.arrowCounterClockwise(),
+          onPressed: () => _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
+        ),
+        _TvButtonSpec(
+          id: 'forward',
+          label: 'Forward ${_configuration.forwardSkipTimeInMilliseconds ~/ 1000}s',
+          icon: PhosphorIcons.arrowClockwise(),
+          onPressed: () => _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
+        ),
+      ],
     ];
-    _buttonIds = buttonIds;
-    _buttonOrder = [for (final id in buttonIds) id == 'play' ? _playFocus : _buttonNode(id)];
+    final trailing = <_TvButtonSpec>[
+      if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
+        _TvButtonSpec(
+          id: 'episodes',
+          label: 'Episodes',
+          icon: PhosphorIcons.cardsThree(),
+          onPressed: _configuration.onEpisodeListTap!,
+        ),
+      if (_configuration.enableMovieRecommendations && _configuration.onMovieRecommendationsTap != null)
+        _TvButtonSpec(
+          id: 'recommendations',
+          label: 'More like this',
+          icon: PhosphorIcons.squaresFour(),
+          onPressed: _configuration.onMovieRecommendationsTap!,
+        ),
+      if (_configuration.enableSubtitles)
+        _TvButtonSpec(
+          id: 'subtitles',
+          label: 'Subtitles',
+          icon: PhosphorIcons.closedCaptioning(),
+          onPressed: _openSubtitlesMenu,
+        ),
+      if (_configuration.enableAudioTracks)
+        _TvButtonSpec(id: 'audio', label: 'Audio', icon: PhosphorIcons.waveform(), onPressed: _openAudioMenu),
+      if (_configuration.enableQualities)
+        _TvButtonSpec(
+          id: 'quality',
+          label: 'Quality',
+          icon: PhosphorIcons.highDefinition(),
+          onPressed: _openQualityMenu,
+        ),
+      if (_configuration.enableCrop)
+        _TvButtonSpec(id: 'crop', label: 'Crop & fit', icon: _configuration.cropIcon, onPressed: _openCropMenu),
+      _TvButtonSpec(id: 'settings', label: 'Settings', icon: PhosphorIcons.gearSix(), onPressed: _openSettings),
+    ];
+    _buttonOrder = <FocusNode>[
+      for (final spec in <_TvButtonSpec>[...leading, ...trailing])
+        spec.id == 'play' ? _playFocus : _buttonNode(spec.id),
+    ];
+
+    Widget button(_TvButtonSpec spec) => _TvControlButton(
+      focusNode: spec.id == 'play' ? _playFocus : _buttonNode(spec.id),
+      onKeyEvent: _handleButtonKey,
+      label: spec.label,
+      icon: spec.icon,
+      onPressed: spec.onPressed,
+    );
+
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
+        // Light scrims top and bottom only, so the picture stays the picture.
         _hideWithControls(
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: <Color>[Color(0x8a000000), Color(0x08000000), Color(0xe8000000)],
-                stops: <double>[0, 0.42, 1],
+                colors: <Color>[Color(0x99000000), Color(0x00000000), Color(0x00000000), Color(0xcc000000)],
+                stops: <double>[0, 0.24, 0.55, 1],
               ),
             ),
           ),
         ),
         SafeArea(
-          minimum: const EdgeInsets.all(30),
+          minimum: const EdgeInsets.fromLTRB(48, 30, 48, 26),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               _hideWithControls(
-                Text(
-                  _configuration.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        _configuration.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (live) ...<Widget>[const SizedBox(width: 14), const _LiveBadge()],
+                  ],
                 ),
               ),
               const Spacer(),
               // Outside the fade: the skip window closes on its own, so the
               // button has to survive the overlay's auto-hide. The faded
               // timeline below still holds its space, so the button stays put.
-              if (_configuration.introDbSkipButtonBuilder case final builder?)
-                _buildIntroDbSkipSlot(builder),
+              if (_configuration.introDbSkipButtonBuilder case final builder?) _buildIntroDbSkipSlot(builder),
               _hideWithControls(
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-          BetterPlayerTvProgressBar(
-            position: _value.position,
-            duration: _value.duration ?? Duration.zero,
-            buffered: _bufferedEnd,
-            seekStep: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
-            playedColor: _accent,
-            bufferedColor: _configuration.progressBarBufferedColor,
-            backgroundColor: _configuration.progressBarBackgroundColor,
-            onSeek: widget.controller.seekTo,
-            onEditingChanged: (editing) {
-              _timelineEditing = editing;
-              if (editing) {
-                _hideTimer?.cancel();
-              } else {
-                _restartHideTimer();
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) => SizedBox(
-              key: _buttonViewportKey,
-              width: constraints.maxWidth,
-              child: SingleChildScrollView(
-                controller: _buttonScrollController,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                FocusTraversalGroup(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _TvControlButton(
-                        key: _buttonKey('back'),
-                        focusNode: _buttonNode('back'),
-                        onKeyEvent: _handleButtonKey,
-                        label: 'Back',
-                        icon: PhosphorIcons.caretLeft(),
-                        accentColor: _accent,
-                        onPressed: widget.onExit ?? () => Navigator.of(context).maybePop(),
-                      ),
-                      _TvControlButton(
-                        key: _buttonKey('rewind'),
-                        focusNode: _buttonNode('rewind'),
-                        onKeyEvent: _handleButtonKey,
-                        label: 'Rewind',
-                        icon: PhosphorIcons.rewind(),
-                        accentColor: _accent,
-                        onPressed: () =>
-                            _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
-                      ),
-                      _TvControlButton(
-                        key: _buttonKey('play'),
-                        focusNode: _playFocus,
-                        onKeyEvent: _handleButtonKey,
-                        label: _value.isPlaying ? 'Pause' : 'Play',
-                        icon: _value.isPlaying
-                            ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
-                            : PhosphorIcons.play(PhosphorIconsStyle.fill),
-                        accentColor: _accent,
-                        primary: true,
-                        onPressed: _togglePlayback,
-                      ),
-                      _TvControlButton(
-                        key: _buttonKey('forward'),
-                        focusNode: _buttonNode('forward'),
-                        onKeyEvent: _handleButtonKey,
-                        label: 'Forward',
-                        icon: PhosphorIcons.fastForward(),
-                        accentColor: _accent,
-                        onPressed: () =>
-                            _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
-                      ),
-                      if (_configuration.enableSubtitles)
-                        _TvControlButton(
-                          key: _buttonKey('subtitles'),
-                          focusNode: _buttonNode('subtitles'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'Subtitles',
-                          icon: PhosphorIcons.closedCaptioning(),
-                          accentColor: _accent,
-                          onPressed: _openSubtitlesMenu,
+                      if (!live)
+                        BetterPlayerTvProgressBar(
+                          key: _timeline,
+                          focusNode: _timelineFocus,
+                          position: _value.position,
+                          duration: _value.duration ?? Duration.zero,
+                          buffered: _bufferedEnd,
+                          seekStep: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
+                          // The played part is the player's one touch of the
+                          // brand colour.
+                          playedColor: _accent,
+                          bufferedColor: const Color(0x4dffffff),
+                          backgroundColor: const Color(0x33ffffff),
+                          onSeek: widget.controller.seekTo,
+                          onEditingChanged: (editing) {
+                            _timelineEditing = editing;
+                            if (editing) {
+                              _hideTimer?.cancel();
+                            } else {
+                              _restartHideTimer();
+                            }
+                          },
                         ),
-                      if (_configuration.enableAudioTracks)
-                        _TvControlButton(
-                          key: _buttonKey('audio'),
-                          focusNode: _buttonNode('audio'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'Audio',
-                          icon: PhosphorIcons.waveform(),
-                          accentColor: _accent,
-                          onPressed: _openAudioMenu,
-                        ),
-                      if (_configuration.enableQualities)
-                        _TvControlButton(
-                          key: _buttonKey('quality'),
-                          focusNode: _buttonNode('quality'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'Quality',
-                          icon: PhosphorIcons.highDefinition(),
-                          accentColor: _accent,
-                          onPressed: _openQualityMenu,
-                        ),
-                      if (_configuration.enableCrop)
-                        _TvControlButton(
-                          key: _buttonKey('crop'),
-                          focusNode: _buttonNode('crop'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'Crop & fit',
-                          icon: _configuration.cropIcon,
-                          accentColor: _accent,
-                          onPressed: _openCropMenu,
-                        ),
-                      if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
-                        _TvControlButton(
-                          key: _buttonKey('episodes'),
-                          focusNode: _buttonNode('episodes'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'Episodes',
-                          icon: PhosphorIcons.listBullets(),
-                          accentColor: _accent,
-                          onPressed: _configuration.onEpisodeListTap!,
-                        ),
-                      if (_configuration.enableMovieRecommendations &&
-                          _configuration.onMovieRecommendationsTap != null)
-                        _TvControlButton(
-                          key: _buttonKey('recommendations'),
-                          focusNode: _buttonNode('recommendations'),
-                          onKeyEvent: _handleButtonKey,
-                          label: 'More like this',
-                          icon: PhosphorIcons.sparkle(),
-                          accentColor: _accent,
-                          onPressed: _configuration.onMovieRecommendationsTap!,
-                        ),
-                      _TvControlButton(
-                        key: _buttonKey('settings'),
-                        focusNode: _buttonNode('settings'),
-                        onKeyEvent: _handleButtonKey,
-                        label: 'Settings',
-                        icon: PhosphorIcons.gear(),
-                        accentColor: _accent,
-                        onPressed: _openSettings,
+                      const SizedBox(height: 10),
+                      Row(
+                        children: <Widget>[
+                          for (final spec in leading) button(spec),
+                          const Spacer(),
+                          for (final spec in trailing) button(spec),
+                        ],
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-          ),
-                  ],
                 ),
               ),
             ],
@@ -953,18 +891,17 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(PhosphorIconsRegular.warningCircle, color: Colors.white, size: 52),
+            const Icon(PhosphorIconsRegular.warningCircle, color: Colors.white, size: 48),
             const SizedBox(height: 14),
             const Text(
               'Playback failed',
-              style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.w700),
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 18),
             _TvControlButton(
               label: 'Retry',
               icon: PhosphorIcons.arrowClockwise(),
-              accentColor: _accent,
-              primary: true,
+              showLabel: true,
               autofocus: true,
               onPressed: widget.controller.retryDataSource,
             ),
@@ -982,26 +919,57 @@ class _TvMenuData {
   final List<BetterPlayerTvMenuItem> items;
 }
 
+class _TvButtonSpec {
+  const _TvButtonSpec({required this.id, required this.label, required this.icon, required this.onPressed});
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+}
+
+/// "LIVE", where a timeline would otherwise be.
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white70, width: 1.5),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'LIVE',
+        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4),
+      ),
+    );
+  }
+}
+
+/// A control: an icon on its own at rest, a white pill naming itself under
+/// focus. Only the focused control says what it is, which keeps the row
+/// quiet over the picture.
 class _TvControlButton extends StatefulWidget {
   const _TvControlButton({
     required this.label,
     required this.icon,
-    required this.accentColor,
     required this.onPressed,
     this.focusNode,
     this.onKeyEvent,
-    this.primary = false,
+    this.showLabel = false,
     this.autofocus = false,
-    super.key,
   });
 
   final String label;
   final IconData icon;
-  final Color accentColor;
   final VoidCallback onPressed;
   final FocusNode? focusNode;
   final KeyEventResult Function(FocusNode node, KeyEvent event)? onKeyEvent;
-  final bool primary;
+
+  /// Names the control even without focus, for a lone button.
+  final bool showLabel;
   final bool autofocus;
 
   @override
@@ -1013,8 +981,10 @@ class _TvControlButtonState extends State<_TvControlButton> {
 
   @override
   Widget build(BuildContext context) {
+    final foreground = _focused ? Colors.black : Colors.white;
+    final labelled = _focused || widget.showLabel;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Semantics(
         button: true,
         label: widget.label,
@@ -1025,17 +995,7 @@ class _TvControlButtonState extends State<_TvControlButton> {
           child: FocusableActionDetector(
             focusNode: widget.focusNode,
             autofocus: widget.autofocus,
-            onFocusChange: (focused) {
-              setState(() => _focused = focused);
-              if (focused) {
-                Scrollable.ensureVisible(
-                  context,
-                  alignment: 0.5,
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                );
-              }
-            },
+            onFocusChange: (focused) => setState(() => _focused = focused),
             shortcuts: const <ShortcutActivator, Intent>{
               SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
               SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
@@ -1053,28 +1013,27 @@ class _TvControlButtonState extends State<_TvControlButton> {
             child: GestureDetector(
               onTap: widget.onPressed,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 130),
-                constraints: const BoxConstraints(minWidth: 76),
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                duration: const Duration(milliseconds: 120),
+                height: 44,
+                constraints: const BoxConstraints(minWidth: 44),
+                padding: EdgeInsets.symmetric(horizontal: labelled ? 14 : 0),
                 decoration: BoxDecoration(
-                  color: widget.primary
-                      ? widget.accentColor
-                      : _focused
-                      ? const Color(0xff30312f)
-                      : Colors.black45,
-                  borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: _focused ? Colors.white : Colors.transparent, width: 3),
+                  color: _focused ? const Color(0xf2ffffff) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(22),
                 ),
-                child: Column(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Icon(widget.icon, color: Colors.white, size: 25),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.label,
-                      maxLines: 1,
-                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
-                    ),
+                    Icon(widget.icon, color: foreground, size: 24),
+                    if (labelled) ...<Widget>[
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.label,
+                        maxLines: 1,
+                        style: TextStyle(color: foreground, fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ],
                   ],
                 ),
               ),
