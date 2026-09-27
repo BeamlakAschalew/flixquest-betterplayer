@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:better_player_plus/src/controls/better_player_material_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_material_progress_bar.dart';
-import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:better_player_plus/src/core/better_player_with_controls.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -432,6 +431,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(videoController.lastSeekPosition?.inSeconds, closeTo(60, 1));
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('the speed selector follows a drag and keeps the panel open', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 675);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final videoController = MockVideoPlayerController();
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_speed_button'))).onPressed!();
+    await tester.pumpAndSettle();
+
+    final selector = tester.getRect(find.byType(BetterPlayerSpeedSelector));
+    final gesture = await tester.startGesture(
+      Offset(selector.left + selector.width * .1, selector.center.dy),
+    );
+    await gesture.moveTo(Offset(selector.left + selector.width * .9, selector.center.dy));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(videoController.speed, 2.0);
+    expect(
+      find.byType(BetterPlayerSpeedSelector),
+      findsOneWidget,
+      reason: 'the panel stays open so the range can be tried',
+    );
   });
 }
 

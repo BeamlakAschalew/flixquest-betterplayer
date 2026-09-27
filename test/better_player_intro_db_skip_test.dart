@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:better_player_plus/src/controls/better_player_material_controls.dart';
 import 'package:better_player_plus/src/controls/better_player_material_progress_bar.dart';
-import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

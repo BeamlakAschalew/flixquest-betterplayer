@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:better_player_plus/better_player_plus.dart';
-import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -137,6 +136,21 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
   /// is more than one soundtrack to choose between.
   String get audioAndSubtitlesLabel => _hasAudioChoice ? strings.audioAndSubtitles : strings.subtitles;
 
+  /// A track's language as the app wants it shown; the raw label when the app
+  /// did not ask for anything.
+  String _languageLabel(String? label) {
+    final text = label?.trim() ?? '';
+    if (text.isEmpty) return '';
+    return betterPlayerControlsConfiguration.languageLabelBuilder?.call(text) ?? text;
+  }
+
+  String _audioTrackLabel(BetterPlayerAsmsAudioTrack track, int index) {
+    final label = _languageLabel(track.label);
+    if (label.isNotEmpty) return label;
+    final language = _languageLabel(track.language);
+    return language.isNotEmpty ? language : '${strings.audio} ${index + 1}';
+  }
+
   bool get _hasAudioChoice =>
       betterPlayerControlsConfiguration.enableAudioTracks &&
       (betterPlayerController?.betterPlayerAsmsAudioTracks?.length ?? 0) > 1;
@@ -181,8 +195,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
                 speeds: speeds,
                 selected: current,
                 normalLabel: strings.normalSpeed,
+                // The panel stays open while the stops are dragged through.
                 onSelected: (speed) {
-                  _closeSheet();
                   betterPlayerController!.setSpeed(speed);
                 },
               ),
@@ -257,7 +271,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
           title: source.type == BetterPlayerSubtitlesSourceType.none
               ? strings.off
               : source.name?.trim().isNotEmpty == true
-              ? source.name!.trim()
+              ? _languageLabel(source.name)
               : '${strings.subtitles} $index',
           selected: isSelectedSubtitle(source),
           onTap: () async {
@@ -271,13 +285,9 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     final audioTiles = <Widget>[
       for (final (index, track) in tracks.indexed)
         BetterPlayerSelectionTile(
-          title: track.label?.trim().isNotEmpty == true
-              ? track.label!.trim()
-              : track.language?.trim().isNotEmpty == true
-              ? track.language!.trim()
-              : '${strings.audio} ${index + 1}',
+          title: _audioTrackLabel(track, index),
           subtitle: track.language?.trim().isNotEmpty == true && track.label?.trim().isNotEmpty == true
-              ? track.language!.trim()
+              ? _languageLabel(track.language)
               : null,
           selected: selectedTrack == track || (selectedTrack == null && track.isDefault),
           onTap: () {
@@ -392,7 +402,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     if (source == null || source.type == BetterPlayerSubtitlesSourceType.none) {
       return strings.off;
     }
-    return source.name ?? betterPlayerController!.translations.generalDefault;
+    final name = _languageLabel(source.name);
+    return name.isNotEmpty ? name : betterPlayerController!.translations.generalDefault;
   }
 
   String _selectedQualityLabel() {

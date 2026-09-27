@@ -677,8 +677,9 @@ class BetterPlayerEmptyState extends StatelessWidget {
 }
 
 /// Speeds as stops along a line, the chosen one a larger white dot. Reads
-/// left to right in every language, slowest first.
-class BetterPlayerSpeedSelector extends StatelessWidget {
+/// left to right in every language, slowest first. Drag across the line to
+/// move through the stops, or tap one.
+class BetterPlayerSpeedSelector extends StatefulWidget {
   const BetterPlayerSpeedSelector({
     required this.speeds,
     required this.selected,
@@ -698,73 +699,103 @@ class BetterPlayerSpeedSelector extends StatelessWidget {
   }
 
   @override
+  State<BetterPlayerSpeedSelector> createState() => _BetterPlayerSpeedSelectorState();
+}
+
+class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
+  late double _selected = widget.selected;
+
+  @override
+  void didUpdateWidget(BetterPlayerSpeedSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) _selected = widget.selected;
+  }
+
+  void _select(double speed) {
+    if (speed == _selected) return;
+    setState(() => _selected = speed);
+    widget.onSelected(speed);
+  }
+
+  void _selectAt(double dx, double width) {
+    if (width <= 0 || widget.speeds.isEmpty) return;
+    final index = (dx / width * widget.speeds.length).floor().clamp(0, widget.speeds.length - 1);
+    _select(widget.speeds[index]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.ltr,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final inset = constraints.maxWidth / (speeds.length * 2);
+          final inset = constraints.maxWidth / (widget.speeds.length * 2);
           return SizedBox(
             height: 76,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: inset,
-                  right: inset,
-                  top: 21,
-                  height: 2,
-                  child: const ColoredBox(color: Colors.white24),
-                ),
-                Row(
-                  children: [
-                    for (final speed in speeds)
-                      Expanded(
-                        child: Semantics(
-                          button: true,
-                          selected: speed == selected,
-                          label: speed == 1 ? '${format(speed)} $normalLabel' : format(speed),
-                          excludeSemantics: true,
-                          child: InkWell(
-                            key: ValueKey('better_player_speed_${format(speed)}'),
-                            onTap: () => onSelected(speed),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Column(
-                              children: [
-                                SizedBox(
-                                  height: 44,
-                                  child: Center(
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 160),
-                                      width: speed == selected ? 22 : 10,
-                                      height: speed == selected ? 22 : 10,
-                                      decoration: BoxDecoration(
-                                        color: speed == selected ? Colors.white : Colors.white54,
-                                        shape: BoxShape.circle,
-                                        border: speed == selected
-                                            ? Border.all(color: const Color(0x66FFFFFF), width: 5)
-                                            : null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => _selectAt(details.localPosition.dx, constraints.maxWidth),
+              onHorizontalDragStart: (details) => _selectAt(details.localPosition.dx, constraints.maxWidth),
+              onHorizontalDragUpdate: (details) => _selectAt(details.localPosition.dx, constraints.maxWidth),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: inset,
+                    right: inset,
+                    top: 21,
+                    height: 2,
+                    child: const ColoredBox(color: Colors.white24),
+                  ),
+                  Row(
+                    children: [
+                      for (final speed in widget.speeds)
+                        Expanded(
+                          child: Semantics(
+                            button: true,
+                            selected: speed == _selected,
+                            label: speed == 1 ? '${BetterPlayerSpeedSelector.format(speed)} ${widget.normalLabel}' : BetterPlayerSpeedSelector.format(speed),
+                            onTap: () => _select(speed),
+                            excludeSemantics: true,
+                            child: KeyedSubtree(
+                              key: ValueKey('better_player_speed_${BetterPlayerSpeedSelector.format(speed)}'),
+                              child: Column(
+                                children: [
+                                  SizedBox(
+                                    height: 44,
+                                    child: Center(
+                                      child: AnimatedContainer(
+                                        duration: betterPlayerMotionDuration,
+                                        width: speed == _selected ? 22 : 10,
+                                        height: speed == _selected ? 22 : 10,
+                                        decoration: BoxDecoration(
+                                          color: speed == _selected ? Colors.white : Colors.white54,
+                                          shape: BoxShape.circle,
+                                          border: speed == _selected
+                                              ? Border.all(color: const Color(0x66FFFFFF), width: 5)
+                                              : null,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  speed == 1 ? '${format(speed)} ($normalLabel)' : format(speed),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: speed == selected ? Colors.white : BetterPlayerColors.muted,
-                                    fontSize: 13,
-                                    fontWeight: speed == selected ? FontWeight.w700 : FontWeight.w500,
+                                  Text(
+                                    speed == 1 ? '${BetterPlayerSpeedSelector.format(speed)} (${widget.normalLabel})' : BetterPlayerSpeedSelector.format(speed),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: speed == _selected ? Colors.white : BetterPlayerColors.muted,
+                                      fontSize: 13,
+                                      fontWeight: speed == _selected ? FontWeight.w700 : FontWeight.w500,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           );
         },

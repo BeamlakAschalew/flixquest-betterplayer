@@ -84,6 +84,7 @@ class BetterPlayerControlsConfiguration {
     this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
     this.subtitle,
     this.strings = const BetterPlayerControlsStrings(),
+    this.languageLabelBuilder,
     this.emphasisFontFamily,
     this.onNextEpisodeTap,
     this.quickActions = const [],
@@ -344,6 +345,10 @@ class BetterPlayerControlsConfiguration {
 
   ///The words the phone controls show.
   final BetterPlayerControlsStrings strings;
+
+  ///Turns a track's raw language label into what the panels show, so an app
+  ///can render "eng" as "English". Unset, labels pass through unchanged.
+  final String Function(String label)? languageLabelBuilder;
 
   ///A heavier face for the title, labels and times, when the app ships its
   ///weights as separate families. Without it they are drawn bold.
