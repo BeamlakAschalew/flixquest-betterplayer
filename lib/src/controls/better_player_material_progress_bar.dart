@@ -1,9 +1,18 @@
 import 'dart:async';
+
 import 'package:better_player_plus/better_player.dart';
+import 'package:better_player_plus/src/core/better_player_utils.dart';
 import 'package:better_player_plus/src/video_player/video_player.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter/material.dart';
 
+/// The phone timeline: a thin track whose played part is the one touch of
+/// the accent. Dragging thickens it and shows the time the handle is on in a
+/// bubble above it; the seek happens once, when the finger lifts, so a slow
+/// stream isn't asked for every frame on the way. A tap jumps straight
+/// there.
+///
+/// It always runs left to right, as a timeline does in every language.
 class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
   BetterPlayerMaterialVideoProgressBar(
     this.controller,
@@ -14,6 +23,7 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
     this.onDragUpdate,
     this.onTapDown,
     this.showThumbnailPreview = true,
+    this.timeStyle,
     super.key,
   }) : colors = colors ?? BetterPlayerProgressColors();
 
@@ -24,499 +34,252 @@ class BetterPlayerMaterialVideoProgressBar extends StatefulWidget {
   final Function()? onDragEnd;
   final Function()? onDragUpdate;
   final Function()? onTapDown;
+
+  /// Whether dragging shows the time bubble.
   final bool showThumbnailPreview;
+  final TextStyle? timeStyle;
 
   @override
-  State<BetterPlayerMaterialVideoProgressBar> createState() {
-    return _VideoProgressBarState();
-  }
+  State<BetterPlayerMaterialVideoProgressBar> createState() => _VideoProgressBarState();
 }
 
 class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar> {
-  _VideoProgressBarState() {
-    listener = () {
-      if (mounted) setState(() {});
-    };
-  }
+  VideoPlayerController? _listened;
 
-  late VoidCallback listener;
-  bool _controllerWasPlaying = false;
+  /// Where the handle is while a finger holds it, as a fraction.
+  double? _dragFraction;
+
+  /// A seek just sent, shown until the player reports it, so the handle
+  /// doesn't jump back for a frame.
+  Duration? _pendingSeek;
+  Timer? _pendingSeekTimer;
 
   VideoPlayerController? get controller => widget.controller;
 
-  BetterPlayerController? get betterPlayerController => widget.betterPlayerController;
-
-  bool shouldPlayAfterDragEnd = false;
-  Duration? lastSeek;
-  Timer? _updateBlockTimer;
-
-  // Thumbnail preview state
-  bool _showThumbnailPreview = false;
-  Offset? _dragPosition;
-  Duration? _previewPosition;
-  Timer? _previewLoadTimer;
-  Duration? _lastPreviewLoadPosition;
+  bool get _dragEnabled =>
+      widget.betterPlayerController?.betterPlayerConfiguration.controlsConfiguration.enableProgressBarDrag ?? true;
 
   @override
   void initState() {
     super.initState();
-    controller!.addListener(listener);
+    _listen();
   }
 
   @override
-  void deactivate() {
-    controller!.removeListener(listener);
-    _cancelUpdateBlockTimer();
-    _cancelPreviewLoadTimer();
-    super.deactivate();
+  void didUpdateWidget(BetterPlayerMaterialVideoProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) _listen();
+  }
+
+  void _listen() {
+    _listened?.removeListener(_onValue);
+    _listened = controller;
+    _listened?.addListener(_onValue);
+  }
+
+  void _onValue() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _listened?.removeListener(_onValue);
+    _pendingSeekTimer?.cancel();
+    super.dispose();
+  }
+
+  Duration? get _duration {
+    final value = controller?.value;
+    if (value == null || !value.initialized) return null;
+    final duration = value.duration;
+    return duration == null || duration <= Duration.zero ? null : duration;
+  }
+
+  double _fractionAt(Offset localPosition, double width) => width <= 0 ? 0 : (localPosition.dx / width).clamp(0.0, 1.0);
+
+  Future<void> _seekToFraction(double fraction) async {
+    final duration = _duration;
+    if (duration == null) return;
+    final target = duration * fraction;
+    _pendingSeekTimer?.cancel();
+    setState(() => _pendingSeek = target);
+    _pendingSeekTimer = Timer(const Duration(milliseconds: 1000), () {
+      if (mounted) setState(() => _pendingSeek = null);
+    });
+    await widget.betterPlayerController?.seekTo(target);
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool enableProgressBarDrag =
-        betterPlayerController!.betterPlayerConfiguration.controlsConfiguration.enableProgressBarDrag;
+    final value = controller?.value;
+    final duration = _duration;
+    final fullscreen = widget.betterPlayerController?.isFullScreen ?? false;
+    final dragging = _dragFraction != null;
+    final position = _pendingSeek ?? value?.position ?? Duration.zero;
+    final played = duration == null
+        ? 0.0
+        : dragging
+        ? _dragFraction!
+        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    final buffered = <(double, double)>[
+      if (duration != null)
+        for (final range in value?.buffered ?? const <DurationRange>[])
+          (
+            (range.start.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0),
+            (range.end.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0),
+          ),
+    ];
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (details) {
+                    if (duration == null || !_dragEnabled) return;
+                    setState(() => _dragFraction = _fractionAt(details.localPosition, width));
+                    widget.onDragStart?.call();
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    if (_dragFraction == null) return;
+                    setState(() => _dragFraction = _fractionAt(details.localPosition, width));
+                    widget.onDragUpdate?.call();
+                  },
+                  onHorizontalDragEnd: (_) {
+                    final fraction = _dragFraction;
+                    if (fraction == null) return;
+                    setState(() => _dragFraction = null);
+                    unawaited(_seekToFraction(fraction));
+                    widget.onDragEnd?.call();
+                  },
+                  onHorizontalDragCancel: () {
+                    if (_dragFraction == null) return;
+                    setState(() => _dragFraction = null);
+                    widget.onDragEnd?.call();
+                  },
+                  onTapDown: (details) {
+                    if (duration == null || !_dragEnabled) return;
+                    unawaited(_seekToFraction(_fractionAt(details.localPosition, width)));
+                    widget.onTapDown?.call();
+                  },
+                  child: CustomPaint(
+                    painter: _ProgressBarPainter(
+                      played: played,
+                      buffered: buffered,
+                      colors: widget.colors,
+                      trackHeight: dragging ? 6 : (fullscreen ? 4 : 3),
+                      handleRadius: duration == null ? 0 : (dragging ? 10 : 7),
+                    ),
+                  ),
+                ),
+              ),
+              if (dragging && widget.showThumbnailPreview && duration != null)
+                _TimeBubble(
+                  label: BetterPlayerUtils.formatDuration(duration * _dragFraction!),
+                  centerX: width * _dragFraction!,
+                  width: width,
+                  style: widget.timeStyle,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        GestureDetector(
-          onHorizontalDragStart: (DragStartDetails details) {
-            if (!controller!.value.initialized || !enableProgressBarDrag) {
-              return;
-            }
+/// The time under the handle, floating above it while it is dragged.
+class _TimeBubble extends StatelessWidget {
+  const _TimeBubble({required this.label, required this.centerX, required this.width, this.style});
 
-            _controllerWasPlaying = controller!.value.isPlaying;
-            if (_controllerWasPlaying) {
-              controller!.pause();
-            }
+  static const double _bubbleWidth = 76;
 
-            if (widget.showThumbnailPreview) {
-              setState(() {
-                _showThumbnailPreview = true;
-                _dragPosition = details.globalPosition;
-                _updatePreviewPosition(details.globalPosition);
-                _schedulePreviewLoad();
-              });
-            }
+  final String label;
+  final double centerX;
+  final double width;
+  final TextStyle? style;
 
-            if (widget.onDragStart != null) {
-              widget.onDragStart!();
-            }
-          },
-          onHorizontalDragUpdate: (DragUpdateDetails details) {
-            if (!controller!.value.initialized || !enableProgressBarDrag) {
-              return;
-            }
-
-            seekToRelativePosition(details.globalPosition);
-
-            if (widget.showThumbnailPreview) {
-              setState(() {
-                _dragPosition = details.globalPosition;
-                _updatePreviewPosition(details.globalPosition);
-                _schedulePreviewLoad();
-              });
-            }
-
-            if (widget.onDragUpdate != null) {
-              widget.onDragUpdate!();
-            }
-          },
-          onHorizontalDragEnd: (DragEndDetails details) {
-            if (!enableProgressBarDrag) {
-              return;
-            }
-
-            if (_controllerWasPlaying) {
-              betterPlayerController?.play();
-              shouldPlayAfterDragEnd = true;
-            }
-            _setupUpdateBlockTimer();
-
-            if (widget.showThumbnailPreview) {
-              setState(() {
-                _showThumbnailPreview = false;
-                _dragPosition = null;
-                _previewPosition = null;
-                _cancelPreviewLoadTimer();
-              });
-            }
-
-            if (widget.onDragEnd != null) {
-              widget.onDragEnd!();
-            }
-          },
-          onTapDown: (TapDownDetails details) {
-            if (!controller!.value.initialized || !enableProgressBarDrag) {
-              return;
-            }
-            seekToRelativePosition(details.globalPosition);
-            _setupUpdateBlockTimer();
-            if (widget.onTapDown != null) {
-              widget.onTapDown!();
-            }
-          },
-          child: Center(
-            child: Container(
-              height: MediaQuery.of(context).size.height / 2,
-              width: MediaQuery.of(context).size.width,
-              color: Colors.transparent,
-              child: CustomPaint(painter: _ProgressBarPainter(_getValue(), widget.colors, betterPlayerController!)),
+  @override
+  Widget build(BuildContext context) {
+    final left = (centerX - _bubbleWidth / 2).clamp(0.0, (width - _bubbleWidth).clamp(0.0, double.infinity));
+    return Positioned(
+      left: left,
+      bottom: 30,
+      width: _bubbleWidth,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xE6000000),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: (style ?? const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)).copyWith(
+                color: Colors.white,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ),
-        // Thumbnail preview widget
-        if (_showThumbnailPreview && _dragPosition != null && _previewPosition != null) _buildThumbnailPreview(context),
-      ],
-    );
-  }
-
-  void _setupUpdateBlockTimer() {
-    _updateBlockTimer = Timer(const Duration(milliseconds: 1000), () {
-      lastSeek = null;
-      _cancelUpdateBlockTimer();
-    });
-  }
-
-  void _cancelUpdateBlockTimer() {
-    _updateBlockTimer?.cancel();
-    _updateBlockTimer = null;
-  }
-
-  VideoPlayerValue _getValue() {
-    if (lastSeek != null) {
-      return controller!.value.copyWith(position: lastSeek);
-    } else {
-      return controller!.value;
-    }
-  }
-
-  void seekToRelativePosition(Offset globalPosition) async {
-    final RenderObject? renderObject = context.findRenderObject();
-    if (renderObject != null) {
-      final box = renderObject as RenderBox;
-      final Offset tapPos = box.globalToLocal(globalPosition);
-      final double relative = tapPos.dx / box.size.width;
-      if (relative > 0) {
-        final Duration position = controller!.value.duration! * relative;
-        lastSeek = position;
-        await betterPlayerController!.seekTo(position);
-        onFinishedLastSeek();
-        if (relative >= 1) {
-          lastSeek = controller!.value.duration;
-          await betterPlayerController!.seekTo(controller!.value.duration!);
-          onFinishedLastSeek();
-        }
-      }
-    }
-  }
-
-  void onFinishedLastSeek() {
-    if (shouldPlayAfterDragEnd) {
-      shouldPlayAfterDragEnd = false;
-      betterPlayerController?.play();
-    }
-  }
-
-  void _updatePreviewPosition(Offset globalPosition) {
-    final RenderObject? renderObject = context.findRenderObject();
-    if (renderObject != null) {
-      final box = renderObject as RenderBox;
-      final Offset tapPos = box.globalToLocal(globalPosition);
-      final double relative = tapPos.dx / box.size.width;
-      if (relative >= 0 && relative <= 1) {
-        final Duration position = controller!.value.duration! * relative;
-        _previewPosition = position;
-      }
-    }
-  }
-
-  /// Check if a position is in the buffered range
-  bool _isPositionBuffered(Duration position) {
-    if (controller == null || !controller!.value.initialized) {
-      return false;
-    }
-
-    for (final DurationRange range in controller!.value.buffered) {
-      if (position >= range.start && position <= range.end) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// Schedule progressive loading for unbuffered positions
-  void _schedulePreviewLoad() {
-    // Cancel any existing timer
-    _cancelPreviewLoadTimer();
-
-    if (_previewPosition == null) return;
-
-    // If position is already buffered, no need to load
-    if (_isPositionBuffered(_previewPosition!)) {
-      return;
-    }
-
-    // If we already tried to load this position recently, don't retry immediately
-    if (_lastPreviewLoadPosition != null &&
-        (_previewPosition! - _lastPreviewLoadPosition!).abs() < const Duration(seconds: 2)) {
-      return;
-    }
-
-    // Schedule loading after user hovers for 800ms on unbuffered region
-    _previewLoadTimer = Timer(const Duration(milliseconds: 800), () {
-      if (_previewPosition != null && !_isPositionBuffered(_previewPosition!)) {
-        _loadPreviewFrame(_previewPosition!);
-      }
-    });
-  }
-
-  /// Load a preview frame by temporarily seeking to that position
-  Future<void> _loadPreviewFrame(Duration position) async {
-    if (controller == null || !controller!.value.initialized) {
-      return;
-    }
-
-    _lastPreviewLoadPosition = position;
-
-    try {
-      // Store current position
-      final currentPosition = controller!.value.position;
-
-      // Briefly seek to the preview position to trigger buffering
-      await controller!.seekTo(position);
-
-      // Wait a moment for the frame to load
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Seek back to original position (or close to it)
-      // This allows the frame to stay in buffer while user is still hovering
-      if (_showThumbnailPreview && mounted) {
-        await controller!.seekTo(currentPosition);
-      }
-    } catch (e) {
-      // Ignore errors during preview loading
-    }
-  }
-
-  void _cancelPreviewLoadTimer() {
-    _previewLoadTimer?.cancel();
-    _previewLoadTimer = null;
-  }
-
-  Widget _buildThumbnailPreview(BuildContext context) {
-    final RenderObject? renderObject = context.findRenderObject();
-    if (renderObject == null || _previewPosition == null) {
-      return const SizedBox.shrink();
-    }
-
-    final box = renderObject as RenderBox;
-    final Offset localPosition = box.globalToLocal(_dragPosition!);
-
-    // Calculate horizontal position, ensuring it stays within screen bounds
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isFullScreen = betterPlayerController?.isFullScreen ?? false;
-
-    // Use smaller thumbnails in non-fullscreen mode
-    final double previewWidth = isFullScreen ? 160.0 : 120.0;
-    final double previewHeight = isFullScreen ? 90.0 : 67.5;
-    const double previewPadding = 10.0;
-
-    double leftPosition = localPosition.dx - (previewWidth / 2);
-
-    // Keep preview within screen bounds
-    if (leftPosition < previewPadding) {
-      leftPosition = previewPadding;
-    } else if (leftPosition + previewWidth > screenWidth - previewPadding) {
-      leftPosition = screenWidth - previewWidth - previewPadding;
-    }
-
-    // Position above the progress bar - closer in non-fullscreen mode
-    final double bottomPosition = isFullScreen ? 60.0 : 35.0;
-
-    return Positioned(
-      left: leftPosition,
-      bottom: bottomPosition,
-      child: _ThumbnailPreviewWidget(
-        controller: controller!,
-        position: _previewPosition!,
-        width: previewWidth,
-        height: previewHeight,
       ),
     );
   }
 }
 
 class _ProgressBarPainter extends CustomPainter {
-  _ProgressBarPainter(this.value, this.colors, this._betterPlayerController);
+  _ProgressBarPainter({
+    required this.played,
+    required this.buffered,
+    required this.colors,
+    required this.trackHeight,
+    required this.handleRadius,
+  });
 
-  VideoPlayerValue value;
-  BetterPlayerProgressColors colors;
-  final BetterPlayerController _betterPlayerController;
-
-  @override
-  bool shouldRepaint(CustomPainter painter) {
-    return true;
-  }
+  final double played;
+  final List<(double, double)> buffered;
+  final BetterPlayerProgressColors colors;
+  final double trackHeight;
+  final double handleRadius;
 
   @override
   void paint(Canvas canvas, Size size) {
-    double height = _betterPlayerController.isFullScreen ? 4.0 : 2.0;
+    final top = (size.height - trackHeight) / 2;
+    final radius = Radius.circular(trackHeight / 2);
+    RRect bar(double from, double to) =>
+        RRect.fromRectAndRadius(Rect.fromLTRB(size.width * from, top, size.width * to, top + trackHeight), radius);
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromPoints(Offset(0.0, size.height / 2), Offset(size.width, size.height / 2 + height)),
-        const Radius.circular(4.0),
-      ),
-      colors.backgroundPaint,
-    );
-    if (!value.initialized) {
-      return;
+    canvas.drawRRect(bar(0, 1), colors.backgroundPaint);
+    for (final (start, end) in buffered) {
+      if (end > start) canvas.drawRRect(bar(start, end), colors.bufferedPaint);
     }
-    double playedPartPercent = value.position.inMilliseconds / value.duration!.inMilliseconds;
-    if (playedPartPercent.isNaN) {
-      playedPartPercent = 0;
+    if (played > 0) canvas.drawRRect(bar(0, played), colors.playedPaint);
+    if (handleRadius > 0) {
+      canvas.drawCircle(Offset(size.width * played, size.height / 2), handleRadius, colors.handlePaint);
     }
-    final double playedPart = playedPartPercent > 1 ? size.width : playedPartPercent * size.width;
-    for (final DurationRange range in value.buffered) {
-      double start = range.startFraction(value.duration!) * size.width;
-      if (start.isNaN) {
-        start = 0;
-      }
-      double end = range.endFraction(value.duration!) * size.width;
-      if (end.isNaN) {
-        end = 0;
-      }
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromPoints(Offset(start, size.height / 2), Offset(end, size.height / 2 + height)),
-          const Radius.circular(4.0),
-        ),
-        colors.bufferedPaint,
-      );
-    }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromPoints(Offset(0.0, size.height / 2), Offset(playedPart, size.height / 2 + height)),
-        const Radius.circular(4.0),
-      ),
-      colors.playedPaint,
-    );
-    canvas.drawCircle(Offset(playedPart, size.height / 2 + height / 2), height * 3, colors.handlePaint);
-  }
-}
-
-/// Widget that displays a thumbnail preview of the video at a specific position
-class _ThumbnailPreviewWidget extends StatelessWidget {
-  const _ThumbnailPreviewWidget({
-    required this.controller,
-    required this.position,
-    required this.width,
-    required this.height,
-  });
-
-  final VideoPlayerController controller;
-  final Duration position;
-  final double width;
-  final double height;
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-
-    if (hours > 0) {
-      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
-    }
-    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
-  }
-
-  /// Check if position is buffered
-  bool _isBuffered() {
-    for (final DurationRange range in controller.value.buffered) {
-      if (position >= range.start && position <= range.end) {
-        return true;
-      }
-    }
-    return false;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final bool isBuffered = _isBuffered();
+  bool shouldRepaint(_ProgressBarPainter old) =>
+      old.played != played ||
+      old.trackHeight != trackHeight ||
+      old.handleRadius != handleRadius ||
+      old.colors != colors ||
+      old.buffered.length != buffered.length ||
+      !_sameRanges(old.buffered, buffered);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(8.0),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .5), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Video frame preview
-          SizedBox(
-            width: width,
-            height: height,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6.0)),
-              child: Container(
-                color: Colors.black,
-                child: Stack(
-                  children: [
-                    // Video frame - use contain to show full frame without cropping
-                    Center(
-                      child: AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller)),
-                    ),
-                    // Loading overlay for unbuffered content
-                    if (!isBuffered)
-                      Container(
-                        color: Colors.black.withValues(alpha: .7),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha: .8)),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Loading...',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: .8),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Timestamp
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-            decoration: BoxDecoration(
-              color: Colors.black87,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(6.0)),
-            ),
-            child: Text(
-              _formatDuration(position),
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+  static bool _sameRanges(List<(double, double)> a, List<(double, double)> b) {
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
   }
 }

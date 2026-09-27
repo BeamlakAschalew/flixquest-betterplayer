@@ -82,6 +82,11 @@ class BetterPlayerControlsConfiguration {
     this.introDbSkipAvailable,
     this.onIntroDbSkip,
     this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
+    this.subtitle,
+    this.strings = const BetterPlayerControlsStrings(),
+    this.emphasisFontFamily,
+    this.onNextEpisodeTap,
+    this.quickActions = const [],
   });
 
   factory BetterPlayerControlsConfiguration.white() => const BetterPlayerControlsConfiguration(
@@ -333,4 +338,22 @@ class BetterPlayerControlsConfiguration {
 
   ///Gesture-based controls configuration (volume/brightness swipe)
   final BetterPlayerGestureConfiguration gestureConfiguration;
+
+  ///Second line under [name], such as the episode: "S1:E3 · Pilot".
+  final String? subtitle;
+
+  ///The words the phone controls show.
+  final BetterPlayerControlsStrings strings;
+
+  ///A heavier face for the title, labels and times, when the app ships its
+  ///weights as separate families. Without it they are drawn bold.
+  final String? emphasisFontFamily;
+
+  ///Plays the next episode. The Next episode control shows only with it.
+  final VoidCallback? onNextEpisodeTap;
+
+  ///The app's own actions, given a labelled button beside the built-in ones
+  ///(Channels, Backup streams). Anything less frequent belongs in
+  ///[overflowMenuCustomItems].
+  final List<BetterPlayerOverflowMenuItem> quickActions;
 }
