@@ -6,9 +6,9 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 /// How long the overlay takes to fade in or out.
 const Duration betterPlayerMotionDuration = Duration(milliseconds: 160);
 
-/// The player's own colours. It sits over video, which is dark whatever the
-/// app's theme, so these stay fixed: white ink, black glass, and panels a
-/// step off black. The accent is kept to the timeline.
+/// The colours of things drawn over the video: controls, badges, the
+/// gesture pill. The picture is dark whatever the app's theme, so these stay
+/// fixed: white ink and black glass. The accent is kept to the timeline.
 abstract final class BetterPlayerColors {
   /// A control at rest: black at 45%.
   static const Color idle = Color(0x73000000);
@@ -16,10 +16,8 @@ abstract final class BetterPlayerColors {
   /// A control under the finger: near-white, with a black icon.
   static const Color pressed = Color(0xF2FFFFFF);
 
-  /// Sheets and panels opened from the player.
+  /// Panels over the picture in the dark modes.
   static const Color panel = Color(0xFF161616);
-
-  /// A tile or a selected row inside a panel.
   static const Color panelRaised = Color(0xFF262626);
 
   static const Color foreground = Color(0xFFFFFFFF);
@@ -28,48 +26,159 @@ abstract final class BetterPlayerColors {
   static const Color hairline = Color(0x1FFFFFFF);
 }
 
-/// The panels' theme: dark, with the host app's accent kept as `primary` for
-/// progress, whatever mode the app itself is in.
-ThemeData betterPlayerPanelTheme(ThemeData inherited) {
+/// The colours of the panels the player opens (sheets, lists, menus). They
+/// follow the app: near-white in Light, a step off black in the dark modes.
+@immutable
+class BetterPlayerPanelColors extends ThemeExtension<BetterPlayerPanelColors> {
+  const BetterPlayerPanelColors({
+    required this.page,
+    required this.panel,
+    required this.raised,
+    required this.foreground,
+    required this.secondary,
+    required this.muted,
+    required this.hairline,
+    required this.selectedFill,
+    required this.pill,
+    required this.onPill,
+    required this.track,
+  });
+
+  static const BetterPlayerPanelColors dark = BetterPlayerPanelColors(
+    page: Color(0xFF000000),
+    panel: BetterPlayerColors.panel,
+    raised: BetterPlayerColors.panelRaised,
+    foreground: BetterPlayerColors.foreground,
+    secondary: BetterPlayerColors.secondary,
+    muted: BetterPlayerColors.muted,
+    hairline: BetterPlayerColors.hairline,
+    selectedFill: Color(0x14FFFFFF),
+    pill: BetterPlayerColors.pressed,
+    onPill: Color(0xFF000000),
+    track: Color(0x3DFFFFFF),
+  );
+
+  /// Light panels on [page], the app's own page colour.
+  factory BetterPlayerPanelColors.light(Color page) {
+    const ink = Color(0xFF141516);
+    Color lift(double alpha) => Color.alphaBlend(ink.withValues(alpha: alpha), page);
+    return BetterPlayerPanelColors(
+      page: page,
+      panel: page,
+      raised: lift(.07),
+      foreground: ink,
+      secondary: const Color(0xFF2F3134),
+      muted: const Color(0xFF5C5F63),
+      hairline: ink.withValues(alpha: .12),
+      selectedFill: ink.withValues(alpha: .06),
+      pill: ink.withValues(alpha: .95),
+      onPill: const Color(0xFFFFFFFF),
+      track: ink.withValues(alpha: .16),
+    );
+  }
+
+  /// The screen behind a portrait player, around the video.
+  final Color page;
+
+  /// A sheet's background.
+  final Color panel;
+
+  /// Tiles and placeholders on a panel.
+  final Color raised;
+  final Color foreground;
+  final Color secondary;
+  final Color muted;
+  final Color hairline;
+
+  /// Behind the chosen row.
+  final Color selectedFill;
+
+  /// The main button, and what is written on it.
+  final Color pill;
+  final Color onPill;
+
+  /// The unfilled part of a slider or bar.
+  final Color track;
+
+  bool get isLight => ThemeData.estimateBrightnessForColor(panel) == Brightness.light;
+
+  /// The panel colours in effect; the dark ones anywhere no panel theme was
+  /// set, which is over the video.
+  static BetterPlayerPanelColors of(BuildContext context) =>
+      Theme.of(context).extension<BetterPlayerPanelColors>() ?? dark;
+
+  @override
+  BetterPlayerPanelColors copyWith() => this;
+
+  @override
+  BetterPlayerPanelColors lerp(BetterPlayerPanelColors? other, double t) {
+    if (other == null) return this;
+    return BetterPlayerPanelColors(
+      page: Color.lerp(page, other.page, t)!,
+      panel: Color.lerp(panel, other.panel, t)!,
+      raised: Color.lerp(raised, other.raised, t)!,
+      foreground: Color.lerp(foreground, other.foreground, t)!,
+      secondary: Color.lerp(secondary, other.secondary, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
+      selectedFill: Color.lerp(selectedFill, other.selectedFill, t)!,
+      pill: Color.lerp(pill, other.pill, t)!,
+      onPill: Color.lerp(onPill, other.onPill, t)!,
+      track: Color.lerp(track, other.track, t)!,
+    );
+  }
+}
+
+/// The panels' theme. It follows the app's mode (light panels in Light,
+/// dark ones otherwise) unless [dark] asks for the dark panels whatever the
+/// mode, for anything drawn over the video. The app's accent stays `primary`
+/// for progress; buttons are ink pills, never the accent.
+ThemeData betterPlayerPanelTheme(ThemeData inherited, {bool dark = false}) {
   final accent = inherited.colorScheme.primary;
+  final light = !dark && inherited.colorScheme.brightness == Brightness.light;
+  final colors = light ? BetterPlayerPanelColors.light(inherited.scaffoldBackgroundColor) : BetterPlayerPanelColors.dark;
   final base = ThemeData(
     useMaterial3: inherited.useMaterial3,
-    brightness: Brightness.dark,
+    brightness: light ? Brightness.light : Brightness.dark,
     fontFamily: inherited.textTheme.bodyMedium?.fontFamily,
   );
-  final scheme = ColorScheme.dark(
+  final scheme = (light ? const ColorScheme.light() : const ColorScheme.dark()).copyWith(
     primary: accent,
     onPrimary: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark ? Colors.white : Colors.black,
-    surface: BetterPlayerColors.panel,
-    onSurface: BetterPlayerColors.foreground,
-    onSurfaceVariant: BetterPlayerColors.muted,
-    surfaceContainerHigh: BetterPlayerColors.panel,
-    surfaceContainerHighest: BetterPlayerColors.panelRaised,
-    outlineVariant: BetterPlayerColors.hairline,
+    surface: colors.panel,
+    onSurface: colors.foreground,
+    onSurfaceVariant: colors.muted,
+    surfaceContainerLow: colors.panel,
+    surfaceContainer: colors.panel,
+    surfaceContainerHigh: colors.panel,
+    surfaceContainerHighest: colors.raised,
+    outline: colors.hairline,
+    outlineVariant: colors.hairline,
     error: inherited.colorScheme.error,
   );
-  const white = BetterPlayerColors.foreground;
+  final ink = colors.foreground;
   final pill = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
   const buttonText = TextStyle(fontSize: 15, fontWeight: FontWeight.w700);
+  final radius = BorderRadius.circular(8);
   return base.copyWith(
+    extensions: <ThemeExtension<dynamic>>[colors],
     colorScheme: scheme,
-    canvasColor: BetterPlayerColors.panel,
-    scaffoldBackgroundColor: BetterPlayerColors.panel,
-    textTheme: base.textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-    iconTheme: const IconThemeData(color: white),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: white,
-      linearTrackColor: Colors.white24,
+    canvasColor: colors.panel,
+    scaffoldBackgroundColor: colors.panel,
+    textTheme: base.textTheme.apply(bodyColor: ink, displayColor: ink),
+    iconTheme: IconThemeData(color: ink),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: ink,
+      linearTrackColor: colors.track,
       circularTrackColor: Colors.transparent,
     ),
     textSelectionTheme: inherited.textSelectionTheme,
-    // White pills with black text, as Netflix's; never the accent.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: BetterPlayerColors.pressed,
-        foregroundColor: Colors.black,
-        disabledBackgroundColor: Colors.white12,
-        disabledForegroundColor: Colors.white38,
+        backgroundColor: colors.pill,
+        foregroundColor: colors.onPill,
+        disabledBackgroundColor: colors.hairline,
+        disabledForegroundColor: colors.muted,
         minimumSize: const Size(0, 44),
         shape: pill,
         textStyle: buttonText,
@@ -77,8 +186,8 @@ ThemeData betterPlayerPanelTheme(ThemeData inherited) {
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: BetterPlayerColors.pressed,
-        foregroundColor: Colors.black,
+        backgroundColor: colors.pill,
+        foregroundColor: colors.onPill,
         minimumSize: const Size(0, 44),
         shape: pill,
         textStyle: buttonText,
@@ -86,68 +195,69 @@ ThemeData betterPlayerPanelTheme(ThemeData inherited) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: white,
-        side: const BorderSide(color: Colors.white38),
+        foregroundColor: ink,
+        side: BorderSide(color: ink.withValues(alpha: .32)),
         minimumSize: const Size(0, 44),
         shape: pill,
         textStyle: buttonText,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(foregroundColor: white, textStyle: buttonText),
+      style: TextButton.styleFrom(foregroundColor: ink, textStyle: buttonText),
     ),
-    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: white)),
-    sliderTheme: const SliderThemeData(
-      activeTrackColor: white,
-      inactiveTrackColor: Colors.white24,
-      thumbColor: white,
-      overlayColor: Color(0x1FFFFFFF),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: ink)),
+    sliderTheme: SliderThemeData(
+      activeTrackColor: ink,
+      inactiveTrackColor: colors.track,
+      thumbColor: ink,
+      overlayColor: ink.withValues(alpha: .12),
       activeTickMarkColor: Colors.transparent,
       inactiveTickMarkColor: Colors.transparent,
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? Colors.black : Colors.white70,
+        (states) => states.contains(WidgetState.selected) ? colors.onPill : colors.muted,
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? white : Colors.white24,
+        (states) => states.contains(WidgetState.selected) ? colors.pill : colors.track,
       ),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? white : Colors.transparent,
+        (states) => states.contains(WidgetState.selected) ? colors.pill : Colors.transparent,
       ),
-      checkColor: const WidgetStatePropertyAll(Colors.black),
-      side: const BorderSide(color: Colors.white54, width: 1.5),
+      checkColor: WidgetStatePropertyAll(colors.onPill),
+      side: BorderSide(color: colors.muted, width: 1.5),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0x1AFFFFFF),
+      fillColor: colors.raised,
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      hintStyle: const TextStyle(color: BetterPlayerColors.muted),
-      prefixIconColor: BetterPlayerColors.muted,
-      suffixIconColor: BetterPlayerColors.muted,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      hintStyle: TextStyle(color: colors.muted),
+      prefixIconColor: colors.muted,
+      suffixIconColor: colors.muted,
+      border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.white54),
+        borderRadius: radius,
+        borderSide: BorderSide(color: ink.withValues(alpha: .5)),
       ),
     ),
-    snackBarTheme: const SnackBarThemeData(
-      backgroundColor: Color(0xFF2B2B2B),
-      contentTextStyle: TextStyle(color: white, fontSize: 14),
-      actionTextColor: white,
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: light ? const Color(0xFF2B2C2E) : const Color(0xFF2B2B2B),
+      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+      actionTextColor: Colors.white,
       behavior: SnackBarBehavior.floating,
     ),
-    dialogTheme: const DialogThemeData(backgroundColor: BetterPlayerColors.panel),
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: BetterPlayerColors.panel,
-      modalBackgroundColor: BetterPlayerColors.panel,
+    dialogTheme: DialogThemeData(backgroundColor: colors.panel, surfaceTintColor: Colors.transparent),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: colors.panel,
+      modalBackgroundColor: colors.panel,
+      surfaceTintColor: Colors.transparent,
     ),
-    dividerTheme: const DividerThemeData(color: BetterPlayerColors.hairline, space: 1),
-    listTileTheme: const ListTileThemeData(iconColor: BetterPlayerColors.muted, textColor: white),
+    dividerTheme: DividerThemeData(color: colors.hairline, space: 1),
+    listTileTheme: ListTileThemeData(iconColor: colors.muted, textColor: ink),
   );
 }
 
@@ -358,6 +468,7 @@ class BetterPlayerModalSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.sizeOf(context).height;
+    final colors = BetterPlayerPanelColors.of(context);
     return SafeArea(
       top: false,
       child: Align(
@@ -365,7 +476,7 @@ class BetterPlayerModalSheet extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: 640, maxHeight: height * .9),
           child: Material(
-            color: BetterPlayerColors.panel,
+            color: colors.panel,
             clipBehavior: Clip.antiAlias,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Column(
@@ -375,7 +486,7 @@ class BetterPlayerModalSheet extends StatelessWidget {
                 Container(
                   width: 36,
                   height: 4,
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(99)),
+                  decoration: BoxDecoration(color: colors.track, borderRadius: BorderRadius.circular(99)),
                 ),
                 BetterPlayerPanelHeader(title: title, subtitle: subtitle, closeLabel: closeLabel),
                 Flexible(child: child),
@@ -399,6 +510,7 @@ class BetterPlayerPanelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 8, 8),
       child: Row(
@@ -412,7 +524,7 @@ class BetterPlayerPanelHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: colors.foreground, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 if (subtitle?.isNotEmpty == true) ...[
                   const SizedBox(height: 2),
@@ -420,7 +532,7 @@ class BetterPlayerPanelHeader extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: BetterPlayerColors.muted, fontSize: 13),
+                    style: TextStyle(color: colors.muted, fontSize: 13),
                   ),
                 ],
               ],
@@ -428,7 +540,7 @@ class BetterPlayerPanelHeader extends StatelessWidget {
           ),
           IconButton(
             tooltip: closeLabel ?? MaterialLocalizations.of(context).closeButtonTooltip,
-            color: Colors.white,
+            color: colors.foreground,
             onPressed: () => Navigator.maybePop(context),
             icon: Icon(PhosphorIcons.x()),
           ),
@@ -447,11 +559,12 @@ class BetterPlayerIconSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     return Container(
       width: 48,
       height: 48,
-      decoration: const BoxDecoration(color: Color(0x1AFFFFFF), shape: BoxShape.circle),
-      child: Icon(icon, color: color ?? BetterPlayerColors.secondary),
+      decoration: BoxDecoration(color: colors.raised, shape: BoxShape.circle),
+      child: Icon(icon, color: color ?? colors.secondary),
     );
   }
 }
@@ -496,16 +609,17 @@ class _BetterPlayerSelectionTileState extends State<BetterPlayerSelectionTile> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     final titleColor = !widget.enabled
-        ? Colors.white38
+        ? colors.muted.withValues(alpha: .6)
         : widget.selected
-        ? Colors.white
-        : BetterPlayerColors.secondary;
+        ? colors.foreground
+        : colors.secondary;
     return Semantics(
       selected: widget.selected,
       button: true,
       child: Material(
-        color: widget.selected ? const Color(0x14FFFFFF) : Colors.transparent,
+        color: widget.selected ? colors.selectedFill : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -519,7 +633,7 @@ class _BetterPlayerSelectionTileState extends State<BetterPlayerSelectionTile> {
                   SizedBox(
                     width: 32,
                     child: widget.selected
-                        ? Icon(PhosphorIcons.check(PhosphorIconsStyle.bold), size: 20, color: Colors.white)
+                        ? Icon(PhosphorIcons.check(PhosphorIconsStyle.bold), size: 20, color: colors.foreground)
                         : null,
                   ),
                   Expanded(
@@ -543,17 +657,17 @@ class _BetterPlayerSelectionTileState extends State<BetterPlayerSelectionTile> {
                             widget.subtitle!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: BetterPlayerColors.muted, fontSize: 12),
+                            style: TextStyle(color: colors.muted, fontSize: 12),
                           ),
                         ],
                       ],
                     ),
                   ),
                   if (_loading)
-                    const SizedBox.square(
-                      key: Key('better_player_selection_progress'),
+                    SizedBox.square(
+                      key: const Key('better_player_selection_progress'),
                       dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: colors.foreground),
                     )
                   else if (widget.trailing != null)
                     widget.trailing!,
@@ -579,6 +693,7 @@ class BetterPlayerMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -590,14 +705,14 @@ class BetterPlayerMenuRow extends StatelessWidget {
             padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 8, 8),
             child: Row(
               children: [
-                Icon(icon, size: 22, color: BetterPlayerColors.muted),
+                Icon(icon, size: 22, color: colors.muted),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: colors.foreground, fontSize: 15, fontWeight: FontWeight.w500),
                   ),
                 ),
                 if (value?.isNotEmpty == true) ...[
@@ -608,12 +723,12 @@ class BetterPlayerMenuRow extends StatelessWidget {
                       value!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: BetterPlayerColors.muted, fontSize: 13),
+                      style: TextStyle(color: colors.muted, fontSize: 13),
                     ),
                   ),
                 ],
                 const SizedBox(width: 4),
-                Icon(PhosphorIcons.caretRight(), size: 18, color: BetterPlayerColors.muted),
+                Icon(PhosphorIcons.caretRight(), size: 18, color: colors.muted),
               ],
             ),
           ),
@@ -635,7 +750,11 @@ class BetterPlayerPanelSectionTitle extends StatelessWidget {
       padding: const EdgeInsetsDirectional.fromSTEB(12, 4, 12, 8),
       child: Text(
         title,
-        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: BetterPlayerPanelColors.of(context).foreground,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -650,6 +769,7 @@ class BetterPlayerEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       child: Column(
@@ -660,14 +780,14 @@ class BetterPlayerEmptyState extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(color: colors.foreground, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           if (message != null) ...[
             const SizedBox(height: 4),
             Text(
               message!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: BetterPlayerColors.muted, fontSize: 14),
+              style: TextStyle(color: colors.muted, fontSize: 14),
             ),
           ],
         ],
@@ -676,7 +796,7 @@ class BetterPlayerEmptyState extends StatelessWidget {
   }
 }
 
-/// Speeds as stops along a line, the chosen one a larger white dot. Reads
+/// Speeds as stops along a line, the chosen one a larger dot. Reads
 /// left to right in every language, slowest first. Drag across the line to
 /// move through the stops, or tap one.
 class BetterPlayerSpeedSelector extends StatefulWidget {
@@ -725,6 +845,7 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerPanelColors.of(context);
     return Directionality(
       textDirection: TextDirection.ltr,
       child: LayoutBuilder(
@@ -744,7 +865,7 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
                     right: inset,
                     top: 21,
                     height: 2,
-                    child: const ColoredBox(color: Colors.white24),
+                    child: ColoredBox(color: colors.track),
                   ),
                   Row(
                     children: [
@@ -768,10 +889,10 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
                                         width: speed == _selected ? 22 : 10,
                                         height: speed == _selected ? 22 : 10,
                                         decoration: BoxDecoration(
-                                          color: speed == _selected ? Colors.white : Colors.white54,
+                                          color: speed == _selected ? colors.foreground : colors.muted,
                                           shape: BoxShape.circle,
                                           border: speed == _selected
-                                              ? Border.all(color: const Color(0x66FFFFFF), width: 5)
+                                              ? Border.all(color: colors.foreground.withValues(alpha: .35), width: 5)
                                               : null,
                                         ),
                                       ),
@@ -782,7 +903,7 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: speed == _selected ? Colors.white : BetterPlayerColors.muted,
+                                      color: speed == _selected ? colors.foreground : colors.muted,
                                       fontSize: 13,
                                       fontWeight: speed == _selected ? FontWeight.w700 : FontWeight.w500,
                                     ),
