@@ -401,7 +401,8 @@ class VideoEvent {
 
   /// Size of the video.
   ///
-  /// Only used if [eventType] is [VideoEventType.initialized].
+  /// Only used if [eventType] is [VideoEventType.initialized] or
+  /// [VideoEventType.videoSizeChanged].
   final Size? size;
 
   /// Buffered parts of the video.
@@ -437,6 +438,9 @@ enum VideoEventType {
 
   /// A pre-roll sequence advanced to the main content item.
   preRollEnded,
+
+  /// The decoded video size changed, for example after an adaptive quality switch.
+  videoSizeChanged,
 
   /// The playback has ended.
   completed,

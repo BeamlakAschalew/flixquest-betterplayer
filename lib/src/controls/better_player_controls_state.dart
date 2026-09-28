@@ -339,62 +339,142 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
   );
 
   void _showQualitiesSelectionWidget() {
-    final items = <Widget>[];
-    final names = betterPlayerController!.betterPlayerDataSource?.asmsTrackNames ?? const <String>[];
-    final tracks = betterPlayerController!.betterPlayerAsmsTracks;
+    final controller = betterPlayerController!;
+    var showAllQualities = false;
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: controller.betterPlayerConfiguration.useRootNavigator,
+      useSafeArea: true,
+      showDragHandle: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (sheetContext) => Theme(
+        data: betterPlayerPanelTheme(Theme.of(context)),
+        child: StatefulBuilder(
+          builder: (_, setSheetState) => ListenableBuilder(
+            // The decoded size changes as the stream adapts to the network.
+            listenable: controller.videoPlayerController ?? ValueNotifier<int>(0),
+            builder: (_, _) {
+              final items = _qualityItems(
+                showAll: showAllQualities,
+                onShowAll: () => setSheetState(() => showAllQualities = true),
+              );
+              return BetterPlayerModalSheet(
+                title: strings.quality,
+                subtitle: _selectedQualityLabel(),
+                closeLabel: strings.close,
+                child: items.isEmpty
+                    ? BetterPlayerEmptyState(icon: PhosphorIcons.monitorPlay(), title: _selectedQualityLabel())
+                    : _panelList(items),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isAutomaticTrack(BetterPlayerAsmsTrack track) => track.height == 0 && track.width == 0 && track.bitrate == 0;
+
+  static final RegExp _autoSourceName = RegExp(r'^\s*auto(?:matic)?\b', caseSensitive: false);
+
+  /// A provider source that is itself an adaptive playlist ("Auto ...").
+  bool get _providerAutoActive {
+    final controller = betterPlayerController!;
+    final name = controller.betterPlayerResolutionName;
+    if (name == null || name.trim().isEmpty) return false;
+    final displayName = controller.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
+    return _autoSourceName.hasMatch(displayName);
+  }
+
+  bool get _autoQualityActive {
+    final controller = betterPlayerController!;
+    if (_providerAutoActive) return true;
+    if (controller.betterPlayerResolutionName?.trim().isNotEmpty == true) return false;
+    final track = controller.betterPlayerAsmsTrack;
+    return track == null || _isAutomaticTrack(track);
+  }
+
+  List<Widget> _qualityItems({required bool showAll, required VoidCallback onShowAll}) {
+    final controller = betterPlayerController!;
+    final names = controller.betterPlayerDataSource?.asmsTrackNames ?? const <String>[];
+    final tracks = controller.betterPlayerAsmsTracks;
+    final sourceSelected = controller.betterPlayerResolutionName?.trim().isNotEmpty == true;
+    final autoActive = _autoQualityActive;
+    final hasAutoTrack = tracks.any(_isAutomaticTrack);
+
+    final streamItems = <Widget>[];
+    var variantsHidden = false;
     for (var index = 0; index < tracks.length; index++) {
       final track = tracks[index];
-      final automatic = track.height == 0 && track.width == 0 && track.bitrate == 0;
-      final currentSize = betterPlayerController?.videoPlayerController?.value.size;
-      final currentHeight = currentSize?.height.toInt() ?? 0;
-      final currentWidth = currentSize?.width.toInt() ?? 0;
+      final automatic = _isAutomaticTrack(track);
+      // A provider "Auto" source already stands for adaptive playback, so the
+      // stream's own Auto row would be a second, identical choice.
+      if (automatic && _providerAutoActive) continue;
+      if (!automatic && autoActive && hasAutoTrack && !showAll) {
+        variantsHidden = true;
+        continue;
+      }
+      final detectedHeight = BetterPlayerUtils.detectedVideoHeight(controller.videoPlayerController?.value.size);
       final label = automatic
-          ? betterPlayerController!.translations.qualityAuto
+          ? controller.translations.qualityAuto
           : index < names.length && names[index].trim().isNotEmpty
           ? names[index]
           : _qualityLabel(track);
-      final selected = betterPlayerController!.betterPlayerAsmsTrack == track;
-      items.add(
+      final selected = !sourceSelected && (automatic ? autoActive : controller.betterPlayerAsmsTrack == track);
+      streamItems.add(
         BetterPlayerSelectionTile(
           title: label,
-          subtitle: automatic ? (currentHeight > 0 ? '$currentWidth×$currentHeight' : null) : _qualityDetails(track),
+          subtitle: automatic ? (detectedHeight == null ? null : '${detectedHeight}p') : _qualityDetails(track),
           selected: selected,
           onTap: () {
             _closeSheet();
-            betterPlayerController!.setTrack(track);
+            controller.setTrack(track);
           },
         ),
       );
     }
-    betterPlayerController!.betterPlayerDataSource?.resolutions?.forEach((name, url) {
-      final selected = name == betterPlayerController!.betterPlayerResolutionName;
+    if (variantsHidden) {
+      streamItems.add(
+        BetterPlayerSelectionTile(title: 'Choose a specific quality', selected: false, onTap: onShowAll),
+      );
+    }
+
+    final sourceItems = <Widget>[];
+    controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
+      final selected = name == controller.betterPlayerResolutionName;
       final detectedDetails = selected ? _detectedQualityDetails() : null;
-      final displayName = betterPlayerController!.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
-      final description = betterPlayerController!.betterPlayerDataSource?.resolutionDescriptions?[name];
+      final displayName = controller.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
+      final description = controller.betterPlayerDataSource?.resolutionDescriptions?[name];
       final subtitleParts = <String>[
         if (description?.trim().isNotEmpty == true) description!.trim(),
         if (BetterPlayerUtils.resolutionHeightFromLabel(displayName) == null && detectedDetails != null)
           detectedDetails,
       ];
-      items.add(
+      sourceItems.add(
         BetterPlayerSelectionTile(
           title: displayName,
           subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
           selected: selected,
           onTap: () {
             _closeSheet();
-            betterPlayerController!.setResolution(url, name: name);
+            controller.setResolution(url, name: name);
           },
         ),
       );
     });
-    showPanel(
-      title: strings.quality,
-      subtitle: _selectedQualityLabel(),
-      child: items.isEmpty
-          ? BetterPlayerEmptyState(icon: PhosphorIcons.monitorPlay(), title: _selectedQualityLabel())
-          : _panelList(items),
-    );
+
+    if (streamItems.isNotEmpty && sourceItems.isNotEmpty) {
+      return [
+        BetterPlayerPanelSectionTitle('Stream quality'),
+        ...streamItems,
+        const SizedBox(height: 12),
+        BetterPlayerPanelSectionTitle('Sources'),
+        ...sourceItems,
+      ];
+    }
+    return [...streamItems, ...sourceItems];
   }
 
   String? _selectedSubtitleLabel() {

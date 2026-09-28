@@ -43,6 +43,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.VideoSize
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
@@ -666,6 +667,20 @@ internal class BetterPlayer(
                 val event: MutableMap<String, Any?> = HashMap()
                 event["event"] = "preRollEnded"
                 event["key"] = key
+                eventSink.success(event)
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (!isInitialized || videoSize.width == 0 || videoSize.height == 0) {
+                    return
+                }
+                val rotated = videoSize.unappliedRotationDegrees == 90 ||
+                    videoSize.unappliedRotationDegrees == 270
+                val event: MutableMap<String, Any?> = HashMap()
+                event["event"] = "videoSizeChanged"
+                event["key"] = key
+                event["width"] = if (rotated) videoSize.height else videoSize.width
+                event["height"] = if (rotated) videoSize.width else videoSize.height
                 eventSink.success(event)
             }
 
