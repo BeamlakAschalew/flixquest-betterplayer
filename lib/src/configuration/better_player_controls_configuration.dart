@@ -357,8 +357,8 @@ class BetterPlayerControlsConfiguration {
   ///Plays the next episode. The Next episode control shows only with it.
   final VoidCallback? onNextEpisodeTap;
 
-  ///The app's own actions, given a labelled button beside the built-in ones
-  ///(Channels, Backup streams). Anything less frequent belongs in
-  ///[overflowMenuCustomItems].
+  ///The app's own actions, given a button beside the built-in ones (Switch
+  ///provider, Channels, Backup streams) on both the phone and the TV
+  ///controls. Anything less frequent belongs in [overflowMenuCustomItems].
   final List<BetterPlayerOverflowMenuItem> quickActions;
 }

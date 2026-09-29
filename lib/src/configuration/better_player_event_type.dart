@@ -26,4 +26,8 @@ enum BetterPlayerEventType {
   bufferingUpdate,
   bufferingEnd,
   changedPlaylistItem,
+
+  /// A batch of network bytes the player downloaded. Parameters: `bytes`, the
+  /// batch, and `totalBytes`, everything counted so far.
+  networkUsage,
 }

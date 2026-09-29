@@ -27,6 +27,7 @@ void main() {
           onEpisodeListTap: () {},
           enableMovieRecommendations: true,
           onMovieRecommendationsTap: () {},
+          quickActions: [BetterPlayerOverflowMenuItem(Icons.swap_horiz, 'Switch provider', () {})],
         ),
       ),
     );
@@ -56,6 +57,7 @@ void main() {
     const order = <String>[
       'rewind',
       'forward',
+      'quick_0',
       'episodes',
       'recommendations',
       'subtitles',

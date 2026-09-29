@@ -157,6 +157,17 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   );
 
   @override
+  Future<int?> flushNetworkUsage(int? textureId) async {
+    try {
+      final bytes = await _channel.invokeMethod<num>('flushNetworkUsage', <String, dynamic>{'textureId': textureId});
+      return bytes?.toInt();
+    } on MissingPluginException {
+      // Platforms that do not measure network usage, such as iOS.
+      return null;
+    }
+  }
+
+  @override
   Future<DateTime?> getAbsolutePosition(int? textureId) async {
     final int milliseconds =
         await _channel.invokeMethod<int>('absolutePosition', <String, dynamic>{'textureId': textureId}) ?? 0;
@@ -306,6 +317,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
 
           case 'pipStop':
             return VideoEvent(eventType: VideoEventType.pipStop, key: key);
+
+          case 'networkUsage':
+            return VideoEvent(
+              eventType: VideoEventType.networkUsage,
+              key: key,
+              bytesTransferred: (map['bytes'] as num?)?.toInt() ?? 0,
+            );
 
           default:
             return VideoEvent(eventType: VideoEventType.unknown, key: key);

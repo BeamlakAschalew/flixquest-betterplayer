@@ -35,6 +35,8 @@ class BetterPlayerController {
   static const String _speedParameter = 'speed';
   static const String _dataSourceParameter = 'dataSource';
   static const String _sourceKeyParameter = 'sourceKey';
+  static const String _bytesParameter = 'bytes';
+  static const String _totalBytesParameter = 'totalBytes';
   static const String _authorizationHeader = 'Authorization';
 
   ///General configuration used in controller instance.
@@ -178,6 +180,14 @@ class BetterPlayerController {
 
   ///Has player been disposed.
   bool _disposed = false;
+
+  int _networkBytesTransferred = 0;
+  bool _networkUsageMeasured = false;
+
+  /// Network bytes this controller's player has downloaded across every data
+  /// source it played, as of the last batch, or null when the platform does
+  /// not measure them. [flushNetworkUsage] brings it up to date.
+  int? get networkBytesTransferred => _networkUsageMeasured ? _networkBytesTransferred : null;
 
   ///Was player playing before automatic pause.
   bool? _wasPlayingBeforePause;
@@ -1567,11 +1577,38 @@ class BetterPlayerController {
         );
       case VideoEventType.bufferingEnd:
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingEnd, parameters: sourceParameters));
+      case VideoEventType.networkUsage:
+        _addNetworkUsage(event.bytesTransferred);
       default:
 
         ///TODO: Handle when needed
         break;
     }
+  }
+
+  void _addNetworkUsage(int? bytes) {
+    if (bytes == null) return;
+    _networkUsageMeasured = true;
+    _networkBytesTransferred += bytes;
+    if (bytes > 0) {
+      _postEvent(
+        BetterPlayerEvent(
+          BetterPlayerEventType.networkUsage,
+          parameters: <String, dynamic>{_bytesParameter: bytes, _totalBytesParameter: _networkBytesTransferred},
+        ),
+      );
+    }
+  }
+
+  /// Collects the bytes still waiting for the next batch and returns
+  /// [networkBytesTransferred].
+  ///
+  /// The request is sent before this returns, so it is safe to call right
+  /// before [dispose].
+  Future<int?> flushNetworkUsage() async {
+    final pending = videoPlayerController?.flushNetworkUsage();
+    if (pending != null) _addNetworkUsage(await pending);
+    return networkBytesTransferred;
   }
 
   ///Setup controls always visible mode

@@ -259,6 +259,9 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           value = value.copyWith(isPip: true);
         case VideoEventType.pipStop:
           value = value.copyWith(isPip: false);
+        case VideoEventType.networkUsage:
+          // Counted by BetterPlayerController.
+          break;
         case VideoEventType.unknown:
           break;
       }
@@ -529,6 +532,17 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       return null;
     }
     return _videoPlayerPlatform.getPosition(_textureId);
+  }
+
+  /// Takes the network bytes downloaded since the last
+  /// [VideoEventType.networkUsage] event or flush, or null when the platform
+  /// does not measure them.
+  ///
+  /// The request is sent before this returns, so a flush followed by
+  /// [dispose] still reaches the player before it is released.
+  Future<int?> flushNetworkUsage() {
+    if (!_created || _isDisposed) return Future<int?>.value();
+    return _videoPlayerPlatform.flushNetworkUsage(_textureId);
   }
 
   /// The absolute position in the current video stream

@@ -101,6 +101,8 @@ internal class BetterPlayer(
     )
     private val loadControl: LoadControl
     private val streamingDiagnostics: StreamingDiagnostics
+    private val networkUsageMeter: NetworkUsageMeter
+    private val networkUsageHandler = Handler(Looper.getMainLooper())
     private var isInitialized = false
     private var surface: Surface? = null
     private var key: String? = null
@@ -149,10 +151,13 @@ internal class BetterPlayer(
             .setInitialBitrateEstimate(1_000_000L)
             .setResetOnNetworkTypeChange(true)
             .build()
+        networkUsageMeter = NetworkUsageMeter(bandwidthMeter, onBatchReady = {
+            networkUsageHandler.post(::sendNetworkUsage)
+        })
         exoPlayer = ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
-            .setBandwidthMeter(bandwidthMeter)
+            .setBandwidthMeter(networkUsageMeter)
             .build()
         streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
         exoPlayer.addAnalyticsListener(streamingDiagnostics)
@@ -1125,7 +1130,18 @@ internal class BetterPlayer(
         setAudioAttributes(exoPlayer, mixWithOthers)
     }
 
+    /** Sends the network bytes counted since the last batch, if any. */
+    private fun sendNetworkUsage() {
+        val bytes = networkUsageMeter.drain()
+        if (bytes <= 0) return
+        eventSink.success(mapOf("event" to "networkUsage", "bytes" to bytes))
+    }
+
+    /** Hands over the network bytes counted since the last batch. */
+    fun drainNetworkUsage(): Long = networkUsageMeter.drain()
+
     fun dispose() {
+        networkUsageHandler.removeCallbacksAndMessages(null)
         disposeMediaSession()
         disposeRemoteNotifications()
         positionSnapshotHandler?.removeCallbacksAndMessages(null)

@@ -291,6 +291,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             }
 
             ABSOLUTE_POSITION_METHOD -> result.success(player.absolutePosition)
+            FLUSH_NETWORK_USAGE_METHOD -> result.success(player.drainNetworkUsage())
             SET_SPEED_METHOD -> {
                 val speed = call.argument<Double>(SPEED_PARAMETER)!!
                 if (castManager?.setSpeed(textureId, speed) != true) {
@@ -897,6 +898,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val SEEK_TO_METHOD = "seekTo"
         private const val POSITION_METHOD = "position"
         private const val ABSOLUTE_POSITION_METHOD = "absolutePosition"
+        private const val FLUSH_NETWORK_USAGE_METHOD = "flushNetworkUsage"
         private const val SET_SPEED_METHOD = "setSpeed"
         private const val SET_TRACK_PARAMETERS_METHOD = "setTrackParameters"
         private const val SET_AUDIO_TRACK_METHOD = "setAudioTrack"

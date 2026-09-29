@@ -707,6 +707,14 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       ],
     ];
     final trailing = <_TvButtonSpec>[
+      // The app's own frequent actions lead, as they do on the phone bar.
+      for (final (index, action) in _configuration.quickActions.indexed)
+        _TvButtonSpec(
+          id: 'quick_$index',
+          label: action.title,
+          icon: action.icon,
+          onPressed: () => action.onClicked(),
+        ),
       if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
         _TvButtonSpec(
           id: 'episodes',

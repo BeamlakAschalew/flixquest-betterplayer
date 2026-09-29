@@ -140,6 +140,11 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('getAbsolutePosition() has not been implemented.');
   }
 
+  /// Takes the network bytes the player has downloaded since the last
+  /// [VideoEventType.networkUsage] event or flush, or null when the platform
+  /// does not measure them.
+  Future<int?> flushNetworkUsage(int? textureId) => Future<int?>.value();
+
   ///Enables PiP mode.
   Future<void> enablePictureInPicture(int? textureId, double? top, double? left, double? width, double? height) {
     throw UnimplementedError('enablePictureInPicture() has not been implemented.');
@@ -384,7 +389,15 @@ class VideoEvent {
   ///
   /// Depending on the [eventType], the [duration], [size] and [buffered]
   /// arguments can be null.
-  VideoEvent({required this.eventType, required this.key, this.duration, this.size, this.buffered, this.position});
+  VideoEvent({
+    required this.eventType,
+    required this.key,
+    this.duration,
+    this.size,
+    this.buffered,
+    this.position,
+    this.bytesTransferred,
+  });
 
   /// The type of the event.
   final VideoEventType eventType;
@@ -412,6 +425,11 @@ class VideoEvent {
 
   ///Seek position
   final Duration? position;
+
+  /// Network bytes downloaded since the previous batch.
+  ///
+  /// Only used if [eventType] is [VideoEventType.networkUsage].
+  final int? bytesTransferred;
 
   @override
   bool operator ==(Object other) =>
@@ -468,6 +486,9 @@ enum VideoEventType {
 
   /// Picture in picture mode has been dismissed
   pipStop,
+
+  /// A batch of network bytes the player downloaded.
+  networkUsage,
 
   /// An unknown event has been received.
   unknown,
