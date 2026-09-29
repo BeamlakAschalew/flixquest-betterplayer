@@ -340,7 +340,6 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
   void _showQualitiesSelectionWidget() {
     final controller = betterPlayerController!;
-    var showAllQualities = false;
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: controller.betterPlayerConfiguration.useRootNavigator,
@@ -351,25 +350,20 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       barrierColor: Colors.black54,
       builder: (sheetContext) => Theme(
         data: betterPlayerPanelTheme(Theme.of(context)),
-        child: StatefulBuilder(
-          builder: (_, setSheetState) => ListenableBuilder(
-            // The decoded size changes as the stream adapts to the network.
-            listenable: controller.videoPlayerController ?? ValueNotifier<int>(0),
-            builder: (_, _) {
-              final items = _qualityItems(
-                showAll: showAllQualities,
-                onShowAll: () => setSheetState(() => showAllQualities = true),
-              );
-              return BetterPlayerModalSheet(
-                title: strings.quality,
-                subtitle: _selectedQualityLabel(),
-                closeLabel: strings.close,
-                child: items.isEmpty
-                    ? BetterPlayerEmptyState(icon: PhosphorIcons.monitorPlay(), title: _selectedQualityLabel())
-                    : _panelList(items),
-              );
-            },
-          ),
+        child: ListenableBuilder(
+          // The decoded size changes as the stream adapts to the network.
+          listenable: controller.videoPlayerController ?? ValueNotifier<int>(0),
+          builder: (_, _) {
+            final items = _qualityItems();
+            return BetterPlayerModalSheet(
+              title: strings.quality,
+              subtitle: _selectedQualityLabel(),
+              closeLabel: strings.close,
+              child: items.isEmpty
+                  ? BetterPlayerEmptyState(icon: PhosphorIcons.monitorPlay(), title: _selectedQualityLabel())
+                  : _panelList(items),
+            );
+          },
         ),
       ),
     );
@@ -396,7 +390,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     return track == null || _isAutomaticTrack(track);
   }
 
-  List<Widget> _qualityItems({required bool showAll, required VoidCallback onShowAll}) {
+  List<Widget> _qualityItems() {
     final controller = betterPlayerController!;
     final names = controller.betterPlayerDataSource?.asmsTrackNames ?? const <String>[];
     final tracks = controller.betterPlayerAsmsTracks;
@@ -405,17 +399,13 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     final hasAutoTrack = tracks.any(_isAutomaticTrack);
 
     final streamItems = <Widget>[];
-    var variantsHidden = false;
     for (var index = 0; index < tracks.length; index++) {
       final track = tracks[index];
       final automatic = _isAutomaticTrack(track);
       // A provider "Auto" source already stands for adaptive playback, so the
       // stream's own Auto row would be a second, identical choice.
       if (automatic && _providerAutoActive) continue;
-      if (!automatic && autoActive && hasAutoTrack && !showAll) {
-        variantsHidden = true;
-        continue;
-      }
+      if (!automatic && autoActive && hasAutoTrack) continue;
       final detectedHeight = BetterPlayerUtils.detectedVideoHeight(controller.videoPlayerController?.value.size);
       final label = automatic
           ? controller.translations.qualityAuto
@@ -426,7 +416,9 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       streamItems.add(
         BetterPlayerSelectionTile(
           title: label,
-          subtitle: automatic ? (detectedHeight == null ? null : '${detectedHeight}p') : _qualityDetails(track),
+          subtitle: automatic
+              ? [if (detectedHeight != null) '${detectedHeight}p', strings.qualityAutoNote].join(' • ')
+              : _qualityDetails(track),
           selected: selected,
           onTap: () {
             _closeSheet();
@@ -435,12 +427,6 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
         ),
       );
     }
-    if (variantsHidden) {
-      streamItems.add(
-        BetterPlayerSelectionTile(title: 'Choose a specific quality', selected: false, onTap: onShowAll),
-      );
-    }
-
     final sourceItems = <Widget>[];
     controller.betterPlayerDataSource?.resolutions?.forEach((name, url) {
       final selected = name == controller.betterPlayerResolutionName;
@@ -467,7 +453,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
     if (streamItems.isNotEmpty && sourceItems.isNotEmpty) {
       return [
-        BetterPlayerPanelSectionTitle('Stream quality'),
+        BetterPlayerPanelSectionTitle(strings.qualityResolution),
         ...streamItems,
         const SizedBox(height: 12),
         BetterPlayerPanelSectionTitle('Sources'),

@@ -23,6 +23,8 @@ class BetterPlayerControlsStrings {
     this.subtitles = 'Subtitles',
     this.off = 'Off',
     this.quality = 'Quality',
+    this.qualityAutoNote = 'Adjusts to your connection',
+    this.qualityResolution = 'Resolution',
     this.more = 'More',
     this.close = 'Close',
     this.download = 'Download',
@@ -65,6 +67,12 @@ class BetterPlayerControlsStrings {
   final String subtitles;
   final String off;
   final String quality;
+
+  /// Under Auto: it follows the network, so the resolution comes and goes.
+  final String qualityAutoNote;
+
+  /// Heads the stream's own resolutions when provider sources share the sheet.
+  final String qualityResolution;
   final String more;
   final String close;
   final String download;
