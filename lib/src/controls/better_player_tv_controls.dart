@@ -275,7 +275,9 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     widget.controller.toggleControlsVisibility(visible);
     if (!visible) {
       _hideTimer?.cancel();
-      _rootFocus.requestFocus();
+      // A sheet or dialog the app opened over the player owns the remote;
+      // taking focus back under it would leave the D-pad driving the picture.
+      if (!mounted || (ModalRoute.isCurrentOf(context) ?? true)) _rootFocus.requestFocus();
     } else {
       _restartHideTimer();
     }

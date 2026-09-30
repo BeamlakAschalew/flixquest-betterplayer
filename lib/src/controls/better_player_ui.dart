@@ -129,6 +129,79 @@ class BetterPlayerPanelColors extends ThemeExtension<BetterPlayerPanelColors> {
   }
 }
 
+/// The colours of the TV player's panels (menus and prompts opened over the
+/// picture). They follow the app the way its own TV screens do, built from
+/// the theme's page colour: a panel a shade off the page, so near-black in
+/// Lights Out and near-white in Light, and focus filled with the page's ink.
+@immutable
+class BetterPlayerTvPanelColors {
+  const BetterPlayerTvPanelColors._({
+    required this.dark,
+    required this.panel,
+    required this.foreground,
+    required this.muted,
+    required this.disabled,
+    required this.idleFill,
+    required this.track,
+    required this.focusFill,
+    required this.onFocus,
+    required this.onFocusMuted,
+    required this.onFocusTrack,
+  });
+
+  factory BetterPlayerTvPanelColors.fromTheme(ThemeData theme) {
+    final dark = theme.colorScheme.brightness == Brightness.dark;
+    final page = theme.scaffoldBackgroundColor;
+    final ink = dark ? const Color(0xfff7f7f7) : const Color(0xff141516);
+    return BetterPlayerTvPanelColors._(
+      dark: dark,
+      panel: Color.alphaBlend(ink.withValues(alpha: dark ? .045 : .035), page).withValues(alpha: .96),
+      foreground: ink,
+      muted: dark ? const Color(0xffa7a8a8) : const Color(0xff5c5f63),
+      disabled: ink.withValues(alpha: .38),
+      idleFill: ink.withValues(alpha: .14),
+      track: ink.withValues(alpha: .24),
+      focusFill: ink.withValues(alpha: .95),
+      onFocus: dark ? Colors.black : Colors.white,
+      onFocusMuted: dark ? Colors.black54 : Colors.white70,
+      onFocusTrack: dark ? Colors.black12 : Colors.white24,
+    );
+  }
+
+  static final Expando<BetterPlayerTvPanelColors> _cache = Expando<BetterPlayerTvPanelColors>(
+    'BetterPlayerTvPanelColors',
+  );
+
+  /// The colours for the theme in effect at [context], built once per theme.
+  static BetterPlayerTvPanelColors of(BuildContext context) {
+    final theme = Theme.of(context);
+    return _cache[theme] ??= BetterPlayerTvPanelColors.fromTheme(theme);
+  }
+
+  final bool dark;
+
+  /// A panel's background.
+  final Color panel;
+
+  /// Titles, labels and icons.
+  final Color foreground;
+  final Color muted;
+  final Color disabled;
+
+  /// A control at rest.
+  final Color idleFill;
+
+  /// The unfilled part of a bar.
+  final Color track;
+
+  /// A focused control: white on a dark page, near-black on a light one,
+  /// with [onFocus] for what is on it.
+  final Color focusFill;
+  final Color onFocus;
+  final Color onFocusMuted;
+  final Color onFocusTrack;
+}
+
 /// The panels' theme. It follows the app's mode (light panels in Light,
 /// dark ones otherwise) unless [dark] asks for the dark panels whatever the
 /// mode, for anything drawn over the video. The app's accent stays `primary`

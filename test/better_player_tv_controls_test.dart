@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -254,6 +256,67 @@ void main() {
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV play pause');
     expect(find.text('Pause'), findsOneWidget);
+  });
+
+  testWidgets('hiding the controls leaves focus in a sheet opened over them', (tester) async {
+    final (_, video) = await pumpControls(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV play pause');
+
+    final sheetFocus = FocusNode(debugLabel: 'sheet button');
+    addTearDown(sheetFocus.dispose);
+    unawaited(
+      showModalBottomSheet<void>(
+        context: tester.element(find.byType(BetterPlayerTvControls)),
+        builder: (_) =>
+            TextButton(focusNode: sheetFocus, autofocus: true, onPressed: () {}, child: const Text('Later')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, sheetFocus);
+
+    // The controls' hide timer runs out while the sheet is up.
+    await tester.pump(const Duration(seconds: 5));
+    expect(FocusManager.instance.primaryFocus, sheetFocus);
+
+    video.playbackOperations.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 1));
+    expect(video.playbackOperations.where((op) => op.startsWith('seek')), isEmpty);
+  });
+
+  testWidgets('the TV menu follows a light theme', (tester) async {
+    final theme = ThemeData(colorScheme: const ColorScheme.light(), scaffoldBackgroundColor: const Color(0xFFF5F5F5));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: BetterPlayerTvMenu(
+            title: 'Player settings',
+            items: <BetterPlayerTvMenuItem>[
+              BetterPlayerTvMenuItem(label: 'Playback speed', icon: Icons.speed, onSelected: () {}),
+              BetterPlayerTvMenuItem(label: 'Subtitles', icon: Icons.subtitles, onSelected: () {}),
+            ],
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final colors = BetterPlayerTvPanelColors.fromTheme(theme);
+
+    final panel = tester.widget<Container>(
+      find.ancestor(of: find.text('Player settings'), matching: find.byType(Container)).first,
+    );
+    expect(panel.color, colors.panel);
+    expect(panel.color!.computeLuminance(), greaterThan(.8));
+    expect(tester.widget<Text>(find.text('Player settings')).style!.color, colors.foreground);
+
+    // The focused row is filled with dark ink and written in white.
+    expect(tester.widget<Text>(find.text('Playback speed')).style!.color, Colors.white);
+    expect(tester.widget<Text>(find.text('Subtitles')).style!.color, colors.foreground);
   });
 
   testWidgets('a live stream has no timeline or seeking', (tester) async {

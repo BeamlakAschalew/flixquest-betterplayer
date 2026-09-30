@@ -1,3 +1,4 @@
+import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -159,6 +160,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerTvPanelColors.of(context);
     return FocusScope(
       node: _focusScopeNode,
       autofocus: true,
@@ -170,7 +172,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
           child: Container(
             width: 420,
             height: double.infinity,
-            color: const Color(0xf2111212),
+            color: colors.panel,
             padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -182,7 +184,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                         widget.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: colors.foreground, fontSize: 24, fontWeight: FontWeight.w700),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -230,14 +232,16 @@ class _TvMenuTileState extends State<_TvMenuTile> {
 
   @override
   Widget build(BuildContext context) {
-    // Focus is a white row, as everywhere else on the TV; the chosen option
-    // carries a check rather than a colour.
+    // Focus fills the row with the page's ink (white on a dark page), as
+    // everywhere else on the TV; the chosen option carries a check rather
+    // than a colour.
+    final colors = BetterPlayerTvPanelColors.of(context);
     final foreground = !widget.item.enabled
-        ? Colors.white38
+        ? colors.disabled
         : _focused
-        ? Colors.black
-        : Colors.white;
-    final secondary = _focused ? Colors.black54 : Colors.white60;
+        ? colors.onFocus
+        : colors.foreground;
+    final secondary = _focused ? colors.onFocusMuted : colors.muted;
     return Semantics(
       button: true,
       selected: widget.item.selected,
@@ -276,7 +280,7 @@ class _TvMenuTileState extends State<_TvMenuTile> {
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: _focused ? const Color(0xf2ffffff) : Colors.transparent,
+              color: _focused ? colors.focusFill : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -337,6 +341,7 @@ class _TvMenuCloseButtonState extends State<_TvMenuCloseButton> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = BetterPlayerTvPanelColors.of(context);
     return FocusableActionDetector(
       focusNode: widget.focusNode,
       onFocusChange: (focused) => setState(() => _focused = focused),
@@ -359,10 +364,10 @@ class _TvMenuCloseButtonState extends State<_TvMenuCloseButton> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: _focused ? const Color(0xf2ffffff) : const Color(0x1fffffff),
+          color: _focused ? colors.focusFill : colors.idleFill,
           shape: BoxShape.circle,
         ),
-        child: Icon(PhosphorIconsRegular.x, color: _focused ? Colors.black : Colors.white),
+        child: Icon(PhosphorIconsRegular.x, color: _focused ? colors.onFocus : colors.foreground),
       ),
     );
   }
