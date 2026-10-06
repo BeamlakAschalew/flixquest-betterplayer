@@ -277,6 +277,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 result.success(null)
             }
 
+            SKIP_PRE_ROLL_METHOD -> {
+                player.skipPreRoll()
+                result.success(null)
+            }
+
             SEEK_TO_METHOD -> {
                 val location = (call.argument<Any>(LOCATION_PARAMETER) as Number?)!!.toInt()
                 if (castManager?.seekTo(textureId, location.toLong()) != true) {
@@ -895,6 +900,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val SET_VOLUME_METHOD = "setVolume"
         private const val PLAY_METHOD = "play"
         private const val PAUSE_METHOD = "pause"
+        private const val SKIP_PRE_ROLL_METHOD = "skipPreRoll"
         private const val SEEK_TO_METHOD = "seekTo"
         private const val POSITION_METHOD = "position"
         private const val ABSOLUTE_POSITION_METHOD = "absolutePosition"

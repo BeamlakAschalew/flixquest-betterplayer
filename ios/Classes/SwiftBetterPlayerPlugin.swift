@@ -364,6 +364,8 @@ extension SwiftBetterPlayerPlugin {
             result(nil)
         case "pause":
             player.pause(); result(nil)
+        case "skipPreRoll":
+            player.skipPreRoll(); result(nil)
         case "setSpeed":
             if let speed = (argsMap["speed"] as? NSNumber)?.doubleValue { player.setSpeed(speed, result: result) } else { result(nil) }
         case "setTrackParameters":

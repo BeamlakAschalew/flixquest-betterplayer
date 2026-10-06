@@ -213,60 +213,6 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     unawaited(_applyLooping());
     unawaited(_applyVolume());
 
-    void eventListener(VideoEvent event) {
-      if (_isDisposed) {
-        return;
-      }
-      final activeSourceKey = _activeDataSourceKey;
-      if (event.key != null && activeSourceKey != null && event.key != activeSourceKey) {
-        return;
-      }
-      videoEventStreamController.add(event);
-      switch (event.eventType) {
-        case VideoEventType.initialized:
-          value = value.copyWith(duration: event.duration, size: event.size);
-          if (!_initializingCompleter.isCompleted) {
-            _initializingCompleter.complete(null);
-          }
-          _applyPlayPause();
-        case VideoEventType.videoSizeChanged:
-          if (event.size != null && event.size != value.size) {
-            value = value.copyWith(size: event.size);
-          }
-        case VideoEventType.preRollEnded:
-          // The native sequence transition is consumed by BetterPlayerController.
-          // The current value is updated by the following initialized event.
-          break;
-        case VideoEventType.completed:
-          value = value.copyWith(isPlaying: false, position: value.duration);
-          _timer?.cancel();
-        case VideoEventType.bufferingUpdate:
-          value = value.copyWith(buffered: event.buffered);
-        case VideoEventType.bufferingStart:
-          value = value.copyWith(isBuffering: true);
-        case VideoEventType.bufferingEnd:
-          if (value.isBuffering) {
-            value = value.copyWith(isBuffering: false);
-          }
-
-        case VideoEventType.play:
-          play();
-        case VideoEventType.pause:
-          pause();
-        case VideoEventType.seek:
-          seekTo(event.position);
-        case VideoEventType.pipStart:
-          value = value.copyWith(isPip: true);
-        case VideoEventType.pipStop:
-          value = value.copyWith(isPip: false);
-        case VideoEventType.networkUsage:
-          // Counted by BetterPlayerController.
-          break;
-        case VideoEventType.unknown:
-          break;
-      }
-    }
-
     void errorListener(Object object) {
       if (_isDisposed) return;
       if (object is PlatformException) {
@@ -291,8 +237,79 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       }
     }
 
-    _eventSubscription = _videoPlayerPlatform.videoEventsFor(_textureId).listen(eventListener, onError: errorListener);
+    _eventSubscription = _videoPlayerPlatform.videoEventsFor(_textureId).listen(_handleEvent, onError: errorListener);
   }
+
+  void _handleEvent(VideoEvent event) {
+    if (_isDisposed) {
+      return;
+    }
+    final activeSourceKey = _activeDataSourceKey;
+    if (event.key != null && activeSourceKey != null && event.key != activeSourceKey) {
+      return;
+    }
+    videoEventStreamController.add(event);
+    switch (event.eventType) {
+      case VideoEventType.initialized:
+        value = value.copyWith(duration: event.duration, size: event.size);
+        if (!_initializingCompleter.isCompleted) {
+          _initializingCompleter.complete(null);
+        }
+        _applyPlayPause();
+      case VideoEventType.videoSizeChanged:
+        if (event.size != null && event.size != value.size) {
+          value = value.copyWith(size: event.size);
+        }
+      case VideoEventType.preRollEnded:
+        // The content is not initialized yet: its duration arrives with its
+        // own initialized event, which may come later than this one (after
+        // a Skip the content has not been prepared). Until then neither the
+        // pre-roll's duration nor a placeholder may stand in for it, or the
+        // content's position reads as past the end.
+        value = VideoPlayerValue(
+          duration: null,
+          size: value.size,
+          isPlaying: value.isPlaying,
+          isLooping: value.isLooping,
+          isBuffering: true,
+          volume: value.volume,
+          speed: value.speed,
+          isPip: value.isPip,
+        );
+      case VideoEventType.completed:
+        value = value.copyWith(isPlaying: false, position: value.duration);
+        _timer?.cancel();
+      case VideoEventType.bufferingUpdate:
+        value = value.copyWith(buffered: event.buffered);
+      case VideoEventType.bufferingStart:
+        value = value.copyWith(isBuffering: true);
+      case VideoEventType.bufferingEnd:
+        if (value.isBuffering) {
+          value = value.copyWith(isBuffering: false);
+        }
+
+      case VideoEventType.play:
+        play();
+      case VideoEventType.pause:
+        pause();
+      case VideoEventType.seek:
+        seekTo(event.position);
+      case VideoEventType.pipStart:
+        value = value.copyWith(isPip: true);
+      case VideoEventType.pipStop:
+        value = value.copyWith(isPip: false);
+      case VideoEventType.networkUsage:
+        // Counted by BetterPlayerController.
+        break;
+      case VideoEventType.unknown:
+        break;
+    }
+  }
+
+  /// Feeds a native event to this controller. Tests use it in place of a
+  /// platform event stream.
+  @visibleForTesting
+  void handleEventForTesting(VideoEvent event) => _handleEvent(event);
 
   /// Set data source for playing a video from an asset.
   ///
@@ -468,6 +485,14 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   Future<void> pause() async {
     value = value.copyWith(isPlaying: false);
     await _applyPlayPause();
+  }
+
+  /// Advances a pre-roll sequence to its content; a no-op without one.
+  Future<void> skipPreRoll() async {
+    if (!_created || _isDisposed) {
+      return;
+    }
+    await _videoPlayerPlatform.skipPreRoll(_textureId);
   }
 
   Future<void> _applyLooping() async {

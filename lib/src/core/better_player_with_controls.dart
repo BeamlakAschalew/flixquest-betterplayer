@@ -128,15 +128,30 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
             child: _BetterPlayerVideoFitWidget(betterPlayerController, betterPlayerController.getFit()),
           ),
           if (!configuration.overlayOnTop) configuration.overlay ?? Container(),
-          BetterPlayerSubtitlesDrawer(
-            betterPlayerController: betterPlayerController,
-            betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
-            subtitles: betterPlayerController.subtitlesLines,
-            playerVisibilityStream: playerVisibilityStreamController.stream,
-            isFullScreen: betterPlayerController.isFullScreen,
+          // Subtitle cues are timed to the content. A pre-roll's positions
+          // would show them at the wrong moments, so they wait for the content.
+          ValueListenableBuilder<bool>(
+            valueListenable: betterPlayerController.preRollActiveListenable,
+            builder: (context, preRoll, _) => preRoll
+                ? const SizedBox.shrink()
+                : BetterPlayerSubtitlesDrawer(
+                    betterPlayerController: betterPlayerController,
+                    betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
+                    subtitles: betterPlayerController.subtitlesLines,
+                    playerVisibilityStream: playerVisibilityStreamController.stream,
+                    isFullScreen: betterPlayerController.isFullScreen,
+                  ),
           ),
           if (!placeholderOnTop) _buildPlaceholder(betterPlayerController),
-          _buildControls(context, betterPlayerController),
+          ValueListenableBuilder<bool>(
+            valueListenable: betterPlayerController.preRollActiveListenable,
+            builder: (context, preRoll, _) {
+              final overlay = preRoll
+                  ? controlsConfiguration.preRollOverlayBuilder?.call(context, betterPlayerController)
+                  : null;
+              return overlay ?? _buildControls(context, betterPlayerController);
+            },
+          ),
           if (configuration.overlayOnTop) configuration.overlay ?? Container(),
         ],
       ),

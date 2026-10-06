@@ -37,6 +37,8 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     private var sequenceContentStartPosition: Int = 0
     private var sequenceContentStartApplied: Bool = false
     private var sequencePreRollEndedSent: Bool = false
+    // "skipped" or "error"; nil means the pre-roll played to its end.
+    private var sequencePreRollEndReason: String? = nil
     private var currentSourceIsLive: Bool = false
 
     private var pipController: AVPictureInPictureController?
@@ -204,6 +206,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
         self.sequenceContentStartPosition = max(0, contentStartPosition)
         self.sequenceContentStartApplied = false
         self.sequencePreRollEndedSent = false
+        self.sequencePreRollEndReason = nil
         self.currentSourceIsLive = contentIsLive
         if #available(iOS 10.0, *) {
             self.player.automaticallyWaitsToMinimizeStalling = contentIsLive
@@ -359,6 +362,7 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
                 switch item.status {
                 case .failed:
                     if let contentItem = sequenceContentItem, item !== contentItem {
+                        sequencePreRollEndReason = "error"
                         removeObservers()
                         isInitialized = false
                         if let queue = player as? AVQueuePlayer {
@@ -462,17 +466,22 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
 
         isInitialized = true
         updatePlayingState()
+        // preRollEnded comes first: Flutter resets to an uninitialized value
+        // on it, and the content's initialized event then supplies the
+        // content's duration.
+        if let contentItem = sequenceContentItem,
+           player.currentItem === contentItem,
+           !sequencePreRollEndedSent {
+            sequencePreRollEndedSent = true
+            eventSink(["event": "preRollEnded",
+                       "key": key as Any,
+                       "reason": sequencePreRollEndReason ?? "completed"])
+        }
         eventSink(["event": "initialized",
                    "duration": NSNumber(value: duration()),
                    "width": NSNumber(value: Float(width)),
                    "height": NSNumber(value: Float(height)),
                    "key": key as Any])
-        if let contentItem = sequenceContentItem,
-           player.currentItem === contentItem,
-           !sequencePreRollEndedSent {
-            sequencePreRollEndedSent = true
-            eventSink(["event": "preRollEnded", "key": key as Any])
-        }
     }
 
     public func play() {
@@ -485,6 +494,20 @@ public class BetterPlayer: NSObject, FlutterPlatformView, FlutterStreamHandler, 
     public func pause() {
         isPlaying = false
         updatePlayingState()
+    }
+
+    /// Advances a pre-roll sequence to its content; a no-op otherwise.
+    public func skipPreRoll() {
+        guard let contentItem = sequenceContentItem,
+              !sequencePreRollEndedSent,
+              player.currentItem !== contentItem,
+              let queue = player as? AVQueuePlayer else { return }
+        sequencePreRollEndReason = "skipped"
+        removeObservers()
+        isInitialized = false
+        queue.advanceToNextItem()
+        addObservers(contentItem)
+        onReadyToPlay()
     }
 
     public func position() -> Int64 {

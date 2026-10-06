@@ -137,6 +137,9 @@ internal class BetterPlayer(
     private var lastKnownPositionMs = 0L
     private var hasPreRollSequence = false
     private var preRollEndedSent = false
+    // Why the sequence left the pre-roll: "skipped" or "error". A natural end
+    // leaves it null and is reported as "completed".
+    private var preRollEndReason: String? = null
     private var completionSent = false
     private var liveSource = false
     private val liveWindowRecovery = LiveWindowRecovery()
@@ -269,6 +272,7 @@ internal class BetterPlayer(
         }
         hasPreRollSequence = preRollDataSource != null
         preRollEndedSent = false
+        preRollEndReason = null
         this.contentStartPositionMs = contentStartPositionMs.coerceAtLeast(0L)
         if (preRollDataSource != null) {
             val preRollMediaSource = buildPreRollMediaSource(
@@ -666,13 +670,24 @@ internal class BetterPlayer(
                 if (contentStartPositionMs > 0L) {
                     player.seekTo(1, contentStartPositionMs)
                 }
-                isInitialized = true
-                sendInitialized()
+                // preRollEnded comes first: Flutter resets to an uninitialized
+                // value on it. The content's initialized event follows once its
+                // duration is known. After a Skip the content is usually not
+                // prepared yet, and ExoPlayer reports C.TIME_UNSET, so the
+                // STATE_READY handler sends it instead.
                 preRollEndedSent = true
                 val event: MutableMap<String, Any?> = HashMap()
                 event["event"] = "preRollEnded"
                 event["key"] = key
+                event["reason"] = preRollEndReason ?: "completed"
                 eventSink.success(event)
+                val contentDurationMs = player.duration
+                if (contentDurationMs != C.TIME_UNSET && contentDurationMs > 0L) {
+                    isInitialized = true
+                    sendInitialized()
+                } else {
+                    isInitialized = false
+                }
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -726,6 +741,7 @@ internal class BetterPlayer(
                     player?.currentMediaItemIndex == 0 &&
                     player.hasNextMediaItem()
                 ) {
+                    preRollEndReason = "error"
                     val resumePlayback = player.playWhenReady
                     player.seekToNextMediaItem()
                     player.prepare()
@@ -870,6 +886,18 @@ internal class BetterPlayer(
 
     fun pause() {
         exoPlayer?.playWhenReady = false
+    }
+
+    /** Advances a pre-roll sequence to its content; a no-op otherwise. */
+    fun skipPreRoll() {
+        val player = exoPlayer ?: return
+        if (!hasPreRollSequence || preRollEndedSent ||
+            player.currentMediaItemIndex != 0 || !player.hasNextMediaItem()
+        ) {
+            return
+        }
+        preRollEndReason = "skipped"
+        player.seekToNextMediaItem()
     }
     
     fun isPlaying(): Boolean {

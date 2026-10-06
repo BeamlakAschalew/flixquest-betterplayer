@@ -132,6 +132,10 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   Future<void> pause(int? textureId) => _channel.invokeMethod<void>('pause', <String, dynamic>{'textureId': textureId});
 
   @override
+  Future<void> skipPreRoll(int? textureId) =>
+      _channel.invokeMethod<void>('skipPreRoll', <String, dynamic>{'textureId': textureId});
+
+  @override
   Future<void> setVolume(int? textureId, double volume) =>
       _channel.invokeMethod<void>('setVolume', <String, dynamic>{'textureId': textureId, 'volume': volume});
 
@@ -283,7 +287,11 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
               size: Size(width.toDouble(), height.toDouble()),
             );
           case 'preRollEnded':
-            return VideoEvent(eventType: VideoEventType.preRollEnded, key: key);
+            return VideoEvent(
+              eventType: VideoEventType.preRollEnded,
+              key: key,
+              preRollEndReason: map['reason'] as String? ?? 'completed',
+            );
           case 'completed':
             return VideoEvent(eventType: VideoEventType.completed, key: key);
           case 'bufferingUpdate':

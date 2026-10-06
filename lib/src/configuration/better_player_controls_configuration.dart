@@ -79,6 +79,7 @@ class BetterPlayerControlsConfiguration {
     this.enableMovieRecommendations = false,
     this.enableNextEpisodeButton = true,
     this.introDbSkipButtonBuilder,
+    this.preRollOverlayBuilder,
     this.introDbSkipAvailable,
     this.onIntroDbSkip,
     this.gestureConfiguration = const BetterPlayerGestureConfiguration(),
@@ -326,6 +327,12 @@ class BetterPlayerControlsConfiguration {
 
   /// App-provided skip action rendered inside the player controls layer.
   final Widget Function(BuildContext context)? introDbSkipButtonBuilder;
+
+  /// Replaces the controls while a pre-roll plays, in the inline and the
+  /// fullscreen player alike. Returning null keeps the regular controls.
+  /// Seeking, gestures and the content's menus stay unavailable meanwhile,
+  /// because the timeline belongs to the pre-roll.
+  final Widget? Function(BuildContext context, BetterPlayerController controller)? preRollOverlayBuilder;
 
   /// Whether [introDbSkipButtonBuilder] currently has something to skip.
   /// Queried on every controls build: the skip button is kept outside the

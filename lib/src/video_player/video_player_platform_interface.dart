@@ -110,6 +110,11 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('pause() has not been implemented.');
   }
 
+  /// Advances a pre-roll sequence to its content item.
+  Future<void> skipPreRoll(int? textureId) {
+    throw UnimplementedError('skipPreRoll() has not been implemented.');
+  }
+
   /// Sets the volume to a range between 0.0 and 1.0.
   Future<void> setVolume(int? textureId, double volume) {
     throw UnimplementedError('setVolume() has not been implemented.');
@@ -397,6 +402,7 @@ class VideoEvent {
     this.buffered,
     this.position,
     this.bytesTransferred,
+    this.preRollEndReason,
   });
 
   /// The type of the event.
@@ -430,6 +436,11 @@ class VideoEvent {
   ///
   /// Only used if [eventType] is [VideoEventType.networkUsage].
   final int? bytesTransferred;
+
+  /// Why a pre-roll ended: `completed`, `skipped` or `error`.
+  ///
+  /// Only used if [eventType] is [VideoEventType.preRollEnded].
+  final String? preRollEndReason;
 
   @override
   bool operator ==(Object other) =>

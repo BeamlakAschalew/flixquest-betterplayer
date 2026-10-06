@@ -110,6 +110,20 @@ class BetterPlayerController {
   ///and provider changes during the same playback session.
   final ValueNotifier<Duration> _subtitleOffsetNotifier = ValueNotifier<Duration>(Duration.zero);
 
+  /// Parameter of [BetterPlayerEventType.preRollEnded]: `completed`, `skipped`
+  /// or `error`.
+  static const String preRollEndReasonParameter = 'preRollEndReason';
+
+  final ValueNotifier<bool> _preRollActiveNotifier = ValueNotifier<bool>(false);
+
+  /// True from [setupDataSourceWithPreRoll] until the sequence reaches its
+  /// content. Positions and durations then belong to the pre-roll, so
+  /// subtitles are hidden and [BetterPlayerControlsConfiguration.preRollOverlayBuilder]
+  /// can replace the controls.
+  ValueListenable<bool> get preRollActiveListenable => _preRollActiveNotifier;
+
+  bool get isPreRollActive => _preRollActiveNotifier.value;
+
   Duration get subtitleOffset => _subtitleOffsetNotifier.value;
 
   ValueListenable<Duration> get subtitleOffsetListenable => _subtitleOffsetNotifier;
@@ -371,6 +385,7 @@ class BetterPlayerController {
     Duration? initialPosition,
   }) async {
     final setupGeneration = ++_dataSourceSetupGeneration;
+    _preRollActiveNotifier.value = preRollDataSource != null;
     _cancelNetworkRecovery(clearSavedPosition: true);
     postEvent(
       BetterPlayerEvent(
@@ -1018,6 +1033,12 @@ class BetterPlayerController {
     _postEvent(BetterPlayerEvent(BetterPlayerEventType.pause));
   }
 
+  /// Leaves the pre-roll and starts the content at its start position.
+  Future<void> skipPreRoll() async {
+    if (!isPreRollActive) return;
+    await videoPlayerController?.skipPreRoll();
+  }
+
   ///Move player to specific position/moment of the video.
   Future<void> seekTo(Duration moment) async {
     if (videoPlayerController == null) {
@@ -1565,7 +1586,19 @@ class BetterPlayerController {
           ),
         );
       case VideoEventType.preRollEnded:
-        _postEvent(BetterPlayerEvent(BetterPlayerEventType.preRollEnded, parameters: sourceParameters));
+        _preRollActiveNotifier.value = false;
+        // The content reports its own initialized event once its duration is
+        // known; listeners treat it as the start of the content.
+        _hasCurrentDataSourceInitialized = false;
+        _postEvent(
+          BetterPlayerEvent(
+            BetterPlayerEventType.preRollEnded,
+            parameters: <String, dynamic>{
+              ...sourceParameters,
+              preRollEndReasonParameter: event.preRollEndReason ?? 'completed',
+            },
+          ),
+        );
       case VideoEventType.bufferingStart:
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingStart, parameters: sourceParameters));
       case VideoEventType.bufferingUpdate:
@@ -1792,6 +1825,7 @@ class BetterPlayerController {
       _nextVideoTimeStreamController.close();
       _controlsVisibilityStreamController.close();
       _subtitleOffsetNotifier.dispose();
+      _preRollActiveNotifier.dispose();
       _videoEventStreamSubscription?.cancel();
       _disposed = true;
       _controllerEventStreamController.close();

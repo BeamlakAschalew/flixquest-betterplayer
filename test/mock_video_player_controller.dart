@@ -32,6 +32,9 @@ class MockVideoPlayerController extends VideoPlayerController {
     isLoopingState = looping;
   }
 
+  /// Delivers [event] as if the native player had sent it.
+  void emit(VideoEvent event) => handleEventForTesting(event);
+
   void setBuffering(bool buffering) {
     value = value.copyWith(isBuffering: buffering);
   }

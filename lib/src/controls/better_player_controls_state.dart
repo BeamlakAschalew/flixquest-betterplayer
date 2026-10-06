@@ -242,7 +242,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
   bool isLoading(VideoPlayerValue? value) {
     if (value == null) return false;
-    if (!value.isPlaying && value.duration == null) return true;
+    if (value.duration == null && (!value.isPlaying || value.isBuffering)) return true;
     final bufferedEnd = value.buffered.isNotEmpty ? value.buffered.last.end : null;
     return bufferedEnd != null &&
         value.isPlaying &&
