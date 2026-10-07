@@ -164,6 +164,10 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('isPictureInPictureEnabled() has not been implemented.');
   }
 
+  ///Lets the platform open PiP on its own when the user leaves the app, such as
+  ///by pressing home. Platforms without it ignore the call.
+  Future<void> setAutoPictureInPicture(int? textureId, bool enabled) => Future<void>.value();
+
   Future<void> setAudioTrack(int? textureId, String? name, int? index) {
     throw UnimplementedError('setAudio() has not been implemented.');
   }

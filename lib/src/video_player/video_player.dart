@@ -655,6 +655,13 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     await _videoPlayerPlatform.disablePictureInPicture(textureId);
   }
 
+  ///Opens PiP by itself when the user leaves the app while this video plays.
+  Future<void> setAutoPictureInPicture(bool enabled) async {
+    if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
+    if (_isDisposed) return;
+    await _videoPlayerPlatform.setAutoPictureInPicture(_textureId, enabled);
+  }
+
   void _updatePosition(Duration? position, {DateTime? absolutePosition}) {
     value = value.copyWith(position: _seekPosition ?? position);
     if (_seekPosition == null) {

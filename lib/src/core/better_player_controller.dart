@@ -245,6 +245,12 @@ class BetterPlayerController {
   ///Was controls enabled before Picture in Picture opened.
   bool _wasControlsEnabledBeforePiP = false;
 
+  ///[enablePictureInPicture] already set up the current Picture in Picture.
+  bool _pipSetUpByController = false;
+
+  ///Should the platform open Picture in Picture when the user leaves the app.
+  bool _autoPictureInPicture = false;
+
   ///GlobalKey of the BetterPlayer widget
   GlobalKey? _betterPlayerGlobalKey;
 
@@ -410,6 +416,9 @@ class BetterPlayerController {
         bufferingConfiguration: betterPlayerDataSource.bufferingConfiguration,
       );
       videoPlayerController?.addListener(_onVideoPlayerChanged);
+      if (_autoPictureInPicture) {
+        unawaited(videoPlayerController?.setAutoPictureInPicture(true));
+      }
     }
 
     ///Clear asms tracks
@@ -1197,10 +1206,14 @@ class BetterPlayerController {
       );
     }
     if (currentVideoPlayerValue.isPip) {
+      if (!_wasInPipMode && !_pipSetUpByController) {
+        _adoptPlatformPictureInPicture();
+      }
       _wasInPipMode = true;
     } else if (_wasInPipMode) {
       _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStop));
       _wasInPipMode = false;
+      _pipSetUpByController = false;
       if (!_wasInFullScreenBeforePiP) {
         exitFullScreen();
       }
@@ -1506,7 +1519,13 @@ class BetterPlayerController {
       setControlsEnabled(false);
       if (Platform.isAndroid) {
         _wasInFullScreenBeforePiP = _isFullScreen;
-        await videoPlayerController?.enablePictureInPicture(left: 0, top: 0, width: 0, height: 0);
+        _pipSetUpByController = true;
+        try {
+          await videoPlayerController?.enablePictureInPicture(left: 0, top: 0, width: 0, height: 0);
+        } catch (_) {
+          _pipSetUpByController = false;
+          rethrow;
+        }
         enterFullScreen();
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
         return;
@@ -1537,6 +1556,26 @@ class BetterPlayerController {
         'embedding.',
       );
     }
+  }
+
+  ///Picture in Picture the platform opened by itself, as with
+  ///[setAutoPictureInPicture], gets the same full-screen, controls-free layout
+  ///as one opened with [enablePictureInPicture].
+  void _adoptPlatformPictureInPicture() {
+    _wasInFullScreenBeforePiP = _isFullScreen;
+    _wasControlsEnabledBeforePiP = _controlsEnabled;
+    setControlsEnabled(false);
+    if (!_isFullScreen) enterFullScreen();
+    _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
+  }
+
+  ///Open Picture in Picture by itself when the user leaves the app, as with the
+  ///home button, while this video plays. Android only; elsewhere it does
+  ///nothing.
+  Future<void> setAutoPictureInPicture(bool enabled) async {
+    if (_autoPictureInPicture == enabled) return;
+    _autoPictureInPicture = enabled;
+    await videoPlayerController?.setAutoPictureInPicture(enabled);
   }
 
   ///Disable Picture in Picture mode if it's enabled.

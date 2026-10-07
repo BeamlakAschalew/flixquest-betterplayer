@@ -904,6 +904,14 @@ internal class BetterPlayer(
         return exoPlayer?.isPlaying ?: false
     }
 
+    /** Playing, or about to once it has buffered. */
+    fun wantsToPlay(): Boolean {
+        val player = exoPlayer ?: return false
+        return player.playWhenReady &&
+            player.playbackState != Player.STATE_IDLE &&
+            player.playbackState != Player.STATE_ENDED
+    }
+
     fun setLooping(value: Boolean) {
         exoPlayer?.repeatMode = if (value) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
     }

@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:better_player_plus/src/video_player/video_player_platform_interface.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'better_player_mock_controller.dart';
 import 'better_player_test_utils.dart';
@@ -31,6 +32,58 @@ void main() {
       );
       expect(betterPlayerMockController.betterPlayerDataSource, null);
       expect(betterPlayerMockController.videoPlayerController, null);
+    });
+
+    test('picture in picture the platform opens gets the full-screen, controls-free layout', () async {
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+      final events = <BetterPlayerEventType?>[];
+      controller.addEventsListener((event) => events.add(event.betterPlayerEventType));
+      try {
+        await controller.setupDataSource(BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl));
+        final video = controller.videoPlayerController!;
+        expect(controller.isFullScreen, isFalse);
+
+        video.handleEventForTesting(VideoEvent(eventType: VideoEventType.pipStart, key: null));
+        expect(controller.isFullScreen, isTrue);
+        expect(controller.controlsEnabled, isFalse);
+        expect(events, contains(BetterPlayerEventType.pipStart));
+
+        video.handleEventForTesting(VideoEvent(eventType: VideoEventType.pipStop, key: null));
+        expect(controller.isFullScreen, isFalse);
+        expect(controller.controlsEnabled, isTrue);
+        expect(events, contains(BetterPlayerEventType.pipStop));
+      } finally {
+        controller.dispose();
+      }
+    });
+
+    test('auto picture in picture reaches the platform once the player exists', () async {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        mockMethodChannel.channel,
+        (call) {
+          calls.add(call);
+          return mockMethodChannel.handle(call);
+        },
+      );
+      List<Object?> requested() => calls
+          .where((call) => call.method == 'setAutoPictureInPicture')
+          .map((call) => (call.arguments as Map<Object?, Object?>)['enabled'])
+          .toList();
+      final controller = BetterPlayerMockController(const BetterPlayerConfiguration());
+      try {
+        await controller.setAutoPictureInPicture(true);
+        expect(requested(), isEmpty);
+
+        await controller.setupDataSource(BetterPlayerDataSource.network(BetterPlayerTestUtils.forBiggerBlazesUrl));
+        await Future<void>.delayed(Duration.zero);
+        expect(requested(), <Object?>[true]);
+
+        await controller.setAutoPictureInPicture(false);
+        expect(requested(), <Object?>[true, false]);
+      } finally {
+        controller.dispose();
+      }
     });
 
     test('Setup data source in controller', () async {

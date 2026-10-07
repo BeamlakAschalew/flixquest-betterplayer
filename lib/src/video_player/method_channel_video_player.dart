@@ -212,6 +212,18 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   );
 
   @override
+  Future<void> setAutoPictureInPicture(int? textureId, bool enabled) async {
+    try {
+      await _channel.invokeMethod<void>('setAutoPictureInPicture', <String, dynamic>{
+        'textureId': textureId,
+        'enabled': enabled,
+      });
+    } on MissingPluginException {
+      // Platforms that only open PiP on request, such as iOS.
+    }
+  }
+
+  @override
   Future<void> setMixWithOthers(int? textureId, bool mixWithOthers) => _channel.invokeMethod<void>(
     'setMixWithOthers',
     <String, dynamic>{'textureId': textureId, 'mixWithOthers': mixWithOthers},

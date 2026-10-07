@@ -35,6 +35,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.plugin.common.PluginRegistry
 import io.flutter.view.TextureRegistry
 import java.lang.Exception
 import java.util.HashMap
@@ -56,6 +57,9 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     private var pipRunnable: Runnable? = null
     private var pipBroadcastReceiver: BroadcastReceiver? = null
     private var currentPipPlayer: BetterPlayer? = null
+    private var autoPipPlayer: BetterPlayer? = null
+    private var activityBinding: ActivityPluginBinding? = null
+    private val userLeaveHintListener = PluginRegistry.UserLeaveHintListener { onUserLeaveHint() }
     private var brightnessChannel: MethodChannel? = null
     private var volumeChannel: MethodChannel? = null
     private var castManager: BetterPlayerCastManager? = null
@@ -152,14 +156,46 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-        activity = binding.activity
+        attachToActivity(binding)
     }
 
-    override fun onDetachedFromActivityForConfigChanges() {}
+    override fun onDetachedFromActivityForConfigChanges() {
+        detachFromActivityBinding()
+    }
 
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        attachToActivity(binding)
+    }
 
-    override fun onDetachedFromActivity() {}
+    override fun onDetachedFromActivity() {
+        detachFromActivityBinding()
+    }
+
+    private fun attachToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        activityBinding = binding
+        binding.addOnUserLeaveHintListener(userLeaveHintListener)
+    }
+
+    private fun detachFromActivityBinding() {
+        activityBinding?.removeOnUserLeaveHintListener(userLeaveHintListener)
+        activityBinding = null
+    }
+
+    /**
+     * The user is leaving the app, as with the home button. A video that asked for it moves into
+     * PiP and keeps playing instead of stopping with the activity.
+     */
+    private fun onUserLeaveHint() {
+        val player = autoPipPlayer ?: return
+        if (!isPictureInPictureSupported() || !player.wantsToPlay()) return
+        if (currentPipPlayer != null || activity?.isInPictureInPictureMode == true) return
+        try {
+            enablePictureInPicture(player)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Couldn't open picture in picture: ${e.message}")
+        }
+    }
 
     @UnstableApi
     private fun disposeAllPlayers() {
@@ -327,6 +363,16 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             IS_PICTURE_IN_PICTURE_SUPPORTED_METHOD -> result.success(
                 isPictureInPictureSupported()
             )
+
+            SET_AUTO_PICTURE_IN_PICTURE_METHOD -> {
+                val enabled = call.argument<Boolean>(ENABLED_PARAMETER) ?: false
+                if (enabled) {
+                    autoPipPlayer = player
+                } else if (autoPipPlayer === player) {
+                    autoPipPlayer = null
+                }
+                result.success(null)
+            }
 
             SET_AUDIO_TRACK_METHOD -> {
                 val name = call.argument<String?>(NAME_PARAMETER)
@@ -706,6 +752,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     }
 
     private fun dispose(player: BetterPlayer, textureId: Long) {
+        if (autoPipPlayer === player) autoPipPlayer = null
         castManager?.disposePlayer(textureId)
         player.dispose()
         videoPlayers.remove(textureId)
@@ -911,6 +958,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         private const val ENABLE_PICTURE_IN_PICTURE_METHOD = "enablePictureInPicture"
         private const val DISABLE_PICTURE_IN_PICTURE_METHOD = "disablePictureInPicture"
         private const val IS_PICTURE_IN_PICTURE_SUPPORTED_METHOD = "isPictureInPictureSupported"
+        private const val SET_AUTO_PICTURE_IN_PICTURE_METHOD = "setAutoPictureInPicture"
+        private const val ENABLED_PARAMETER = "enabled"
         private const val SET_MIX_WITH_OTHERS_METHOD = "setMixWithOthers"
         private const val CLEAR_CACHE_METHOD = "clearCache"
         private const val DISPOSE_METHOD = "dispose"
