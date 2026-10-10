@@ -694,13 +694,17 @@ internal class BetterPlayer(
                 if (!isInitialized || videoSize.width == 0 || videoSize.height == 0) {
                     return
                 }
-                val rotated = videoSize.unappliedRotationDegrees == 90 ||
-                    videoSize.unappliedRotationDegrees == 270
+                val (width, height) = displaySize(
+                    videoSize.width,
+                    videoSize.height,
+                    videoSize.pixelWidthHeightRatio,
+                    videoSize.unappliedRotationDegrees
+                )
                 val event: MutableMap<String, Any?> = HashMap()
                 event["event"] = "videoSizeChanged"
                 event["key"] = key
-                event["width"] = if (rotated) videoSize.height else videoSize.width
-                event["height"] = if (rotated) videoSize.width else videoSize.height
+                event["width"] = width
+                event["height"] = height
                 eventSink.success(event)
             }
 
@@ -975,20 +979,39 @@ internal class BetterPlayer(
             event["event"] = "initialized"
             event["key"] = key
             event["duration"] = getDuration()
-            if (exoPlayer?.videoFormat != null) {
-                val videoFormat = exoPlayer.videoFormat
-                var width = videoFormat?.width
-                var height = videoFormat?.height
-                val rotationDegrees = videoFormat?.rotationDegrees
-                // Switch the width/height if video was taken in portrait mode
-                if (rotationDegrees == 90 || rotationDegrees == 270) {
-                    width = exoPlayer.videoFormat?.height
-                    height = exoPlayer.videoFormat?.width
-                }
+            val videoFormat = exoPlayer?.videoFormat
+            if (videoFormat != null) {
+                val (width, height) = displaySize(
+                    videoFormat.width,
+                    videoFormat.height,
+                    videoFormat.pixelWidthHeightRatio,
+                    videoFormat.rotationDegrees
+                )
                 event["width"] = width
                 event["height"] = height
             }
             eventSink.success(event)
+        }
+    }
+
+    /**
+     * Size the video is meant to be shown at. Lower HLS/DASH renditions are
+     * often anamorphic (e.g. 720x480 stored, 16:9 displayed), so the stored
+     * width must be scaled by the pixel aspect ratio or Flutter lays the
+     * frame out too narrow. Width/height are swapped for portrait rotation.
+     */
+    private fun displaySize(
+        width: Int,
+        height: Int,
+        pixelWidthHeightRatio: Float,
+        rotationDegrees: Int
+    ): Pair<Int, Int> {
+        val ratio = if (pixelWidthHeightRatio > 0f) pixelWidthHeightRatio else 1f
+        val displayWidth = Math.round(width * ratio)
+        return if (rotationDegrees == 90 || rotationDegrees == 270) {
+            Pair(height, displayWidth)
+        } else {
+            Pair(displayWidth, height)
         }
     }
 

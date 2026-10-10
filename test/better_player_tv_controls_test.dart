@@ -9,6 +9,67 @@ import 'better_player_mock_controller.dart';
 import 'mock_video_player_controller.dart';
 
 void main() {
+  for (final dismissWhileLoading in <bool>[false, true]) {
+    testWidgets('subtitle selection shows progress${dismissWhileLoading ? ' without closing a reopened menu' : ''}', (
+      tester,
+    ) async {
+      final controller = _DelayedSubtitleController();
+      controller.videoPlayerController = MockVideoPlayerController();
+      await controller.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+      controller.betterPlayerSubtitlesSourceList.add(
+        BetterPlayerSubtitlesSource(
+          type: BetterPlayerSubtitlesSourceType.network,
+          name: 'English',
+          urls: ['https://example.com/en.srt'],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BetterPlayerTvControls(controller: controller, onControlsVisibilityChanged: (_) {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      final subtitleButton = find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Subtitles',
+      );
+      await tester.tap(subtitleButton);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+
+      final progress = find.byKey(const Key('tv_subtitle_selection_progress'));
+      expect(progress, findsOneWidget);
+      expect(find.descendant(of: progress, matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Better Player TV menu item 2');
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.tap(find.text('Off'));
+      await tester.pump();
+      expect(controller.selectionCount, 1);
+
+      if (dismissWhileLoading) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.byType(BetterPlayerTvMenu), findsNothing);
+        await tester.tap(subtitleButton);
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+
+      controller.selection.complete(controller.betterPlayerSubtitlesSourceList.last);
+      await tester.pumpAndSettle();
+      expect(progress, findsNothing);
+      expect(find.byType(BetterPlayerTvMenu), dismissWhileLoading ? findsOneWidget : findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('TV playback errors use the configured recovery view', (tester) async {
     String? receivedError;
     final video = MockVideoPlayerController();
@@ -357,4 +418,28 @@ void main() {
     expect(find.text('LIVE'), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV play pause');
   });
+}
+
+class _DelayedSubtitleController extends BetterPlayerMockController {
+  _DelayedSubtitleController()
+    : super(
+        const BetterPlayerConfiguration(
+          controlsConfiguration: BetterPlayerControlsConfiguration(
+            showControlsOnInitialize: true,
+            controlsHideTime: Duration(minutes: 1),
+          ),
+        ),
+      );
+
+  final selection = Completer<BetterPlayerSubtitlesSource>();
+  int selectionCount = 0;
+
+  @override
+  Future<BetterPlayerSubtitlesSource> selectSubtitlesSource(
+    BetterPlayerSubtitlesSource subtitlesSource, {
+    List<BetterPlayerSubtitlesSource>? fallbacks,
+  }) {
+    selectionCount++;
+    return selection.future;
+  }
 }

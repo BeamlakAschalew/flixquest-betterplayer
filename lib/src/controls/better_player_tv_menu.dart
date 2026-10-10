@@ -29,6 +29,7 @@ class BetterPlayerTvMenu extends StatefulWidget {
     required this.items,
     required this.onClose,
     this.onBack,
+    this.loadingIndex,
     this.accentColor = Colors.deepOrange,
     super.key,
   });
@@ -37,6 +38,9 @@ class BetterPlayerTvMenu extends StatefulWidget {
   final List<BetterPlayerTvMenuItem> items;
   final VoidCallback onClose;
   final VoidCallback? onBack;
+
+  /// The row currently being applied. Other selections wait until it finishes.
+  final int? loadingIndex;
   final Color accentColor;
 
   @override
@@ -203,6 +207,10 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                         item: item,
                         accentColor: widget.accentColor,
                         focusNode: _itemFocusNodes[index],
+                        isLoading: widget.loadingIndex == index,
+                        onSelected: () {
+                          if (widget.loadingIndex == null) item.onSelected();
+                        },
                       );
                     },
                   ),
@@ -217,11 +225,19 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
 }
 
 class _TvMenuTile extends StatefulWidget {
-  const _TvMenuTile({required this.item, required this.accentColor, required this.focusNode});
+  const _TvMenuTile({
+    required this.item,
+    required this.accentColor,
+    required this.focusNode,
+    required this.isLoading,
+    required this.onSelected,
+  });
 
   final BetterPlayerTvMenuItem item;
   final Color accentColor;
   final FocusNode focusNode;
+  final bool isLoading;
+  final VoidCallback onSelected;
 
   @override
   State<_TvMenuTile> createState() => _TvMenuTileState();
@@ -269,13 +285,13 @@ class _TvMenuTileState extends State<_TvMenuTile> {
         actions: <Type, Action<Intent>>{
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
-              widget.item.onSelected();
+              widget.onSelected();
               return null;
             },
           ),
         },
         child: GestureDetector(
-          onTap: widget.item.enabled ? widget.item.onSelected : null,
+          onTap: widget.item.enabled ? widget.onSelected : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -313,7 +329,17 @@ class _TvMenuTileState extends State<_TvMenuTile> {
                     ],
                   ),
                 ),
-                if (widget.item.selected)
+                if (widget.isLoading)
+                  Semantics(
+                    liveRegion: true,
+                    label: 'Loading subtitles',
+                    child: SizedBox.square(
+                      key: const Key('tv_subtitle_selection_progress'),
+                      dimension: 20,
+                      child: CircularProgressIndicator(color: foreground, strokeWidth: 2),
+                    ),
+                  )
+                else if (widget.item.selected)
                   Icon(PhosphorIcons.check(PhosphorIconsStyle.bold), color: foreground, size: 20)
                 else if (widget.item.showsNext)
                   Icon(PhosphorIconsRegular.caretRight, color: secondary, size: 18),

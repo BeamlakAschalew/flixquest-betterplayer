@@ -49,6 +49,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   Timer? _hideTimer;
   VideoPlayerValue _value = VideoPlayerValue.uninitialized();
   _TvMenuData? _menu;
+  _TvMenuData? _loadingSubtitleMenu;
+  int? _loadingSubtitleIndex;
   final List<_TvMenuData> _menuHistory = <_TvMenuData>[];
   ValueNotifier<VideoPlayerValue>? _attachedVideoController;
   FocusNode? _menuReturnFocus;
@@ -459,8 +461,24 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               icon: off ? PhosphorIcons.subtitlesSlash() : PhosphorIcons.closedCaptioning(),
               selected: isSelected,
               onSelected: () async {
-                await widget.controller.selectSubtitlesSource(source);
-                if (mounted) _closeMenu();
+                if (_loadingSubtitleIndex != null) return;
+                final menu = _menu;
+                setState(() {
+                  _loadingSubtitleMenu = menu;
+                  _loadingSubtitleIndex = entry.key;
+                });
+                try {
+                  await widget.controller.selectSubtitlesSource(source);
+                  // Back can dismiss the picker while the request is pending.
+                  if (mounted && identical(_menu, menu)) _closeMenu();
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      _loadingSubtitleMenu = null;
+                      _loadingSubtitleIndex = null;
+                    });
+                  }
+                }
               },
             );
           })
@@ -675,7 +693,13 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               ),
             if (_value.hasError) _buildError(),
             if (_menu case final menu?)
-              BetterPlayerTvMenu(title: menu.title, items: menu.items, onClose: _closeMenu, onBack: _handleMenuBack),
+              BetterPlayerTvMenu(
+                title: menu.title,
+                items: menu.items,
+                onClose: _closeMenu,
+                onBack: _handleMenuBack,
+                loadingIndex: identical(menu, _loadingSubtitleMenu) ? _loadingSubtitleIndex : null,
+              ),
           ],
         ),
       ),
