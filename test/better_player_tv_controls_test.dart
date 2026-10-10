@@ -9,6 +9,35 @@ import 'better_player_mock_controller.dart';
 import 'mock_video_player_controller.dart';
 
 void main() {
+  testWidgets('TV playback errors use the configured recovery view', (tester) async {
+    String? receivedError;
+    final video = MockVideoPlayerController();
+    final controller = BetterPlayerMockController(
+      BetterPlayerConfiguration(
+        errorBuilder: (context, error) {
+          receivedError = error;
+          return const Center(child: Text('Choose another provider'));
+        },
+      ),
+    );
+    controller.videoPlayerController = video;
+    await controller.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    video.value = VideoPlayerValue.erroneous('androidx.media3.exoplayer.ExoPlaybackException: Source error');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BetterPlayerTvControls(controller: controller, onControlsVisibilityChanged: (_) {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Choose another provider'), findsOneWidget);
+    expect(receivedError, contains('ExoPlaybackException'));
+    expect(find.text('Playback failed'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('remote navigation keeps every TV control visible', (tester) async {
     tester.view.physicalSize = const Size(960, 540);
     tester.view.devicePixelRatio = 1;

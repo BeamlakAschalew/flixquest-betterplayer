@@ -77,6 +77,27 @@ class BetterPlayerPanelColors extends ThemeExtension<BetterPlayerPanelColors> {
     );
   }
 
+  /// Use the host app's scaffold surface in every mode, including AMOLED
+  /// and custom themes, rather than switching to a separate player palette.
+  factory BetterPlayerPanelColors.fromTheme(ThemeData theme) {
+    final page = theme.scaffoldBackgroundColor;
+    final ink = theme.colorScheme.onSurface;
+    Color lift(double alpha) => Color.alphaBlend(ink.withValues(alpha: alpha), page);
+    return BetterPlayerPanelColors(
+      page: page,
+      panel: page,
+      raised: lift(.07),
+      foreground: ink,
+      secondary: ink.withValues(alpha: .86),
+      muted: ink.withValues(alpha: .65),
+      hairline: ink.withValues(alpha: .12),
+      selectedFill: ink.withValues(alpha: .08),
+      pill: ink.withValues(alpha: .95),
+      onPill: ThemeData.estimateBrightnessForColor(ink) == Brightness.dark ? Colors.white : Colors.black,
+      track: ink.withValues(alpha: .24),
+    );
+  }
+
   /// The screen behind a portrait player, around the video.
   final Color page;
 
@@ -208,15 +229,11 @@ class BetterPlayerTvPanelColors {
 /// for progress; buttons are ink pills, never the accent.
 ThemeData betterPlayerPanelTheme(ThemeData inherited, {bool dark = false}) {
   final accent = inherited.colorScheme.primary;
-  final light = !dark && inherited.colorScheme.brightness == Brightness.light;
-  final colors = light ? BetterPlayerPanelColors.light(inherited.scaffoldBackgroundColor) : BetterPlayerPanelColors.dark;
-  final base = ThemeData(
-    useMaterial3: inherited.useMaterial3,
-    brightness: light ? Brightness.light : Brightness.dark,
-    fontFamily: inherited.textTheme.bodyMedium?.fontFamily,
-  );
-  final scheme = (light ? const ColorScheme.light() : const ColorScheme.dark()).copyWith(
-    primary: accent,
+  final colors = dark ? BetterPlayerPanelColors.dark : BetterPlayerPanelColors.fromTheme(inherited);
+  // Retain every app color role. A default ColorScheme here introduces an
+  // unrelated secondary accent in overscroll indicators and other controls.
+  final scheme = inherited.colorScheme.copyWith(
+    brightness: dark ? Brightness.dark : inherited.brightness,
     onPrimary: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark ? Colors.white : Colors.black,
     surface: colors.panel,
     onSurface: colors.foreground,
@@ -231,17 +248,24 @@ ThemeData betterPlayerPanelTheme(ThemeData inherited, {bool dark = false}) {
   );
   final ink = colors.foreground;
   final pill = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
-  const buttonText = TextStyle(fontSize: 15, fontWeight: FontWeight.w700);
+  final buttonText = TextStyle(
+    fontFamily: inherited.textTheme.labelLarge?.fontFamily ?? inherited.textTheme.bodyMedium?.fontFamily,
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+  );
   final radius = BorderRadius.circular(8);
-  return base.copyWith(
-    extensions: <ThemeExtension<dynamic>>[colors],
+  return inherited.copyWith(
+    extensions: [
+      ...inherited.extensions.values.where((extension) => extension is! BetterPlayerPanelColors),
+      colors,
+    ],
     colorScheme: scheme,
     canvasColor: colors.panel,
     scaffoldBackgroundColor: colors.panel,
-    textTheme: base.textTheme.apply(bodyColor: ink, displayColor: ink),
+    textTheme: inherited.textTheme.apply(bodyColor: ink, displayColor: ink),
     iconTheme: IconThemeData(color: ink),
     progressIndicatorTheme: ProgressIndicatorThemeData(
-      color: ink,
+      color: accent,
       linearTrackColor: colors.track,
       circularTrackColor: Colors.transparent,
     ),
@@ -280,10 +304,10 @@ ThemeData betterPlayerPanelTheme(ThemeData inherited, {bool dark = false}) {
     ),
     iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: ink)),
     sliderTheme: SliderThemeData(
-      activeTrackColor: ink,
+      activeTrackColor: accent,
       inactiveTrackColor: colors.track,
-      thumbColor: ink,
-      overlayColor: ink.withValues(alpha: .12),
+      thumbColor: accent,
+      overlayColor: accent.withValues(alpha: .12),
       activeTickMarkColor: Colors.transparent,
       inactiveTickMarkColor: Colors.transparent,
     ),
@@ -316,12 +340,6 @@ ThemeData betterPlayerPanelTheme(ThemeData inherited, {bool dark = false}) {
         borderRadius: radius,
         borderSide: BorderSide(color: ink.withValues(alpha: .5)),
       ),
-    ),
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: light ? const Color(0xFF2B2C2E) : const Color(0xFF2B2B2B),
-      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
-      actionTextColor: Colors.white,
-      behavior: SnackBarBehavior.floating,
     ),
     dialogTheme: DialogThemeData(backgroundColor: colors.panel, surfaceTintColor: Colors.transparent),
     bottomSheetTheme: BottomSheetThemeData(
@@ -433,13 +451,7 @@ class _BetterPlayerControlButtonState extends State<BetterPlayerControlButton> {
     );
     if (!enabled) button = Opacity(opacity: .4, child: button);
     if (!widget.showLabel) button = Tooltip(message: widget.label, child: button);
-    return Semantics(
-      button: true,
-      label: widget.label,
-      enabled: enabled,
-      selected: widget.selected,
-      child: button,
-    );
+    return Semantics(button: true, label: widget.label, enabled: enabled, selected: widget.selected, child: button);
   }
 }
 
@@ -947,7 +959,9 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
                           child: Semantics(
                             button: true,
                             selected: speed == _selected,
-                            label: speed == 1 ? '${BetterPlayerSpeedSelector.format(speed)} ${widget.normalLabel}' : BetterPlayerSpeedSelector.format(speed),
+                            label: speed == 1
+                                ? '${BetterPlayerSpeedSelector.format(speed)} ${widget.normalLabel}'
+                                : BetterPlayerSpeedSelector.format(speed),
                             onTap: () => _select(speed),
                             excludeSemantics: true,
                             child: KeyedSubtree(
@@ -972,7 +986,9 @@ class _BetterPlayerSpeedSelectorState extends State<BetterPlayerSpeedSelector> {
                                     ),
                                   ),
                                   Text(
-                                    speed == 1 ? '${BetterPlayerSpeedSelector.format(speed)} (${widget.normalLabel})' : BetterPlayerSpeedSelector.format(speed),
+                                    speed == 1
+                                        ? '${BetterPlayerSpeedSelector.format(speed)} (${widget.normalLabel})'
+                                        : BetterPlayerSpeedSelector.format(speed),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(

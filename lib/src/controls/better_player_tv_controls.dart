@@ -895,6 +895,10 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   }
 
   Widget _buildError() {
+    final custom = widget.controller.betterPlayerConfiguration.errorBuilder;
+    if (custom != null) {
+      return custom(context, _value.errorDescription);
+    }
     return ColoredBox(
       color: Colors.black87,
       child: Center(
@@ -903,9 +907,14 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           children: <Widget>[
             const Icon(PhosphorIconsRegular.warningCircle, color: Colors.white, size: 48),
             const SizedBox(height: 14),
-            const Text(
-              'Playback failed',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+            Text(
+              _configuration.strings.playbackFailed,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontFamily: _configuration.emphasisFontFamily,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 18),
             _TvControlButton(
