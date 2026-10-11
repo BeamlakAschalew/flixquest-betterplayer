@@ -1,4 +1,4 @@
-/// The words the phone controls show, so an app can hand over its own
+/// The words the phone and TV controls show, so an app can hand over its own
 /// translations. Everything defaults to English.
 class BetterPlayerControlsStrings {
   const BetterPlayerControlsStrings({
@@ -40,6 +40,20 @@ class BetterPlayerControlsStrings {
     this.stretchDescription = 'Fill the screen without cropping',
     this.live = 'LIVE',
     this.playbackFailed = 'Playback failed',
+    this.settings = 'Settings',
+    this.playerSettings = 'Player settings',
+    this.audioTrack = 'Audio track',
+    this.defaultAudio = 'Default audio',
+    this.subtitleNumber = 'Subtitle {number}',
+    this.automatic = 'Auto',
+    this.on = 'On',
+    this.defaultLabel = 'Default',
+    this.videoQuality = 'Video quality',
+    this.detectedQuality = 'Detected {height}p • {dimensions}',
+    this.retry = 'Retry',
+    this.loadingSubtitles = 'Loading subtitles',
+    this.playbackPosition = 'Playback position',
+    this.positionOf = '{position} of {duration}',
   });
 
   final String back;
@@ -88,6 +102,28 @@ class BetterPlayerControlsStrings {
   final String stretchDescription;
   final String live;
   final String playbackFailed;
+  final String settings;
+  final String playerSettings;
+  final String audioTrack;
+  final String defaultAudio;
+  final String subtitleNumber;
+  final String automatic;
+  final String on;
+  final String defaultLabel;
+  final String videoQuality;
+  final String detectedQuality;
+  final String retry;
+  final String loadingSubtitles;
+  final String playbackPosition;
+  final String positionOf;
+
+  String subtitleBy(int number) => subtitleNumber.replaceAll('{number}', '$number');
+
+  String detectedQualityDetails(int height, String dimensions) =>
+      detectedQuality.replaceAll('{height}', '$height').replaceAll('{dimensions}', dimensions);
+
+  String positionOfDuration(String position, String duration) =>
+      positionOf.replaceAll('{position}', position).replaceAll('{duration}', duration);
 
   String seekBackBy(int seconds) => seekBack.replaceAll('{seconds}', '$seconds');
 

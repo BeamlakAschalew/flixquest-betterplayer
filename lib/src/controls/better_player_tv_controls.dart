@@ -60,6 +60,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   BetterPlayerControlsConfiguration get _configuration => widget.controller.betterPlayerControlsConfiguration;
 
+  BetterPlayerControlsStrings get _strings => _configuration.strings;
+
   Color get _accent => widget.accentColor ?? _configuration.progressBarPlayedColor;
 
   @override
@@ -349,7 +351,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final items = <BetterPlayerTvMenuItem>[
       if (_configuration.enablePlaybackSpeed)
         BetterPlayerTvMenuItem(
-          label: 'Playback speed',
+          label: _strings.playbackSpeed,
           subtitle: '${_value.speed}×',
           icon: PhosphorIcons.gauge(),
           showsNext: true,
@@ -357,7 +359,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       if (_configuration.enableSubtitles)
         BetterPlayerTvMenuItem(
-          label: 'Subtitles',
+          label: _strings.subtitles,
           subtitle: _subtitleLabel(),
           icon: PhosphorIcons.closedCaptioning(),
           showsNext: true,
@@ -365,7 +367,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       if (_configuration.enableAudioTracks)
         BetterPlayerTvMenuItem(
-          label: 'Audio track',
+          label: _strings.audioTrack,
           subtitle: _audioLabel(),
           icon: PhosphorIcons.waveform(),
           showsNext: true,
@@ -373,7 +375,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       if (_configuration.enableQualities)
         BetterPlayerTvMenuItem(
-          label: 'Quality',
+          label: _strings.quality,
           subtitle: _qualityLabel(),
           icon: PhosphorIcons.highDefinition(),
           showsNext: true,
@@ -400,7 +402,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           },
         ),
     ];
-    _openMenu('Player settings', items);
+    _openMenu(_strings.playerSettings, items);
   }
 
   void _restoreOverlayFocus() {
@@ -414,7 +416,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   void _openSpeedMenu({bool nested = false}) {
     final current = _value.speed;
     _openMenu(
-      'Playback speed',
+      _strings.playbackSpeed,
       _configuration.playbackSpeeds
           .where((speed) => speed > 0 && speed <= 2)
           .map(
@@ -442,7 +444,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       ),
     ];
     _openMenu(
-      'Subtitles',
+      _strings.subtitles,
       sources
           .asMap()
           .entries
@@ -454,10 +456,10 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                 : identical(source, selected) || source == selected;
             return BetterPlayerTvMenuItem(
               label: off
-                  ? 'Off'
-                  : source.name?.trim().isNotEmpty == true
+                  ? _strings.off
+                  : source.name?.trim().isNotEmpty == true && source.name != 'Default subtitles'
                   ? source.name!.trim()
-                  : 'Subtitle ${entry.key}',
+                  : _strings.subtitleBy(entry.key),
               icon: off ? PhosphorIcons.subtitlesSlash() : PhosphorIcons.closedCaptioning(),
               selected: isSelected,
               onSelected: () async {
@@ -491,11 +493,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final tracks = widget.controller.betterPlayerAsmsAudioTracks ?? const [];
     final selected = widget.controller.betterPlayerAsmsAudioTrack;
     _openMenu(
-      'Audio track',
+      _strings.audioTrack,
       tracks.isEmpty
           ? <BetterPlayerTvMenuItem>[
               BetterPlayerTvMenuItem(
-                label: 'Default audio',
+                label: _strings.defaultAudio,
                 icon: PhosphorIcons.waveform(),
                 selected: true,
                 onSelected: _closeMenu,
@@ -506,7 +508,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                   (track) => BetterPlayerTvMenuItem(
                     label: track.label?.trim().isNotEmpty == true
                         ? track.label!.trim()
-                        : track.language?.toUpperCase() ?? 'Audio track',
+                        : track.language?.toUpperCase() ?? _strings.audioTrack,
                     subtitle: track.language,
                     icon: PhosphorIcons.waveform(),
                     selected:
@@ -532,7 +534,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       items.add(
         BetterPlayerTvMenuItem(
           label: automatic
-              ? 'Auto'
+              ? _strings.automatic
               : (track.height ?? 0) > 0
               ? '${track.height}p'
               : '${((track.bitrate ?? 0) / 1000).round()} kbps',
@@ -584,29 +586,29 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         ),
       );
     }
-    _openMenu('Video quality', items, nested: nested);
+    _openMenu(_strings.videoQuality, items, nested: nested);
   }
 
   void _openCropMenu({bool nested = false}) {
     final current = widget.controller.getFit();
-    _openMenu('Crop & fit', <BetterPlayerTvMenuItem>[
+    _openMenu(_strings.cropAndFit, <BetterPlayerTvMenuItem>[
       BetterPlayerTvMenuItem(
-        label: 'Fit',
-        subtitle: 'Show the entire video',
+        label: _strings.fit,
+        subtitle: _strings.fitDescription,
         icon: PhosphorIcons.arrowsIn(),
         selected: current == BoxFit.contain,
         onSelected: () => _selectCropMode(BoxFit.contain),
       ),
       BetterPlayerTvMenuItem(
-        label: 'Crop to fill',
-        subtitle: 'Fill the screen and trim overflowing edges',
+        label: _strings.cropToFill,
+        subtitle: _strings.cropToFillDescription,
         icon: PhosphorIcons.crop(),
         selected: current == BoxFit.cover,
         onSelected: () => _selectCropMode(BoxFit.cover),
       ),
       BetterPlayerTvMenuItem(
-        label: 'Stretch',
-        subtitle: 'Fill the screen without cropping',
+        label: _strings.stretch,
+        subtitle: _strings.stretchDescription,
         icon: PhosphorIcons.arrowsOut(),
         selected: current == BoxFit.fill,
         onSelected: () => _selectCropMode(BoxFit.fill),
@@ -622,14 +624,18 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
   String _subtitleLabel() {
     final source = widget.controller.betterPlayerSubtitlesSource;
     if (source == null || source.type == BetterPlayerSubtitlesSourceType.none) {
-      return 'Off';
+      return _strings.off;
     }
-    return source.name?.trim().isNotEmpty == true ? source.name!.trim() : 'On';
+    return source.name?.trim().isNotEmpty == true && source.name != 'Default subtitles'
+        ? source.name!.trim()
+        : _strings.on;
   }
 
   String _audioLabel() {
     final track = widget.controller.betterPlayerAsmsAudioTrack;
-    return track?.label?.trim().isNotEmpty == true ? track!.label!.trim() : track?.language?.toUpperCase() ?? 'Default';
+    return track?.label?.trim().isNotEmpty == true
+        ? track!.label!.trim()
+        : track?.language?.toUpperCase() ?? _strings.defaultLabel;
   }
 
   String _qualityLabel() {
@@ -645,7 +651,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     }
     final track = widget.controller.betterPlayerAsmsTrack;
     if (track == null || (track.height ?? 0) == 0) {
-      return detectedHeight == null ? 'Auto' : 'Auto • ${detectedHeight}p';
+      return detectedHeight == null ? _strings.automatic : '${_strings.automatic} • ${detectedHeight}p';
     }
     return '${track.height}p';
   }
@@ -655,7 +661,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final height = BetterPlayerUtils.detectedVideoHeight(size);
     final dimensions = BetterPlayerUtils.detectedVideoDimensions(size);
     if (height == null || dimensions == null) return null;
-    return 'Detected ${height}p • $dimensions';
+    return _strings.detectedQualityDetails(height, dimensions);
   }
 
   String _number(double value) => value % 1 == 0 ? value.toStringAsFixed(0) : value.toString();
@@ -695,6 +701,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
             if (_menu case final menu?)
               BetterPlayerTvMenu(
                 title: menu.title,
+                strings: _strings,
                 items: menu.items,
                 onClose: _closeMenu,
                 onBack: _handleMenuBack,
@@ -711,7 +718,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final leading = <_TvButtonSpec>[
       _TvButtonSpec(
         id: 'play',
-        label: _value.isPlaying ? 'Pause' : 'Play',
+        label: _value.isPlaying ? _strings.pause : _strings.play,
         icon: _value.isPlaying
             ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
             : PhosphorIcons.play(PhosphorIconsStyle.fill),
@@ -720,13 +727,13 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       if (!live) ...<_TvButtonSpec>[
         _TvButtonSpec(
           id: 'rewind',
-          label: 'Back ${_configuration.backwardSkipTimeInMilliseconds ~/ 1000}s',
+          label: _strings.seekBackBy(_configuration.backwardSkipTimeInMilliseconds ~/ 1000),
           icon: PhosphorIcons.arrowCounterClockwise(),
           onPressed: () => _seekBy(Duration(milliseconds: -_configuration.backwardSkipTimeInMilliseconds)),
         ),
         _TvButtonSpec(
           id: 'forward',
-          label: 'Forward ${_configuration.forwardSkipTimeInMilliseconds ~/ 1000}s',
+          label: _strings.seekForwardBy(_configuration.forwardSkipTimeInMilliseconds ~/ 1000),
           icon: PhosphorIcons.arrowClockwise(),
           onPressed: () => _seekBy(Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds)),
         ),
@@ -735,45 +742,40 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final trailing = <_TvButtonSpec>[
       // The app's own frequent actions lead, as they do on the phone bar.
       for (final (index, action) in _configuration.quickActions.indexed)
-        _TvButtonSpec(
-          id: 'quick_$index',
-          label: action.title,
-          icon: action.icon,
-          onPressed: () => action.onClicked(),
-        ),
+        _TvButtonSpec(id: 'quick_$index', label: action.title, icon: action.icon, onPressed: () => action.onClicked()),
       if (_configuration.enableEpisodeSelection && _configuration.onEpisodeListTap != null)
         _TvButtonSpec(
           id: 'episodes',
-          label: 'Episodes',
+          label: _strings.episodes,
           icon: PhosphorIcons.cardsThree(),
           onPressed: _configuration.onEpisodeListTap!,
         ),
       if (_configuration.enableMovieRecommendations && _configuration.onMovieRecommendationsTap != null)
         _TvButtonSpec(
           id: 'recommendations',
-          label: 'More like this',
+          label: _strings.moreLikeThis,
           icon: PhosphorIcons.squaresFour(),
           onPressed: _configuration.onMovieRecommendationsTap!,
         ),
       if (_configuration.enableSubtitles)
         _TvButtonSpec(
           id: 'subtitles',
-          label: 'Subtitles',
+          label: _strings.subtitles,
           icon: PhosphorIcons.closedCaptioning(),
           onPressed: _openSubtitlesMenu,
         ),
       if (_configuration.enableAudioTracks)
-        _TvButtonSpec(id: 'audio', label: 'Audio', icon: PhosphorIcons.waveform(), onPressed: _openAudioMenu),
+        _TvButtonSpec(id: 'audio', label: _strings.audio, icon: PhosphorIcons.waveform(), onPressed: _openAudioMenu),
       if (_configuration.enableQualities)
         _TvButtonSpec(
           id: 'quality',
-          label: 'Quality',
+          label: _strings.quality,
           icon: PhosphorIcons.highDefinition(),
           onPressed: _openQualityMenu,
         ),
       if (_configuration.enableCrop)
-        _TvButtonSpec(id: 'crop', label: 'Crop & fit', icon: _configuration.cropIcon, onPressed: _openCropMenu),
-      _TvButtonSpec(id: 'settings', label: 'Settings', icon: PhosphorIcons.gearSix(), onPressed: _openSettings),
+        _TvButtonSpec(id: 'crop', label: _strings.cropAndFit, icon: _configuration.cropIcon, onPressed: _openCropMenu),
+      _TvButtonSpec(id: 'settings', label: _strings.settings, icon: PhosphorIcons.gearSix(), onPressed: _openSettings),
     ];
     _buttonOrder = <FocusNode>[
       for (final spec in <_TvButtonSpec>[...leading, ...trailing])
@@ -820,7 +822,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                         style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
                       ),
                     ),
-                    if (live) ...<Widget>[const SizedBox(width: 14), const _LiveBadge()],
+                    if (live) ...<Widget>[const SizedBox(width: 14), _LiveBadge(label: _strings.live)],
                   ],
                 ),
               ),
@@ -838,6 +840,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                       if (!live)
                         BetterPlayerTvProgressBar(
                           key: _timeline,
+                          strings: _strings,
                           focusNode: _timelineFocus,
                           position: _value.position,
                           duration: _value.duration ?? Duration.zero,
@@ -942,7 +945,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
             ),
             const SizedBox(height: 18),
             _TvControlButton(
-              label: 'Retry',
+              label: _strings.retry,
               icon: PhosphorIcons.arrowClockwise(),
               showLabel: true,
               autofocus: true,
@@ -973,7 +976,9 @@ class _TvButtonSpec {
 
 /// "LIVE", where a timeline would otherwise be.
 class _LiveBadge extends StatelessWidget {
-  const _LiveBadge();
+  const _LiveBadge({required this.label});
+
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -983,9 +988,9 @@ class _LiveBadge extends StatelessWidget {
         border: Border.all(color: Colors.white70, width: 1.5),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text(
-        'LIVE',
-        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4),
       ),
     );
   }

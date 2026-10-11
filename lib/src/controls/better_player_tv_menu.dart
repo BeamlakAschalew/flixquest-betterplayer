@@ -1,4 +1,5 @@
 import 'package:better_player_plus/src/controls/better_player_ui.dart';
+import '../configuration/better_player_controls_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -30,6 +31,7 @@ class BetterPlayerTvMenu extends StatefulWidget {
     required this.onClose,
     this.onBack,
     this.loadingIndex,
+    this.strings = const BetterPlayerControlsStrings(),
     this.accentColor = Colors.deepOrange,
     super.key,
   });
@@ -42,6 +44,7 @@ class BetterPlayerTvMenu extends StatefulWidget {
   /// The row currently being applied. Other selections wait until it finishes.
   final int? loadingIndex;
   final Color accentColor;
+  final BetterPlayerControlsStrings strings;
 
   @override
   State<BetterPlayerTvMenu> createState() => _BetterPlayerTvMenuState();
@@ -192,7 +195,11 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    _TvMenuCloseButton(focusNode: _closeFocusNode, onPressed: widget.onClose),
+                    _TvMenuCloseButton(
+                      focusNode: _closeFocusNode,
+                      onPressed: widget.onClose,
+                      label: widget.strings.close,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -208,6 +215,7 @@ class _BetterPlayerTvMenuState extends State<BetterPlayerTvMenu> {
                         accentColor: widget.accentColor,
                         focusNode: _itemFocusNodes[index],
                         isLoading: widget.loadingIndex == index,
+                        loadingLabel: widget.strings.loadingSubtitles,
                         onSelected: () {
                           if (widget.loadingIndex == null) item.onSelected();
                         },
@@ -230,6 +238,7 @@ class _TvMenuTile extends StatefulWidget {
     required this.accentColor,
     required this.focusNode,
     required this.isLoading,
+    required this.loadingLabel,
     required this.onSelected,
   });
 
@@ -237,6 +246,7 @@ class _TvMenuTile extends StatefulWidget {
   final Color accentColor;
   final FocusNode focusNode;
   final bool isLoading;
+  final String loadingLabel;
   final VoidCallback onSelected;
 
   @override
@@ -332,7 +342,7 @@ class _TvMenuTileState extends State<_TvMenuTile> {
                 if (widget.isLoading)
                   Semantics(
                     liveRegion: true,
-                    label: 'Loading subtitles',
+                    label: widget.loadingLabel,
                     child: SizedBox.square(
                       key: const Key('tv_subtitle_selection_progress'),
                       dimension: 20,
@@ -353,10 +363,11 @@ class _TvMenuTileState extends State<_TvMenuTile> {
 }
 
 class _TvMenuCloseButton extends StatefulWidget {
-  const _TvMenuCloseButton({required this.focusNode, required this.onPressed});
+  const _TvMenuCloseButton({required this.focusNode, required this.onPressed, required this.label});
 
   final FocusNode focusNode;
   final VoidCallback onPressed;
+  final String label;
 
   @override
   State<_TvMenuCloseButton> createState() => _TvMenuCloseButtonState();
@@ -368,32 +379,33 @@ class _TvMenuCloseButtonState extends State<_TvMenuCloseButton> {
   @override
   Widget build(BuildContext context) {
     final colors = BetterPlayerTvPanelColors.of(context);
-    return FocusableActionDetector(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
-      },
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            widget.onPressed();
-            return null;
-          },
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: FocusableActionDetector(
+        focusNode: widget.focusNode,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: _focused ? colors.focusFill : colors.idleFill, shape: BoxShape.circle),
+          child: Icon(PhosphorIconsRegular.x, color: _focused ? colors.onFocus : colors.foreground),
         ),
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: _focused ? colors.focusFill : colors.idleFill,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(PhosphorIconsRegular.x, color: _focused ? colors.onFocus : colors.foreground),
       ),
     );
   }

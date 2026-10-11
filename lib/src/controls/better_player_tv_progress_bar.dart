@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../configuration/better_player_controls_strings.dart';
 import 'package:flutter/services.dart';
 
 /// The TV timeline: a thin track that thickens under focus, where Left and
@@ -15,6 +17,7 @@ class BetterPlayerTvProgressBar extends StatefulWidget {
     required this.onSeek,
     required this.onEditingChanged,
     this.focusNode,
+    this.strings = const BetterPlayerControlsStrings(),
     this.seekStep = const Duration(seconds: 10),
     this.commitDelay = const Duration(milliseconds: 900),
     this.playedColor = Colors.deepOrange,
@@ -29,6 +32,7 @@ class BetterPlayerTvProgressBar extends StatefulWidget {
   final ValueChanged<Duration> onSeek;
   final ValueChanged<bool> onEditingChanged;
   final FocusNode? focusNode;
+  final BetterPlayerControlsStrings strings;
   final Duration seekStep;
 
   /// How long the remote must rest before a scrub is applied.
@@ -128,8 +132,8 @@ class BetterPlayerTvProgressBarState extends State<BetterPlayerTvProgressBar> {
 
     return Semantics(
       slider: true,
-      label: 'Playback position',
-      value: '${_format(_effectivePosition)} of ${_format(widget.duration)}',
+      label: widget.strings.playbackPosition,
+      value: widget.strings.positionOfDuration(_format(_effectivePosition), _format(widget.duration)),
       child: Focus(
         focusNode: widget.focusNode,
         onKeyEvent: _handleKey,
