@@ -184,9 +184,10 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         return KeyEventResult.handled;
       }
     }
+    // OK on a bare picture only brings the controls back; pausing takes a
+    // second press on the focused Play button, or the remote's play key.
     if (!_visible && _isActivate(key)) {
       _setVisibility(true);
-      _togglePlayback();
       _requestPlayFocus();
       return KeyEventResult.handled;
     }
@@ -812,17 +813,33 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               _hideWithControls(
-                Row(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Flexible(
-                      child: Text(
-                        _configuration.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
-                      ),
+                    Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            _configuration.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (live) ...<Widget>[const SizedBox(width: 14), _LiveBadge(label: _strings.live)],
+                      ],
                     ),
-                    if (live) ...<Widget>[const SizedBox(width: 14), _LiveBadge(label: _strings.live)],
+                    if (_configuration.subtitle case final subtitle? when subtitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 16),
+                        ),
+                      ),
                   ],
                 ),
               ),

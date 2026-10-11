@@ -273,6 +273,8 @@ void main() {
   Future<(BetterPlayerController, MockVideoPlayerController)> pumpControls(
     WidgetTester tester, {
     bool live = false,
+    String name = '',
+    String? subtitle,
   }) async {
     tester.view.physicalSize = const Size(960, 540);
     tester.view.devicePixelRatio = 1;
@@ -280,10 +282,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final videoController = MockVideoPlayerController();
     final controller = BetterPlayerMockController(
-      const BetterPlayerConfiguration(
+      BetterPlayerConfiguration(
         controlsConfiguration: BetterPlayerControlsConfiguration(
           showControlsOnInitialize: false,
-          controlsHideTime: Duration(seconds: 4),
+          controlsHideTime: const Duration(seconds: 4),
+          name: name,
+          subtitle: subtitle,
         ),
       ),
     );
@@ -346,6 +350,27 @@ void main() {
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV play pause');
     expect(find.text('Pause'), findsOneWidget);
+  });
+
+  testWidgets('OK on a bare picture shows the controls without pausing', (tester) async {
+    final (_, video) = await pumpControls(tester);
+    video.playbackOperations.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV play pause');
+    expect(find.text('Pause'), findsOneWidget);
+    expect(video.playbackOperations, isNot(contains('pause')));
+  });
+
+  testWidgets('the episode name shows under the series name', (tester) async {
+    await pumpControls(tester, name: 'Severance', subtitle: 'S2:E1 · Hello, Ms. Cobel');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    final series = tester.getTopLeft(find.text('Severance'));
+    final episode = tester.getTopLeft(find.text('S2:E1 · Hello, Ms. Cobel'));
+    expect(episode.dx, series.dx);
+    expect(episode.dy, greaterThan(series.dy));
   });
 
   testWidgets('hiding the controls leaves focus in a sheet opened over them', (tester) async {
