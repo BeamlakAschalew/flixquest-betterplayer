@@ -345,6 +345,13 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
               bytesTransferred: (map['bytes'] as num?)?.toInt() ?? 0,
             );
 
+          case 'connectivityChanged':
+            return VideoEvent(
+              eventType: VideoEventType.connectivityChanged,
+              key: key,
+              isNetworkAvailable: map['online'] as bool? ?? true,
+            );
+
           default:
             return VideoEvent(eventType: VideoEventType.unknown, key: key);
         }

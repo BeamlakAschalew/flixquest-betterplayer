@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Lets playback wait for a dropped connection instead of failing. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Remove the package="uz.shs.better_player_plus" line -->
     <application>
         <meta-data

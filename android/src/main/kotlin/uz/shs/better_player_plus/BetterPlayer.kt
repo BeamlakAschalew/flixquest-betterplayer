@@ -53,6 +53,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.dash.DefaultDashChunkSource
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
@@ -69,6 +70,8 @@ import androidx.media3.exoplayer.offline.DownloadHelper
 import androidx.media3.exoplayer.smoothstreaming.DefaultSsChunkSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
 import androidx.media3.exoplayer.source.ClippingMediaSource
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -77,7 +80,6 @@ import java.io.File
 import java.lang.Exception
 import java.lang.IllegalStateException
 import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
 import androidx.core.net.toUri
@@ -85,6 +87,18 @@ import androidx.core.net.toUri
 private const val FLIXQUEST_OFFLINE_CACHE_KEY_PREFIX = "flixquest-offline:"
 private const val LIVE_MIN_PLAYBACK_SPEED = 0.97f
 private const val LIVE_MAX_PLAYBACK_SPEED = 1.01f
+// A media segment counts as blocking once playback is within this of its start.
+private const val SEGMENT_BLOCKING_TOLERANCE_MS = 1_000L
+// Missing or corrupt segments may be skipped this many times in a row.
+private const val MAX_CONSECUTIVE_SEGMENT_SKIPS = 3
+// Unreachable segments are skipped once in a row: a second suggests the host is down.
+private const val MAX_CONSECUTIVE_NETWORK_SKIPS = 1
+// A host that served media this recently is up, so one segment failing is the segment's fault.
+private const val HOST_HEALTH_WINDOW_MS = 180_000L
+// Playback this far past a skip shows the stream is healthy again.
+private const val SKIP_RECOVERED_MS = 2_000L
+private const val DECODER_RECOVERY_WINDOW_MS = 30_000L
+private const val MAX_DECODER_RECOVERIES = 2
 
 @UnstableApi
 internal class BetterPlayer(
@@ -120,21 +134,30 @@ internal class BetterPlayer(
     private val customDefaultLoadControl: CustomDefaultLoadControl =
         customDefaultLoadControl ?: CustomDefaultLoadControl()
     private var lastSendBufferedPosition = 0L
-    private val resilientLoadErrorHandlingPolicy =
-        StreamingLoadErrorPolicy()
+    private val resilientLoadErrorHandlingPolicy = streamingPolicy()
     /**
      * LoadErrorHandlingPolicy callbacks run on ExoPlayer's playback thread,
      * while player APIs (including currentPosition) must run on the player
-     * application looper. Keep only cross-thread state in the callback and
-     * read the player again from onPlayerError on the main thread.
+     * application looper. The skip callback reads only these main-thread
+     * snapshots and posts the seek, which re-checks the player before acting.
      */
     @Volatile
-    private var pendingBrokenSegmentStartMs: Long? = null
-    @Volatile
-    private var pendingBrokenSegmentEndMs: Long? = null
-    private val skippedBrokenSegmentEnds = ConcurrentHashMap.newKeySet<Long>()
-    @Volatile
     private var lastKnownPositionMs = 0L
+    @Volatile
+    private var lastKnownMediaItemIndex = 0
+    @Volatile
+    private var pendingSkipEndMs: Long? = null
+    @Volatile
+    private var consecutiveSegmentSkips = 0
+    @Volatile
+    private var consecutiveNetworkSkips = 0
+    private var lastSkipTargetMs = 0L
+    @Volatile
+    private var lastMediaLoadCompletedAtMs = 0L
+    private val segmentSkipHandler = Handler(Looper.getMainLooper())
+    private var decoderRecoveries = 0
+    private var lastDecoderRecoveryMs = 0L
+    private val connectivityListener: (Boolean) -> Unit = ::sendConnectivity
     private var hasPreRollSequence = false
     private var preRollEndedSent = false
     // Why the sequence left the pre-roll: "skipped" or "error". A natural end
@@ -143,10 +166,10 @@ internal class BetterPlayer(
     private var completionSent = false
     private var liveSource = false
     private val liveWindowRecovery = LiveWindowRecovery()
-    private val liveLoadErrorHandlingPolicy = StreamingLoadErrorPolicy(isLive = true)
+    private val liveLoadErrorHandlingPolicy = streamingPolicy(isLive = true)
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
-        StreamingLoadErrorPolicy(onMissingSegment = ::markShortSegmentForSkipping)
+        streamingPolicy(onBrokenSegment = ::requestBrokenSegmentSkip)
 
     init {
         loadControl = StreamingLoadControl.create(context, this.customDefaultLoadControl)
@@ -164,10 +187,33 @@ internal class BetterPlayer(
             .build()
         streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
         exoPlayer.addAnalyticsListener(streamingDiagnostics)
+        exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onLoadCompleted(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData
+            ) {
+                if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA) {
+                    lastMediaLoadCompletedAtMs = SystemClock.elapsedRealtime()
+                }
+            }
+        })
         workManager = WorkManager.getInstance(context)
         workerObserverMap = HashMap()
         setupVideoPlayer(eventChannel, textureEntry, result)
+        NetworkConnectivity.addListener(connectivityListener)
+        sendConnectivity(NetworkConnectivity.isOnline)
     }
+
+    private fun streamingPolicy(
+        isLive: Boolean = false,
+        onBrokenSegment: ((Long, Long, LoadFailure) -> SegmentSkip)? = null
+    ) = StreamingLoadErrorPolicy(
+        isLive = isLive,
+        isOnline = { NetworkConnectivity.isOnline },
+        onSuspectedOutage = NetworkConnectivity::reportSuspectedOutage,
+        onBrokenSegment = onBrokenSegment
+    )
 
     @OptIn(UnstableApi::class)
     fun setDataSource(
@@ -196,9 +242,11 @@ internal class BetterPlayer(
         isInitialized = false
         completionSent = false
         lastKnownPositionMs = 0L
-        pendingBrokenSegmentStartMs = null
-        pendingBrokenSegmentEndMs = null
-        skippedBrokenSegmentEnds.clear()
+        lastKnownMediaItemIndex = 0
+        pendingSkipEndMs = null
+        resetSegmentSkips()
+        lastMediaLoadCompletedAtMs = 0L
+        decoderRecoveries = 0
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
@@ -656,7 +704,15 @@ internal class BetterPlayer(
         positionSnapshotHandler = Handler(Looper.getMainLooper())
         positionSnapshotRunnable = object : Runnable {
             override fun run() {
-                lastKnownPositionMs = exoPlayer?.currentPosition ?: 0L
+                val player = exoPlayer
+                lastKnownPositionMs = player?.currentPosition ?: 0L
+                lastKnownMediaItemIndex = player?.currentMediaItemIndex ?: 0
+                if (player != null && consecutiveSegmentSkips > 0 &&
+                    player.playbackState == Player.STATE_READY &&
+                    lastKnownPositionMs > lastSkipTargetMs + SKIP_RECOVERED_MS
+                ) {
+                    resetSegmentSkips()
+                }
                 positionSnapshotHandler?.postDelayed(this, 250L)
             }
         }
@@ -761,7 +817,7 @@ internal class BetterPlayer(
                     player.prepare()
                     return
                 }
-                if (skipBrokenShortSegment()) {
+                if (player != null && recoverDecoderError(player, error)) {
                     return
                 }
                 if (completionSent) {
@@ -779,58 +835,58 @@ internal class BetterPlayer(
         result.success(reply)
     }
 
-    private fun markShortSegmentForSkipping(startMs: Long, endMs: Long): Boolean {
-        if (liveSource) return false
-        if (skippedBrokenSegmentEnds.contains(endMs)) {
-            return true
+    private fun isBlocking(positionMs: Long, startMs: Long, endMs: Long): Boolean =
+        positionMs + SEGMENT_BLOCKING_TOLERANCE_MS >= startMs && positionMs <= endMs
+
+    /**
+     * Policy callback on ExoPlayer's playback thread: never touch the player
+     * here. A segment the policy has verified as broken is skipped only once
+     * playback is stuck on it; until then it keeps loading in case it recovers.
+     */
+    private fun requestBrokenSegmentSkip(startMs: Long, endMs: Long, failure: LoadFailure): SegmentSkip {
+        if (liveSource) return SegmentSkip.REFUSED
+        // A pre-roll's position says nothing about the content's segments.
+        if (hasPreRollSequence && lastKnownMediaItemIndex == 0) return SegmentSkip.REFUSED
+        if (!isBlocking(lastKnownPositionMs, startMs, endMs)) return SegmentSkip.NOT_BLOCKING
+        val networkFailure = failure == LoadFailure.CONNECTIVITY || failure == LoadFailure.SERVER
+        if (networkFailure) {
+            val lastServedMs = lastMediaLoadCompletedAtMs
+            val hostUp = lastServedMs > 0L && SystemClock.elapsedRealtime() - lastServedMs <= HOST_HEALTH_WINDOW_MS
+            if (!hostUp || consecutiveNetworkSkips >= MAX_CONSECUTIVE_NETWORK_SKIPS) return SegmentSkip.REFUSED
         }
-        // Do not access ExoPlayer here. This policy callback is invoked on
-        // ExoPlayer's playback thread; player APIs are main-thread-only.
-        val currentPositionMs = lastKnownPositionMs
-        val segmentIsBlockingPlayback =
-            currentPositionMs + 1_000L >= startMs && currentPositionMs <= endMs
-        if (!segmentIsBlockingPlayback) {
-            return false
+        if (consecutiveSegmentSkips >= MAX_CONSECUTIVE_SEGMENT_SKIPS) return SegmentSkip.REFUSED
+        if (pendingSkipEndMs != endMs) {
+            pendingSkipEndMs = endMs
+            segmentSkipHandler.post { skipBrokenSegment(startMs, endMs, networkFailure) }
         }
-        pendingBrokenSegmentStartMs = startMs
-        pendingBrokenSegmentEndMs = endMs
-        return true
+        return SegmentSkip.SKIPPING
     }
 
-    private fun skipBrokenShortSegment(): Boolean {
-        val segmentStartMs = pendingBrokenSegmentStartMs ?: return false
-        val segmentEndMs = pendingBrokenSegmentEndMs ?: return false
-        pendingBrokenSegmentStartMs = null
-        pendingBrokenSegmentEndMs = null
-        val player = exoPlayer ?: return false
-        // onPlayerError is delivered on the player's application looper, so
-        // this access is safe. Re-check against the live position because the
-        // snapshot used by the playback-thread callback may be up to one
-        // refresh interval old.
-        val currentPositionMs = player.currentPosition
-        val segmentIsBlockingPlayback =
-            currentPositionMs + 1_000L >= segmentStartMs && currentPositionMs <= segmentEndMs
-        if (!segmentIsBlockingPlayback || !skippedBrokenSegmentEnds.add(segmentEndMs)) {
-            return false
-        }
+    private fun skipBrokenSegment(startMs: Long, endMs: Long, networkFailure: Boolean) {
+        if (pendingSkipEndMs != endMs) return
+        pendingSkipEndMs = null
+        val player = exoPlayer ?: return
+        // The snapshot the playback thread used may be up to one refresh
+        // interval old, so check the live position again.
+        if (hasPreRollSequence && player.currentMediaItemIndex == 0) return
+        if (!isBlocking(player.currentPosition, startMs, endMs)) return
+        consecutiveSegmentSkips++
+        if (networkFailure) consecutiveNetworkSkips++
         val durationMs = player.duration
-        val unboundedTargetMs = segmentEndMs + 1L
+        val unboundedTargetMs = endMs + 1L
         val targetMs =
             if (durationMs == C.TIME_UNSET || durationMs <= 0L) {
                 unboundedTargetMs
             } else {
                 min(unboundedTargetMs, durationMs)
             }
-        val resumePlayback = player.playWhenReady
-        Log.w(
-            TAG,
-            "Skipping repeatedly broken adaptive segment to ${targetMs}ms"
-        )
+        lastSkipTargetMs = targetMs
+        Log.w(TAG, "Skipping broken segment ${startMs}-${endMs}ms to ${targetMs}ms")
 
-        // ExoPlayer does not reliably transition to STATE_ENDED after an
-        // errored final HLS segment is skipped to the exact media duration.
-        // Finish explicitly so Flutter receives the same completion event as
-        // a clean stream, while still preparing the player at the end position.
+        // ExoPlayer does not reliably transition to STATE_ENDED after a broken
+        // final HLS segment is skipped to the exact media duration. Finish
+        // explicitly so Flutter receives the same completion event as a clean
+        // stream.
         if (durationMs != C.TIME_UNSET &&
             durationMs > 0L &&
             targetMs >= durationMs - 250L
@@ -838,15 +894,51 @@ internal class BetterPlayer(
             Log.w(TAG, "Broken final segment reached the end of media")
             player.pause()
             player.seekTo(durationMs)
-            player.prepare()
             sendCompleted()
-            return true
+            return
         }
 
         player.seekTo(targetMs)
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+    }
+
+    private fun resetSegmentSkips() {
+        consecutiveSegmentSkips = 0
+        consecutiveNetworkSkips = 0
+    }
+
+    /**
+     * A decoder that failed or was reclaimed usually works again when the
+     * player prepares afresh, so try that before reporting an error. A second
+     * failure in a row is more likely the frames themselves; step past them.
+     */
+    private fun recoverDecoderError(player: ExoPlayer, error: PlaybackException): Boolean {
+        val decoderFailure = error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+            error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+            error.errorCode == PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED ||
+            error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
+            error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+        if (!decoderFailure) return false
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastDecoderRecoveryMs > DECODER_RECOVERY_WINDOW_MS) decoderRecoveries = 0
+        if (decoderRecoveries >= MAX_DECODER_RECOVERIES) return false
+        decoderRecoveries++
+        lastDecoderRecoveryMs = now
+        Log.w(TAG, "Recovering from decoder error ${error.errorCode}")
+        if (decoderRecoveries > 1 && !liveSource) {
+            val durationMs = player.duration
+            val targetMs = player.currentPosition + 2_000L
+            if (durationMs == C.TIME_UNSET || targetMs < durationMs) player.seekTo(targetMs)
+        }
         player.prepare()
-        player.playWhenReady = resumePlayback
         return true
+    }
+
+    private fun sendConnectivity(online: Boolean) {
+        val event: MutableMap<String, Any?> = HashMap()
+        event["event"] = "connectivityChanged"
+        event["online"] = online
+        eventSink.success(event)
     }
 
     private fun sendCompleted() {
@@ -1200,6 +1292,8 @@ internal class BetterPlayer(
     fun drainNetworkUsage(): Long = networkUsageMeter.drain()
 
     fun dispose() {
+        NetworkConnectivity.removeListener(connectivityListener)
+        segmentSkipHandler.removeCallbacksAndMessages(null)
         networkUsageHandler.removeCallbacksAndMessages(null)
         disposeMediaSession()
         disposeRemoteNotifications()

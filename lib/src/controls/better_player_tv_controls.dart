@@ -690,7 +690,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
           fit: StackFit.expand,
           children: <Widget>[
             _buildControls(),
-            if (_value.isBuffering)
+            // A failure the player is still recovering from shows as loading.
+            if (_value.isBuffering || _recovering)
               const Center(
                 child: SizedBox(
                   width: 44,
@@ -698,7 +699,11 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
                 ),
               ),
-            if (_value.hasError) _buildError(),
+            if (!_value.isNetworkAvailable &&
+                widget.controller.streamsOverNetwork &&
+                (_value.isBuffering || _recovering))
+              _buildNetworkWait(),
+            if (_value.hasError && !_recovering) _buildError(),
             if (_menu case final menu?)
               BetterPlayerTvMenu(
                 title: menu.title,
@@ -937,6 +942,32 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
       ),
     );
   }
+
+  bool get _recovering => widget.controller.isRecoveringPlayback;
+
+  Widget _buildNetworkWait() => IgnorePointer(
+    child: Center(
+      child: Transform.translate(
+        offset: const Offset(0, 54),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 48),
+          child: Text(
+            _strings.waitingForNetwork,
+            key: const Key('better_player_tv_network_wait'),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontFamily: _configuration.emphasisFontFamily,
+              fontWeight: FontWeight.w600,
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 8)],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _buildError() {
     final custom = widget.controller.betterPlayerConfiguration.errorBuilder;

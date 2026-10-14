@@ -40,6 +40,7 @@ class BetterPlayerControlsStrings {
     this.stretchDescription = 'Fill the screen without cropping',
     this.live = 'LIVE',
     this.playbackFailed = 'Playback failed',
+    this.waitingForNetwork = 'No internet connection. Playback resumes when you reconnect.',
     this.settings = 'Settings',
     this.playerSettings = 'Player settings',
     this.audioTrack = 'Audio track',
@@ -102,6 +103,9 @@ class BetterPlayerControlsStrings {
   final String stretchDescription;
   final String live;
   final String playbackFailed;
+
+  /// Under the loading indicator while the device is offline.
+  final String waitingForNetwork;
   final String settings;
   final String playerSettings;
   final String audioTrack;

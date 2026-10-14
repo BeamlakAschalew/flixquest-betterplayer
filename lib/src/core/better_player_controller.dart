@@ -281,19 +281,41 @@ class BetterPlayerController {
   ///Selected videoPlayerValue when error occurred.
   VideoPlayerValue? _videoPlayerValueOnError;
 
-  ///Retries transient network failures without requiring a user action.
+  ///Recovers failed network playback without a user action: waits for the
+  ///device to come back online, reloads the source, then asks the app for a
+  ///fresh one. The error is shown only once all of that has failed.
   Timer? _networkRecoveryTimer;
   bool _networkRecoveryInProgress = false;
   int _networkRecoveryAttempts = 0;
   int _dataSourceSetupGeneration = 0;
-  static const List<Duration> _networkRecoveryDelays = [
-    Duration(seconds: 1),
-    Duration(seconds: 3),
-    Duration(seconds: 8),
-  ];
+  bool _recoveringPlayback = false;
+  bool _waitingForNetwork = false;
+  bool _sourceRefreshTried = false;
+  bool _sourceRefreshInProgress = false;
+  bool _reloadEvenIfUnrecoverable = false;
+  bool _errorOnsetHandled = false;
+  bool _wasNetworkAvailable = true;
+  Object? _lastRecoveryError;
+  Duration? _requestedStartPosition;
+  static const List<Duration> _networkRecoveryDelays = [Duration(seconds: 1), Duration(seconds: 4)];
 
   ///Flag which holds information about player visibility
   bool _isPlayerVisible = true;
+
+  /// Whether a playback failure is being recovered automatically, including
+  /// while waiting for the device to come back online. Controls show the
+  /// loading state instead of the error meanwhile.
+  bool get isRecoveringPlayback => _recoveringPlayback;
+
+  /// Whether the current source streams over HTTP(S), so that playing it
+  /// depends on the device being online. Downloads opened through a network
+  /// data source with a custom scheme do not.
+  bool get streamsOverNetwork {
+    final source = _betterPlayerDataSource;
+    if (source == null || source.type != BetterPlayerDataSourceType.network) return false;
+    final uri = Uri.tryParse(source.url);
+    return uri != null && (uri.isScheme('http') || uri.isScheme('https'));
+  }
 
   final StreamController<BetterPlayerControllerEvent> _controllerEventStreamController = StreamController.broadcast();
 
@@ -392,7 +414,18 @@ class BetterPlayerController {
   }) async {
     final setupGeneration = ++_dataSourceSetupGeneration;
     _preRollActiveNotifier.value = preRollDataSource != null;
-    _cancelNetworkRecovery(clearSavedPosition: true);
+    if (_sourceRefreshInProgress) {
+      // sourceRecoveryHandler is replacing a failed source. Stay in recovery,
+      // keeping the saved position, so that if the new source fails too it
+      // gets its own reloads and then the error, not a fresh round of refreshes.
+      _networkRecoveryTimer?.cancel();
+      _networkRecoveryTimer = null;
+      _networkRecoveryAttempts = 0;
+    } else {
+      _cancelNetworkRecovery(clearSavedPosition: true);
+      _setRecoveringPlayback(false);
+    }
+    _requestedStartPosition = preRollDataSource != null ? contentStartPosition : initialPosition;
     postEvent(
       BetterPlayerEvent(
         BetterPlayerEventType.setupDataSource,
@@ -1169,33 +1202,44 @@ class BetterPlayerController {
         videoPlayerController?.value ?? VideoPlayerValue(duration: Duration.zero);
 
     if (currentVideoPlayerValue.hasError) {
-      _videoPlayerValueOnError ??= currentVideoPlayerValue;
-      if (_betterPlayerDataSource?.liveStream != true && currentVideoPlayerValue.isErrorRecoverable) {
-        _scheduleNetworkRecovery();
+      if (!_errorOnsetHandled) {
+        _errorOnsetHandled = true;
+        _videoPlayerValueOnError ??= currentVideoPlayerValue;
+        _postEvent(
+          BetterPlayerEvent(
+            BetterPlayerEventType.exception,
+            parameters: <String, dynamic>{
+              'exception': currentVideoPlayerValue.errorDescription,
+              'recoverable': currentVideoPlayerValue.isErrorRecoverable,
+              _sourceKeyParameter: _betterPlayerDataSource?.url,
+            },
+          ),
+        );
+        // Not from inside this notification: a reload started here would
+        // replace the source while the failed one is still reporting.
+        scheduleMicrotask(_beginPlaybackRecovery);
       }
-      _postEvent(
-        BetterPlayerEvent(
-          BetterPlayerEventType.exception,
-          parameters: <String, dynamic>{
-            'exception': currentVideoPlayerValue.errorDescription,
-            'recoverable': currentVideoPlayerValue.isErrorRecoverable,
-            _sourceKeyParameter: _betterPlayerDataSource?.url,
-          },
-        ),
-      );
+    } else {
+      _errorOnsetHandled = false;
     }
+    final networkAvailable = currentVideoPlayerValue.isNetworkAvailable;
+    if (networkAvailable && !_wasNetworkAvailable) scheduleMicrotask(_onNetworkRestored);
+    _wasNetworkAvailable = networkAvailable;
     final recoveryPosition = _videoPlayerValueOnError?.position;
     final playbackRecovered =
         recoveryPosition != null &&
         currentVideoPlayerValue.isPlaying &&
         !currentVideoPlayerValue.isBuffering &&
         currentVideoPlayerValue.position > recoveryPosition + const Duration(seconds: 1);
-    if (currentVideoPlayerValue.initialized &&
+    final settled =
+        currentVideoPlayerValue.initialized &&
         !currentVideoPlayerValue.hasError &&
         !_networkRecoveryInProgress &&
-        (recoveryPosition == null || playbackRecovered)) {
+        !_sourceRefreshInProgress;
+    if (settled && (recoveryPosition == null || playbackRecovered)) {
       _cancelNetworkRecovery(clearSavedPosition: true);
     }
+    if (settled && _recoveringPlayback) _setRecoveringPlayback(false);
     if (currentVideoPlayerValue.initialized && !_hasCurrentDataSourceInitialized) {
       _hasCurrentDataSourceInitialized = true;
       _postEvent(
@@ -1689,73 +1733,196 @@ class BetterPlayerController {
     _controlsVisibilityStreamController.add(controlsAlwaysVisible);
   }
 
-  ///Retry data source if playback failed.
+  ///Retries a failed source: the recovery the player runs on its own, started
+  ///now with a fresh budget. While the device is offline it waits for the
+  ///network, showing the loading state rather than the error.
   Future retryDataSource() async {
+    final source = _betterPlayerDataSource;
+    final value = videoPlayerController?.value;
+    if (_disposed || source == null) return;
+    if (value == null || !value.hasError || source.type != BetterPlayerDataSourceType.network) {
+      await _reloadDataSource();
+      return;
+    }
+    _cancelNetworkRecovery(clearSavedPosition: false);
+    _networkRecoveryAttempts = 0;
+    _sourceRefreshTried = false;
+    // The viewer asking again is reason enough to reload an error a reload
+    // would not normally fix, unless the app can resolve a fresh source.
+    _reloadEvenIfUnrecoverable = betterPlayerConfiguration.sourceRecoveryHandler == null;
+    _videoPlayerValueOnError ??= value;
+    _setRecoveringPlayback(true);
+    _scheduleRecoveryStep(immediate: true);
+  }
+
+  Future<void> _reloadDataSource() async {
     final generation = _dataSourceSetupGeneration;
     final savedValue = _videoPlayerValueOnError;
-    final isLive = _betterPlayerDataSource?.liveStream == true;
-    final position = !isLive ? savedValue?.position : null;
     final resume = savedValue == null || !savedValue.initialized
         ? betterPlayerConfiguration.autoPlay
         : savedValue.isPlaying;
     await _setupDataSource(
       _betterPlayerDataSource!,
-      initialPosition: position,
+      initialPosition: _recoveryResumePosition(),
       setupGeneration: generation,
       resumePlayback: resume,
     );
-    if (_disposed || generation != _dataSourceSetupGeneration) return;
   }
 
-  void _scheduleNetworkRecovery() {
+  /// Where a reloaded source resumes: the position at the failure, or the
+  /// requested start when the source never got going (a resume point must
+  /// survive a failed first load).
+  Duration? _recoveryResumePosition() {
+    if (_betterPlayerDataSource?.liveStream == true) return null;
+    final savedValue = _videoPlayerValueOnError;
+    if (savedValue != null && savedValue.initialized) return savedValue.position;
+    return _requestedStartPosition;
+  }
+
+  void _beginPlaybackRecovery() {
+    final source = _betterPlayerDataSource;
+    // Live sources are refreshed by the app, which knows how to find the
+    // channel again; a competing reload loop here would fight it.
+    if (_disposed || source == null || source.type != BetterPlayerDataSourceType.network || source.liveStream == true) {
+      return;
+    }
+    _setRecoveringPlayback(true);
+    _scheduleRecoveryStep();
+  }
+
+  void _scheduleRecoveryStep({bool immediate = false}) {
     if (_disposed ||
-        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
-        videoPlayerController?.value.isErrorRecoverable == false ||
-        _networkRecoveryAttempts >= _networkRecoveryDelays.length ||
+        !_recoveringPlayback ||
         _networkRecoveryInProgress ||
+        _sourceRefreshInProgress ||
         _networkRecoveryTimer?.isActive == true) {
       return;
     }
-    final delay = _networkRecoveryDelays[_networkRecoveryAttempts];
-    _networkRecoveryTimer = Timer(delay, () {
-      _networkRecoveryTimer = null;
-      unawaited(_attemptNetworkRecovery());
-    });
+    final value = videoPlayerController?.value;
+    if (value == null) return;
+    // Every step needs the network. Wait for it however long that takes;
+    // coming back online resumes here straight away.
+    if (!value.isNetworkAvailable && streamsOverNetwork) {
+      _waitingForNetwork = true;
+      return;
+    }
+    _waitingForNetwork = false;
+    final canReload = !value.hasError || value.isErrorRecoverable || _reloadEvenIfUnrecoverable;
+    if (canReload && _networkRecoveryAttempts < _networkRecoveryDelays.length) {
+      final delay = immediate ? Duration.zero : _networkRecoveryDelays[_networkRecoveryAttempts];
+      _networkRecoveryTimer = Timer(delay, () {
+        _networkRecoveryTimer = null;
+        unawaited(_attemptNetworkRecovery());
+      });
+      return;
+    }
+    unawaited(_refreshSourceOrGiveUp());
   }
 
   Future<void> _attemptNetworkRecovery() async {
-    if (_disposed ||
-        _networkRecoveryInProgress ||
-        _betterPlayerDataSource?.type != BetterPlayerDataSourceType.network ||
-        videoPlayerController?.value.isErrorRecoverable == false ||
-        _networkRecoveryAttempts >= _networkRecoveryDelays.length ||
-        _betterPlayerDataSource?.liveStream == true) {
+    if (_disposed || _networkRecoveryInProgress || !_recoveringPlayback || _betterPlayerDataSource == null) {
       return;
     }
     _networkRecoveryInProgress = true;
     final generation = _dataSourceSetupGeneration;
     _networkRecoveryAttempts++;
     try {
-      await retryDataSource();
+      await _reloadDataSource();
     } catch (error) {
+      _lastRecoveryError = error;
       BetterPlayerUtils.log('Network playback recovery failed: $error');
     } finally {
       _networkRecoveryInProgress = false;
-      final value = videoPlayerController?.value;
-      if (!_disposed &&
-          generation == _dataSourceSetupGeneration &&
-          (value == null || value.hasError || !value.initialized)) {
-        _scheduleNetworkRecovery();
+      if (!_disposed && generation == _dataSourceSetupGeneration) {
+        _continuePlaybackRecovery();
       }
     }
+  }
+
+  void _continuePlaybackRecovery() {
+    final value = videoPlayerController?.value;
+    if (value == null || value.hasError || !value.initialized) {
+      _scheduleRecoveryStep();
+    } else {
+      _setRecoveringPlayback(false);
+    }
+  }
+
+  Future<void> _refreshSourceOrGiveUp() async {
+    final handler = betterPlayerConfiguration.sourceRecoveryHandler;
+    if (handler == null || _sourceRefreshTried) {
+      _giveUpPlaybackRecovery();
+      return;
+    }
+    _sourceRefreshTried = true;
+    _sourceRefreshInProgress = true;
+    var replaced = false;
+    try {
+      replaced = await handler(_recoveryResumePosition());
+    } catch (error) {
+      _lastRecoveryError = error;
+      BetterPlayerUtils.log('Source recovery failed: $error');
+    } finally {
+      _sourceRefreshInProgress = false;
+    }
+    if (_disposed) return;
+    if (replaced) {
+      _continuePlaybackRecovery();
+    } else {
+      _giveUpPlaybackRecovery();
+    }
+  }
+
+  void _giveUpPlaybackRecovery() {
+    _waitingForNetwork = false;
+    _reloadEvenIfUnrecoverable = false;
+    final controller = videoPlayerController;
+    final value = controller?.value;
+    // A reload that threw before the platform reported anything leaves no
+    // error to show, only an endless loading state.
+    if (controller != null && value != null && !value.hasError && !value.initialized) {
+      controller.value = value.copyWith(errorDescription: _lastRecoveryError?.toString() ?? 'Playback failed');
+    }
+    _setRecoveringPlayback(false);
+  }
+
+  void _onNetworkRestored() {
+    if (_disposed) return;
+    if (_recoveringPlayback) {
+      if (_waitingForNetwork) _scheduleRecoveryStep(immediate: true);
+      return;
+    }
+    // Recovery gave up and the error is showing. Coming back online is reason
+    // enough to try again without waiting for the viewer.
+    final value = videoPlayerController?.value;
+    if (value != null &&
+        value.hasError &&
+        value.isErrorRecoverable &&
+        _betterPlayerDataSource?.liveStream != true &&
+        streamsOverNetwork) {
+      unawaited(retryDataSource());
+    }
+  }
+
+  void _setRecoveringPlayback(bool recovering) {
+    if (_recoveringPlayback == recovering) return;
+    _recoveringPlayback = recovering;
+    // Controls rebuild on video value changes; nudge them to re-read this.
+    scheduleMicrotask(() {
+      if (!_disposed) videoPlayerController?.refresh();
+    });
   }
 
   void _cancelNetworkRecovery({required bool clearSavedPosition}) {
     _networkRecoveryTimer?.cancel();
     _networkRecoveryTimer = null;
+    _waitingForNetwork = false;
     if (clearSavedPosition) {
       _videoPlayerValueOnError = null;
       _networkRecoveryAttempts = 0;
+      _sourceRefreshTried = false;
+      _reloadEvenIfUnrecoverable = false;
+      _lastRecoveryError = null;
     }
   }
 

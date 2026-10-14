@@ -40,6 +40,7 @@ class BetterPlayerMaterialControls extends StatefulWidget {
 
 class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<BetterPlayerMaterialControls> {
   VideoPlayerValue? _latestValue;
+  bool _wasRecovering = false;
   Timer? _hideTimer;
   Timer? _initTimer;
   Timer? _expandTimer;
@@ -71,7 +72,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   Widget build(BuildContext context) => buildLTRDirectionality(_buildMainWidget());
 
   Widget _buildMainWidget() {
-    if (_latestValue?.hasError == true) {
+    if (showsPlaybackError(_latestValue)) {
       return ColoredBox(color: Colors.black, child: _buildErrorWidget());
     }
     _initializeSystemLevels();
@@ -91,6 +92,8 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           children: [
             _buildTapArea(),
             if (_locked) _buildLockedControls(compact) else _buildVisibleControls(compact),
+            // On a small player the hint would crowd the visible controls.
+            if (showsNetworkWait(_latestValue) && (controlsNotVisible || !compact)) _buildNetworkWaitHint(compact),
             _buildNextVideoWidget(),
           ],
         );
@@ -741,6 +744,28 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     child: const ColoredBox(color: Colors.transparent),
   );
 
+  Widget _buildNetworkWaitHint(bool compact) {
+    final spinnerSize = compact ? 56.0 : 72.0;
+    return IgnorePointer(
+      child: Center(
+        child: Transform.translate(
+          offset: Offset(0, spinnerSize / 2 + (compact ? 24 : 32)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              strings.waitingForNetwork,
+              key: const Key('better_player_network_wait'),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _emphasis(compact ? 13 : 15).copyWith(shadows: _textShadow),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorWidget() {
     final custom = _betterPlayerController?.betterPlayerConfiguration.errorBuilder;
     if (custom != null) {
@@ -875,12 +900,16 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     if (!mounted || _controller == null) return;
     final nextValue = _controller!.value;
     final loadingChanged = isLoading(_latestValue) != isLoading(nextValue);
+    final recovering = _betterPlayerController?.isRecoveringPlayback == true;
     final shouldRebuild =
         !controlsNotVisible ||
         isVideoFinished(nextValue) ||
         isLoading(nextValue) ||
         loadingChanged ||
-        _latestValue?.hasError != nextValue.hasError;
+        _latestValue?.hasError != nextValue.hasError ||
+        _latestValue?.isNetworkAvailable != nextValue.isNetworkAvailable ||
+        recovering != _wasRecovering;
+    _wasRecovering = recovering;
     _latestValue = nextValue;
     if (shouldRebuild) {
       setState(() {

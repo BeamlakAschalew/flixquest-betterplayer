@@ -240,8 +240,21 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     _ => strings.fit,
   };
 
+  /// Whether to show the playback error. A failure the player is still
+  /// recovering from (waiting for the network, reloading) shows as loading.
+  bool showsPlaybackError(VideoPlayerValue? value) =>
+      value?.hasError == true && betterPlayerController?.isRecoveringPlayback != true;
+
+  /// Whether to explain a loading indicator by the device being offline.
+  bool showsNetworkWait(VideoPlayerValue? value) =>
+      value != null &&
+      !value.isNetworkAvailable &&
+      betterPlayerController?.streamsOverNetwork == true &&
+      isLoading(value);
+
   bool isLoading(VideoPlayerValue? value) {
     if (value == null) return false;
+    if (value.hasError) return betterPlayerController?.isRecoveringPlayback == true;
     if (value.duration == null && (!value.isPlaying || value.isBuffering)) return true;
     final bufferedEnd = value.buffered.isNotEmpty ? value.buffered.last.end : null;
     return bufferedEnd != null &&

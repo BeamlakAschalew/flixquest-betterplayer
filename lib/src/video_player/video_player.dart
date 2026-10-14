@@ -34,6 +34,7 @@ class VideoPlayerValue {
     this.errorDescription,
     this.isErrorRecoverable = true,
     this.isPip = false,
+    this.isNetworkAvailable = true,
   });
 
   /// Returns an instance with a `null` [Duration].
@@ -91,6 +92,10 @@ class VideoPlayerValue {
   ///Is in Picture in Picture Mode
   final bool isPip;
 
+  /// Whether the device can reach the internet. Platforms that do not report
+  /// connectivity leave this true.
+  final bool isNetworkAvailable;
+
   /// Indicates whether or not the video has been loaded and is ready to play.
   bool get initialized => duration != null;
 
@@ -127,6 +132,7 @@ class VideoPlayerValue {
     bool? isErrorRecoverable,
     double? speed,
     bool? isPip,
+    bool? isNetworkAvailable,
   }) => VideoPlayerValue(
     duration: duration ?? this.duration,
     size: size ?? this.size,
@@ -141,6 +147,7 @@ class VideoPlayerValue {
     errorDescription: errorDescription ?? this.errorDescription,
     isErrorRecoverable: isErrorRecoverable ?? this.isErrorRecoverable,
     isPip: isPip ?? this.isPip,
+    isNetworkAvailable: isNetworkAvailable ?? this.isNetworkAvailable,
   );
 
   @override
@@ -156,6 +163,7 @@ class VideoPlayerValue {
         'isLooping: $isLooping, '
         'isBuffering: $isBuffering, '
         'volume: $volume, '
+        'isNetworkAvailable: $isNetworkAvailable, '
         'errorDescription: $errorDescription)';
   }
 }
@@ -215,6 +223,9 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
 
     void errorListener(Object object) {
       if (_isDisposed) return;
+      // Listeners may set up a new source while the error is delivered; the
+      // error belongs to the source that was initializing when it arrived.
+      final initializing = _initializingCompleter;
       if (object is PlatformException) {
         final PlatformException e = object;
         final details = e.details;
@@ -232,8 +243,8 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         value = value.copyWith(errorDescription: object.toString());
       }
       _timer?.cancel();
-      if (!_initializingCompleter.isCompleted) {
-        _initializingCompleter.completeError(object);
+      if (!initializing.isCompleted) {
+        initializing.completeError(object);
       }
     }
 
@@ -275,6 +286,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           volume: value.volume,
           speed: value.speed,
           isPip: value.isPip,
+          isNetworkAvailable: value.isNetworkAvailable,
         );
       case VideoEventType.completed:
         value = value.copyWith(isPlaying: false, position: value.duration);
@@ -301,6 +313,11 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       case VideoEventType.networkUsage:
         // Counted by BetterPlayerController.
         break;
+      case VideoEventType.connectivityChanged:
+        final available = event.isNetworkAvailable ?? true;
+        if (available != value.isNetworkAvailable) {
+          value = value.copyWith(isNetworkAvailable: available);
+        }
       case VideoEventType.unknown:
         break;
     }
@@ -438,7 +455,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     _timer?.cancel();
     _timer = null;
 
-    value = VideoPlayerValue(duration: null, isLooping: value.isLooping, volume: value.volume);
+    value = VideoPlayerValue(
+      duration: null,
+      isLooping: value.isLooping,
+      volume: value.volume,
+      isNetworkAvailable: value.isNetworkAvailable,
+    );
 
     if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
 

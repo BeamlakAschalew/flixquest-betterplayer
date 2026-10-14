@@ -43,6 +43,7 @@ class BetterPlayerConfiguration {
     this.expandToFill = true,
     this.useRootNavigator = false,
     this.enableAmbientGlow = false,
+    this.sourceRecoveryHandler,
   });
 
   /// Play the video as soon as it's displayed
@@ -166,6 +167,15 @@ class BetterPlayerConfiguration {
   ///pillarbox gutters behind the primary video surface.
   final bool enableAmbientGlow;
 
+  /// Last step of automatic recovery, for a network source that still fails
+  /// after the player reloaded it (or whose error rules a reload out, such as
+  /// an expired link). Set up a fresh source resuming at the given position,
+  /// for example a newly resolved provider link, and complete with true once
+  /// it is set up; complete with false to show the error. The player keeps
+  /// its loading state, not the error, while this runs. Called at most once
+  /// per failure until playback recovers.
+  final Future<bool> Function(Duration? position)? sourceRecoveryHandler;
+
   BetterPlayerConfiguration copyWith({
     double? aspectRatio,
     bool? autoPlay,
@@ -198,6 +208,7 @@ class BetterPlayerConfiguration {
     bool? expandToFill,
     bool? useRootNavigator,
     bool? enableAmbientGlow,
+    Future<bool> Function(Duration? position)? sourceRecoveryHandler,
   }) => BetterPlayerConfiguration(
     aspectRatio: aspectRatio ?? this.aspectRatio,
     autoPlay: autoPlay ?? this.autoPlay,
@@ -230,5 +241,6 @@ class BetterPlayerConfiguration {
     expandToFill: expandToFill ?? this.expandToFill,
     useRootNavigator: useRootNavigator ?? this.useRootNavigator,
     enableAmbientGlow: enableAmbientGlow ?? this.enableAmbientGlow,
+    sourceRecoveryHandler: sourceRecoveryHandler ?? this.sourceRecoveryHandler,
   );
 }

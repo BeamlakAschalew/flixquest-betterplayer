@@ -407,6 +407,7 @@ class VideoEvent {
     this.position,
     this.bytesTransferred,
     this.preRollEndReason,
+    this.isNetworkAvailable,
   });
 
   /// The type of the event.
@@ -445,6 +446,11 @@ class VideoEvent {
   ///
   /// Only used if [eventType] is [VideoEventType.preRollEnded].
   final String? preRollEndReason;
+
+  /// Whether the device can reach the internet.
+  ///
+  /// Only used if [eventType] is [VideoEventType.connectivityChanged].
+  final bool? isNetworkAvailable;
 
   @override
   bool operator ==(Object other) =>
@@ -504,6 +510,9 @@ enum VideoEventType {
 
   /// A batch of network bytes the player downloaded.
   networkUsage,
+
+  /// The device lost or regained its internet connection.
+  connectivityChanged,
 
   /// An unknown event has been received.
   unknown,
