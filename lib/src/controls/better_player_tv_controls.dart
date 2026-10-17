@@ -945,29 +945,21 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   bool get _recovering => widget.controller.isRecoveringPlayback;
 
-  Widget _buildNetworkWait() => IgnorePointer(
-    child: Center(
-      child: Transform.translate(
-        offset: const Offset(0, 54),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 48),
-          child: Text(
-            _strings.waitingForNetwork,
-            key: const Key('better_player_tv_network_wait'),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontFamily: _configuration.emphasisFontFamily,
-              fontWeight: FontWeight.w600,
-              shadows: const [Shadow(color: Colors.black54, blurRadius: 8)],
-            ),
-          ),
-        ),
+  /// Up top, clear of the spinner; it drops below the title while the
+  /// overlay shows.
+  Widget _buildNetworkWait() {
+    final hasSubtitle = _configuration.subtitle?.isNotEmpty == true;
+    return SafeArea(
+      child: BetterPlayerTopBanner(
+        key: const Key('better_player_tv_network_wait'),
+        icon: PhosphorIcons.wifiSlash(),
+        label: _strings.waitingForNetwork,
+        topOffset: _visible ? (hasSubtitle ? 100 : 76) : 30,
+        fontSize: 16,
+        fontFamily: _configuration.emphasisFontFamily,
       ),
-    ),
-  );
+    );
+  }
 
   Widget _buildError() {
     final custom = widget.controller.betterPlayerConfiguration.errorBuilder;

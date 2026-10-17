@@ -92,8 +92,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           children: [
             _buildTapArea(),
             if (_locked) _buildLockedControls(compact) else _buildVisibleControls(compact),
-            // On a small player the hint would crowd the visible controls.
-            if (showsNetworkWait(_latestValue) && (controlsNotVisible || !compact)) _buildNetworkWaitHint(compact),
+            if (showsNetworkWait(_latestValue)) _buildNetworkWaitBanner(compact),
             _buildNextVideoWidget(),
           ],
         );
@@ -744,24 +743,18 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     child: const ColoredBox(color: Colors.transparent),
   );
 
-  Widget _buildNetworkWaitHint(bool compact) {
-    final spinnerSize = compact ? 56.0 : 72.0;
-    return IgnorePointer(
-      child: Center(
-        child: Transform.translate(
-          offset: Offset(0, spinnerSize / 2 + (compact ? 24 : 32)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              strings.waitingForNetwork,
-              key: const Key('better_player_network_wait'),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: _emphasis(compact ? 13 : 15).copyWith(shadows: _textShadow),
-            ),
-          ),
-        ),
+  /// Up top, clear of the spinner and the centre controls; it slides below
+  /// the top bar while the overlay shows.
+  Widget _buildNetworkWaitBanner(bool compact) {
+    final barHeight = (compact ? 40.0 : 44.0) + (compact ? 6 : 10);
+    return _withFullscreenSafeArea(
+      BetterPlayerTopBanner(
+        key: const Key('better_player_network_wait'),
+        icon: PhosphorIcons.wifiSlash(),
+        label: strings.waitingForNetwork,
+        topOffset: controlsNotVisible || _locked ? (compact ? 8 : 12) : barHeight + 8,
+        fontSize: compact ? 12 : 13,
+        fontFamily: _configuration.emphasisFontFamily,
       ),
     );
   }

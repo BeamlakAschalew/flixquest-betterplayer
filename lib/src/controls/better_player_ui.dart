@@ -1064,3 +1064,72 @@ class BetterPlayerGesturePill extends StatelessWidget {
     );
   }
 }
+
+/// A small status pill across the top of the picture, the way streaming apps
+/// say the connection dropped: out of the way of the centre controls, and
+/// pushed down by [topOffset] so it clears the top bar while that is showing.
+class BetterPlayerTopBanner extends StatelessWidget {
+  const BetterPlayerTopBanner({
+    required this.icon,
+    required this.label,
+    this.topOffset = 0,
+    this.fontSize = 13,
+    this.fontFamily,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final double topOffset;
+  final double fontSize;
+  final String? fontFamily;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedPadding(
+        duration: betterPlayerMotionDuration,
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(top: topOffset, left: 16, right: 16),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Semantics(
+            liveRegion: true,
+            label: label,
+            excludeSemantics: true,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: fontSize * 36),
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: const Color(0xD9000000), borderRadius: BorderRadius.circular(99)),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: fontSize * 1.1, vertical: fontSize * .55),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, color: Colors.white, size: fontSize * 1.35),
+                      SizedBox(width: fontSize * .6),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: fontSize,
+                            fontFamily: fontFamily,
+                            fontWeight: FontWeight.w600,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
