@@ -95,19 +95,19 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
 
   @override
   Widget build(BuildContext context) {
+    // Picture in Picture shows the video alone.
+    if (_latestValue?.isPip ?? false) {
+      widget.betterPlayerController.renderedSubtitle = null;
+      return const SizedBox.shrink();
+    }
+
     final BetterPlayerSubtitle? subtitle = _getSubtitleAtCurrentPosition();
     widget.betterPlayerController.renderedSubtitle = subtitle;
     final List<String> subtitles = subtitle?.texts ?? [];
     final List<Widget> textWidgets = subtitles.map(_buildSubtitleTextWidget).toList();
 
-    // Check if player is in PIP mode
-    final bool isInPipMode = _latestValue?.isPip ?? false;
-
     // Calculate bottom padding
-    final double bottomPadding = isInPipMode
-        ? _configuration!.bottomPadding +
-              15 // Extra padding in PIP mode for native controls
-        : _playerVisible && widget.isFullScreen
+    final double bottomPadding = _playerVisible && widget.isFullScreen
         ? _configuration!.bottomPadding + 70
         : _playerVisible && !widget.isFullScreen
         ? _configuration!.bottomPadding + 25
