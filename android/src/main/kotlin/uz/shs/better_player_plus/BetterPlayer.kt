@@ -29,6 +29,8 @@ import androidx.media3.ui.PlayerNotificationManager.MediaDescriptionAdapter
 import androidx.media3.ui.PlayerNotificationManager.BitmapCallback
 import androidx.work.OneTimeWorkRequest
 import android.util.Log
+import android.hardware.display.DisplayManager
+import android.view.Display
 import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.lifecycle.Observer
@@ -185,7 +187,10 @@ internal class BetterPlayer(
             .setLoadControl(loadControl)
             .setBandwidthMeter(networkUsageMeter)
             .build()
-        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter) {
+            displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.refreshRate
+        }
         exoPlayer.addAnalyticsListener(streamingDiagnostics)
         exoPlayer.addAnalyticsListener(object : AnalyticsListener {
             override fun onLoadCompleted(
@@ -1300,6 +1305,7 @@ internal class BetterPlayer(
         positionSnapshotHandler?.removeCallbacksAndMessages(null)
         positionSnapshotHandler = null
         positionSnapshotRunnable = null
+        streamingDiagnostics.release()
         if (isInitialized) {
             exoPlayer?.stop()
         }
