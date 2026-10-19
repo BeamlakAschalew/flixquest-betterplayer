@@ -342,6 +342,123 @@ void main() {
     expect(videoController.value.isPlaying, isTrue);
   });
 
+  for (final compact in [false, true]) {
+    for (final trackCount in [0, 1, 2]) {
+      testWidgets('${compact ? 'compact' : 'wide'} controls separate tracks with $trackCount audio choices', (
+        tester,
+      ) async {
+        tester.view.physicalSize = compact ? const Size(360, 640) : const Size(1200, 675);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final tracks = [
+          BetterPlayerAsmsAudioTrack(id: 0, label: 'English audio', language: 'en'),
+          BetterPlayerAsmsAudioTrack(id: 1, label: 'French audio', language: 'fr'),
+        ].take(trackCount).toList();
+        final controller = _AudioChoiceController(
+          const BetterPlayerConfiguration(
+            controlsConfiguration: BetterPlayerControlsConfiguration(enablePip: false, showSubtitlesButton: true),
+          ),
+          tracks,
+        );
+        final videoController = MockVideoPlayerController();
+        controller.videoPlayerController = videoController;
+        await controller.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+        videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
+
+        await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: controller)));
+        await tester.pump(const Duration(milliseconds: 250));
+        final audioButton = find.byKey(const Key('better_player_audio_button'));
+        expect(audioButton, !compact && trackCount > 1 ? findsOneWidget : findsNothing);
+        final subtitleButton = tester.widget<BetterPlayerControlButton>(
+          find.byKey(const Key('better_player_subtitles_button')),
+        );
+        expect(subtitleButton.label, 'Subtitles');
+        subtitleButton.onPressed!();
+        await tester.pumpAndSettle();
+        expect(find.text('Audio & Subtitles'), findsNothing);
+        expect(find.byType(BetterPlayerSelectionTile), findsOneWidget);
+        expect(find.text('Off'), findsOneWidget);
+        expect(find.text('English audio'), findsNothing);
+        Navigator.of(tester.element(find.text('Off'))).pop();
+        await tester.pumpAndSettle();
+
+        tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_more_button'))).onPressed!();
+        await tester.pumpAndSettle();
+        final audioMenu = find.byWidgetPredicate((widget) => widget is BetterPlayerMenuRow && widget.title == 'Audio');
+        expect(audioMenu, compact && trackCount > 1 ? findsOneWidget : findsNothing);
+        if (compact && trackCount > 1) {
+          tester.widget<BetterPlayerMenuRow>(audioMenu).onTap();
+        } else {
+          Navigator.of(tester.element(find.byType(BetterPlayerModalSheet))).pop();
+          await tester.pumpAndSettle();
+          if (trackCount > 1) tester.widget<BetterPlayerControlButton>(audioButton).onPressed!();
+        }
+        await tester.pumpAndSettle();
+        if (trackCount > 1) {
+          expect(find.text('English audio'), findsOneWidget);
+          expect(find.text('French audio'), findsOneWidget);
+          expect(find.text('Off'), findsNothing);
+          final english = tester.widget<BetterPlayerSelectionTile>(
+            find.widgetWithText(BetterPlayerSelectionTile, 'English audio'),
+          );
+          expect(english.selected, isTrue);
+          expect(
+            tester
+                .widgetList<BetterPlayerSelectionTile>(find.byType(BetterPlayerSelectionTile))
+                .where((tile) => tile.selected),
+            hasLength(1),
+          );
+          final subtitleBefore = controller.betterPlayerSubtitlesSource;
+          await tester.tap(find.text('French audio'));
+          await tester.pumpAndSettle();
+          expect(controller.betterPlayerAsmsAudioTrack, same(tracks.last));
+          expect(controller.betterPlayerSubtitlesSource, same(subtitleBefore));
+          expect(find.byType(BetterPlayerModalSheet), findsNothing);
+          expect(videoController.value.isPlaying, isTrue);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final explicitlySelected in [false, true]) {
+    testWidgets('audio selection honors ${explicitlySelected ? 'the user choice over' : 'a non-first'} default', (
+      tester,
+    ) async {
+      final tracks = [
+        BetterPlayerAsmsAudioTrack(id: 0, label: 'English audio', language: 'en'),
+        BetterPlayerAsmsAudioTrack(id: 1, label: 'French audio', language: 'fr', isDefault: true),
+      ];
+      final controller = _AudioChoiceController(
+        const BetterPlayerConfiguration(
+          controlsConfiguration: BetterPlayerControlsConfiguration(enablePip: false, showSubtitlesButton: true),
+        ),
+        tracks,
+      );
+      final videoController = MockVideoPlayerController();
+      controller.videoPlayerController = videoController;
+      await controller.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+      videoController.value = VideoPlayerValue(duration: const Duration(minutes: 2), isPlaying: true);
+      if (explicitlySelected) controller.setAudioTrack(tracks.first);
+
+      await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: controller)));
+      await tester.pump(const Duration(milliseconds: 250));
+      tester.widget<BetterPlayerControlButton>(find.byKey(const Key('better_player_audio_button'))).onPressed!();
+      await tester.pumpAndSettle();
+      final selectedTiles = tester
+          .widgetList<BetterPlayerSelectionTile>(find.byType(BetterPlayerSelectionTile))
+          .where((tile) => tile.selected);
+      expect(selectedTiles.single.title, explicitlySelected ? 'English audio' : 'French audio');
+      expect(
+        controller.selectedTrack,
+        explicitlySelected ? same(tracks.first) : isNull,
+        reason: 'opening the menu must not change playback',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('narrow players keep the essentials and move the rest into More', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -470,3 +587,19 @@ void main() {
 ///Wrap widget with material app to handle all features like navigation and
 ///localization properly.
 Widget _wrapWidget(Widget widget) => MaterialApp(home: widget);
+
+class _AudioChoiceController extends BetterPlayerMockController {
+  _AudioChoiceController(super.configuration, this.tracks);
+
+  final List<BetterPlayerAsmsAudioTrack> tracks;
+  BetterPlayerAsmsAudioTrack? selectedTrack;
+
+  @override
+  List<BetterPlayerAsmsAudioTrack> get betterPlayerAsmsAudioTracks => tracks;
+
+  @override
+  BetterPlayerAsmsAudioTrack? get betterPlayerAsmsAudioTrack => selectedTrack;
+
+  @override
+  void setAudioTrack(BetterPlayerAsmsAudioTrack track) => selectedTrack = track;
+}

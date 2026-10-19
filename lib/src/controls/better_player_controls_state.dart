@@ -87,12 +87,14 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
           value: BetterPlayerSpeedSelector.format(betterPlayerController!.videoPlayerController?.value.speed ?? 1),
           onTap: showSpeedSelection,
         ),
+      if (hasAudioChoice && (includeBarActions || !configuration.showSubtitlesButton))
+        _PlayerMenuItem(icon: configuration.audioTracksIcon, title: strings.audio, onTap: showAudioSelection),
       if (configuration.enableSubtitles && (includeBarActions || !configuration.showSubtitlesButton))
         _PlayerMenuItem(
           icon: configuration.subtitlesIcon,
-          title: audioAndSubtitlesLabel,
+          title: strings.subtitles,
           value: _selectedSubtitleLabel(),
-          onTap: openAudioAndSubtitles,
+          onTap: openSubtitles,
         ),
       if (configuration.enableQualities && (includeBarActions || !configuration.showQualitiesButton))
         _PlayerMenuItem(
@@ -132,10 +134,6 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     );
   }
 
-  /// What the audio-and-subtitles control is called: both only when there
-  /// is more than one soundtrack to choose between.
-  String get audioAndSubtitlesLabel => _hasAudioChoice ? strings.audioAndSubtitles : strings.subtitles;
-
   /// A track's language as the app wants it shown; the raw label when the app
   /// did not ask for anything.
   String _languageLabel(String? label) {
@@ -151,25 +149,25 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     return language.isNotEmpty ? language : '${strings.audio} ${index + 1}';
   }
 
-  bool get _hasAudioChoice =>
+  bool get hasAudioChoice =>
       betterPlayerControlsConfiguration.enableAudioTracks &&
       (betterPlayerController?.betterPlayerAsmsAudioTracks?.length ?? 0) > 1;
 
   /// The app's own subtitle chooser when it has one, the package's otherwise.
-  void openAudioAndSubtitles() {
+  void openSubtitles() {
     final callback = betterPlayerControlsConfiguration.onSubtitlesTap;
     cancelAndRestartTimer();
     if (callback != null) {
       callback();
       return;
     }
-    _showAudioAndSubtitlesPanel();
+    _showSubtitlesPanel();
   }
 
   ///Shows the package subtitle selector from a dedicated player control.
   void showSubtitlesSelection() {
     cancelAndRestartTimer();
-    _showAudioAndSubtitlesPanel();
+    _showSubtitlesPanel();
   }
 
   ///Shows the package quality selector from a dedicated player control.
@@ -263,10 +261,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
         (bufferedEnd - value.position).inMilliseconds < _bufferingInterval;
   }
 
-  /// Audio on one side and subtitles on the other, as two columns when there
-  /// is room and one list when there isn't. Audio is left out when there is
-  /// only one soundtrack.
-  void _showAudioAndSubtitlesPanel() {
+  /// Subtitle choices, including the option to turn captions off.
+  void _showSubtitlesPanel() {
     final controller = betterPlayerController!;
     final subtitles = <BetterPlayerSubtitlesSource>[
       BetterPlayerSubtitlesSource(type: BetterPlayerSubtitlesSourceType.none),
@@ -293,8 +289,20 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
           },
         ),
     ];
+    showPanel(title: strings.subtitles, child: _panelList(subtitleTiles));
+  }
+
+  /// Audio has its own selector and is available only with multiple tracks.
+  void showAudioSelection() {
+    if (!hasAudioChoice) return;
+    cancelAndRestartTimer();
+    final controller = betterPlayerController!;
     final tracks = controller.betterPlayerAsmsAudioTracks ?? const <BetterPlayerAsmsAudioTrack>[];
-    final selectedTrack = controller.betterPlayerAsmsAudioTrack;
+    // Before a manual choice, some manifests omit DEFAULT entirely. Resolve
+    // one initial row instead of leaving every track unchecked.
+    final selectedTrack =
+        controller.betterPlayerAsmsAudioTrack ??
+        tracks.firstWhere((track) => track.isDefault, orElse: () => tracks.first);
     final audioTiles = <Widget>[
       for (final (index, track) in tracks.indexed)
         BetterPlayerSelectionTile(
@@ -302,54 +310,15 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
           subtitle: track.language?.trim().isNotEmpty == true && track.label?.trim().isNotEmpty == true
               ? _languageLabel(track.language)
               : null,
-          selected: selectedTrack == track || (selectedTrack == null && track.isDefault),
+          selected: selectedTrack == track,
           onTap: () {
             _closeSheet();
             controller.setAudioTrack(track);
           },
         ),
     ];
-    final withAudio = _hasAudioChoice && audioTiles.isNotEmpty;
-    showPanel(
-      title: withAudio ? strings.audioAndSubtitles : strings.subtitles,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (!withAudio) return _panelList(subtitleTiles);
-          if (constraints.maxWidth >= 520) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _panelColumn(strings.audio, audioTiles)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _panelColumn(strings.subtitles, subtitleTiles)),
-                ],
-              ),
-            );
-          }
-          return _panelList([
-            BetterPlayerPanelSectionTitle(strings.audio),
-            ...audioTiles,
-            const SizedBox(height: 16),
-            BetterPlayerPanelSectionTitle(strings.subtitles),
-            ...subtitleTiles,
-          ]);
-        },
-      ),
-    );
+    showPanel(title: strings.audio, child: _panelList(audioTiles));
   }
-
-  Widget _panelColumn(String title, List<Widget> tiles) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      BetterPlayerPanelSectionTitle(title),
-      Flexible(
-        child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: tiles),
-      ),
-    ],
-  );
 
   void _showQualitiesSelectionWidget() {
     final controller = betterPlayerController!;

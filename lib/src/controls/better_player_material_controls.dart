@@ -280,9 +280,9 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
             _iconButton(
               key: const Key('better_player_subtitles_button'),
               icon: _configuration.subtitlesIcon,
-              label: audioAndSubtitlesLabel,
+              label: strings.subtitles,
               size: size,
-              onPressed: openAudioAndSubtitles,
+              onPressed: openSubtitles,
             ),
           if (!compact && _configuration.enableMute) _muteButton(size),
           if (_configuration.enableCast && _betterPlayerController != null)
@@ -552,12 +552,19 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           label: strings.moreLikeThis,
           onPressed: () => configuration.onMovieRecommendationsTap!(),
         ),
+      if (hasAudioChoice && configuration.showSubtitlesButton)
+        _BarAction(
+          key: const Key('better_player_audio_button'),
+          icon: configuration.audioTracksIcon,
+          label: strings.audio,
+          onPressed: showAudioSelection,
+        ),
       if (configuration.enableSubtitles && configuration.showSubtitlesButton)
         _BarAction(
           key: const Key('better_player_subtitles_button'),
           icon: configuration.subtitlesIcon,
-          label: audioAndSubtitlesLabel,
-          onPressed: openAudioAndSubtitles,
+          label: strings.subtitles,
+          onPressed: openSubtitles,
         ),
       if (configuration.enableQualities && configuration.showQualitiesButton)
         _BarAction(
