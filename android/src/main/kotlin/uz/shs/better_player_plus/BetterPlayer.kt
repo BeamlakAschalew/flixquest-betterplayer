@@ -168,7 +168,7 @@ internal class BetterPlayer(
     private var completionSent = false
     private var liveSource = false
     private val liveWindowRecovery = LiveWindowRecovery()
-    private val liveLoadErrorHandlingPolicy = streamingPolicy(isLive = true)
+    private val liveLoadErrorHandlingPolicy = LiveLoadErrorPolicy()
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         streamingPolicy(onBrokenSegment = ::requestBrokenSegmentSkip)
@@ -252,6 +252,8 @@ internal class BetterPlayer(
         resetSegmentSkips()
         lastMediaLoadCompletedAtMs = 0L
         decoderRecoveries = 0
+        // Live and on-demand sources report connectivity differently.
+        sendConnectivity(NetworkConnectivity.isOnline)
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
@@ -916,6 +918,7 @@ internal class BetterPlayer(
      * A decoder that failed or was reclaimed usually works again when the
      * player prepares afresh, so try that before reporting an error. A second
      * failure in a row is more likely the frames themselves; step past them.
+     * Live errors go straight to the app, whose live player recovers them.
      */
     private fun recoverDecoderError(player: ExoPlayer, error: PlaybackException): Boolean {
         val decoderFailure = error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
@@ -923,14 +926,14 @@ internal class BetterPlayer(
             error.errorCode == PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED ||
             error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
             error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
-        if (!decoderFailure) return false
+        if (!decoderFailure || liveSource) return false
         val now = SystemClock.elapsedRealtime()
         if (now - lastDecoderRecoveryMs > DECODER_RECOVERY_WINDOW_MS) decoderRecoveries = 0
         if (decoderRecoveries >= MAX_DECODER_RECOVERIES) return false
         decoderRecoveries++
         lastDecoderRecoveryMs = now
         Log.w(TAG, "Recovering from decoder error ${error.errorCode}")
-        if (decoderRecoveries > 1 && !liveSource) {
+        if (decoderRecoveries > 1) {
             val durationMs = player.duration
             val targetMs = player.currentPosition + 2_000L
             if (durationMs == C.TIME_UNSET || targetMs < durationMs) player.seekTo(targetMs)
@@ -942,7 +945,9 @@ internal class BetterPlayer(
     private fun sendConnectivity(online: Boolean) {
         val event: MutableMap<String, Any?> = HashMap()
         event["event"] = "connectivityChanged"
-        event["online"] = online
+        // Live streams never report offline: Android's validation can fail
+        // while the internet works, and the live player must keep recovering.
+        event["online"] = online || liveSource
         eventSink.success(event)
     }
 

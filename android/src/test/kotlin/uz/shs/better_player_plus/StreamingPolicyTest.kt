@@ -50,6 +50,24 @@ class StreamingPolicyTest {
         assertEquals(0, skips)
     }
 
+    @Test fun liveStreamsRetryBrieflyThenLetTheAppRecover() {
+        val policy = LiveLoadErrorPolicy()
+        // Refused links and invalid requests surface at once.
+        for (code in listOf(400, 401, 403, 405, 416)) {
+            assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(httpError(code), 1)))
+        }
+        // A missing segment gets one quick retry.
+        assertTrue(policy.getRetryDelayMsFor(errorInfo(httpError(404), 1)) >= 0)
+        assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(httpError(404), 2)))
+        // Network failures retry a bounded number of times, never waiting for
+        // Android to report the device online.
+        for (attempt in 1..5) {
+            assertNotEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(SocketTimeoutException(), attempt)))
+        }
+        assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(SocketTimeoutException(), 6)))
+        assertEquals(6, policy.getMinimumLoadableRetryCount(C.DATA_TYPE_MEDIA))
+    }
+
     @Test fun droppedConnectionsWaitForTheNetworkInsteadOfFailing() {
         var online = false
         val policy = StreamingLoadErrorPolicy(isOnline = { online })
