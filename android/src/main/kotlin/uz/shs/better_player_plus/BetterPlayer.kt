@@ -67,6 +67,7 @@ import androidx.media3.exoplayer.drm.UnsupportedDrmException
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.smoothstreaming.DefaultSsChunkSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
 import androidx.media3.exoplayer.source.ClippingMediaSource
@@ -670,9 +671,17 @@ internal class BetterPlayer(
                 .getMethod("getDownload", String::class.java)
                 .invoke(store, downloadId) as? Download
                 ?: throw IllegalArgumentException("Offline download not found: $downloadId")
-            val cacheFactory = store.javaClass
-                .getMethod("readOnlyCacheFactory")
-                .invoke(store) as? CacheDataSource.Factory
+            // Newer apps key each download's cache by its request; older ones
+            // only have the no-argument factory.
+            val cacheFactory = try {
+                store.javaClass
+                    .getMethod("readOnlyCacheFactory", DownloadRequest::class.java)
+                    .invoke(store, download.request)
+            } catch (_: NoSuchMethodException) {
+                store.javaClass
+                    .getMethod("readOnlyCacheFactory")
+                    .invoke(store)
+            } as? CacheDataSource.Factory
                 ?: throw IllegalStateException("Offline cache is unavailable.")
             return DownloadHelper.createMediaSource(download.request, cacheFactory)
         } catch (error: ReflectiveOperationException) {
