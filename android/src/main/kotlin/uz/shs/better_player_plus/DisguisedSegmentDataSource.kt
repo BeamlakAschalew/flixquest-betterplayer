@@ -17,9 +17,11 @@ import java.io.ByteArrayOutputStream
  * request whose first bytes look like an image or the provider's marker is
  * buffered. When nothing can be recovered the original bytes are served, so
  * the failure is identical to reading [upstream] directly.
+ *
+ * Public so the app's offline downloader can unwrap segments before caching them.
  */
 @UnstableApi
-internal class DisguisedSegmentDataSource(
+class DisguisedSegmentDataSource(
     private val upstream: DataSource
 ) : DataSource {
 
