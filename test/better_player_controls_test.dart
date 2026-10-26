@@ -201,6 +201,73 @@ void main() {
     expect(skipForwardSurface.hitTestable(), findsNothing);
   });
 
+  testWidgets('holding an edge plays at its speed until it is let go', (WidgetTester tester) async {
+    final videoController = MockVideoPlayerController();
+    mockController = BetterPlayerMockController(
+      const BetterPlayerConfiguration(
+        controlsConfiguration: BetterPlayerControlsConfiguration(
+          gestureConfiguration: BetterPlayerGestureConfiguration(
+            enableVolumeSwipe: false,
+            enableBrightnessSwipe: false,
+            enableSeekSwipe: false,
+            enableDoubleTapSeek: true,
+            fastHoldSpeed: 2,
+            slowHoldSpeed: .5,
+          ),
+        ),
+      ),
+    );
+    mockController.videoPlayerController = videoController;
+    await mockController.setupDataSource(BetterPlayerDataSource.network('https://example.com/video.mp4'));
+    videoController.value = VideoPlayerValue(
+      duration: const Duration(minutes: 2),
+      position: const Duration(seconds: 30),
+      isPlaying: true,
+      speed: 1.25,
+    );
+
+    await tester.pumpWidget(_wrapWidget(BetterPlayer(controller: mockController)));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final playerRect = tester.getRect(find.byType(BetterPlayer));
+    final right = Offset(playerRect.left + playerRect.width * .85, playerRect.center.dy);
+    final left = Offset(playerRect.left + playerRect.width * .15, playerRect.center.dy);
+    const holdTime = Duration(milliseconds: 600);
+
+    var gesture = await tester.startGesture(playerRect.center);
+    await tester.pump(holdTime);
+    await gesture.up();
+    await tester.pump();
+    expect(videoController.speed, 1);
+
+    gesture = await tester.startGesture(right);
+    await tester.pump(holdTime);
+    expect(videoController.speed, 2);
+    expect(find.text('2x'), findsOneWidget);
+    await gesture.up();
+    await tester.pump();
+    expect(videoController.speed, 1.25);
+    expect(find.text('2x'), findsNothing);
+
+    gesture = await tester.startGesture(left);
+    await tester.pump(holdTime);
+    expect(videoController.speed, .5);
+    expect(find.text('0.5x'), findsOneWidget);
+    await gesture.up();
+    await tester.pump();
+    expect(videoController.speed, 1.25);
+    expect(videoController.lastSeekPosition, isNull);
+
+    videoController.speed = 1;
+    videoController.value = videoController.value.copyWith(isPlaying: false);
+    gesture = await tester.startGesture(right);
+    await tester.pump(holdTime);
+    expect(find.text('2x'), findsNothing);
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(videoController.speed, 1);
+  });
+
   testWidgets('initial loading exposes a functional play button', (WidgetTester tester) async {
     final videoController = MockVideoPlayerController();
     mockController.videoPlayerController = videoController;

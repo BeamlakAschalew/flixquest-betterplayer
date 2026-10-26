@@ -53,6 +53,9 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   bool _brightnessInitialized = false;
   bool _volumeInitialized = false;
 
+  /// The speed to go back to once a held edge is let go, while one is held.
+  double? _speedBeforeHold;
+
   BetterPlayerControlsConfiguration get _configuration => widget.controlsConfiguration;
 
   @override
@@ -81,7 +84,8 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         (gestures.enableVolumeSwipe ||
             gestures.enableBrightnessSwipe ||
             gestures.enableSeekSwipe ||
-            gestures.enableDoubleTapSeek) &&
+            gestures.enableDoubleTapSeek ||
+            gestures.enableHoldSpeed) &&
         !_locked;
 
     Widget content = LayoutBuilder(
@@ -111,7 +115,9 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
               BetterPlayerMultipleGestureDetector.of(context)?.onDoubleTap?.call();
               cancelAndRestartTimer();
             },
-      onLongPress: () => BetterPlayerMultipleGestureDetector.of(context)?.onLongPress?.call(),
+      onLongPress: gestures.enableHoldSpeed
+          ? null
+          : () => BetterPlayerMultipleGestureDetector.of(context)?.onLongPress?.call(),
       child: content,
     );
 
@@ -124,6 +130,8 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
         forwardDoubleTapSeek: Duration(milliseconds: _configuration.forwardSkipTimeInMilliseconds),
         controlsVisible: !controlsNotVisible,
         isFullScreen: _betterPlayerController?.isFullScreen == true,
+        onHoldSpeedStart: _startHoldSpeed,
+        onHoldSpeedEnd: _endHoldSpeed,
         onVolumeChanged: (value) {
           setState(() => _deviceVolume = value);
           BetterPlayerVolumeManager.setVolume(value);
@@ -149,6 +157,30 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
       );
     }
     return content;
+  }
+
+  /// Plays at [speed] while an edge is held, as YouTube does. A paused or
+  /// live player is left alone.
+  bool _startHoldSpeed(double speed) {
+    final controller = _betterPlayerController;
+    final value = _controller?.value;
+    if (controller == null || value == null || !value.isPlaying || _live) return false;
+    _speedBeforeHold ??= value.speed;
+    // The controls would cover the speed pill and the picture.
+    if (!controlsNotVisible) changePlayerControlsNotVisible(true);
+    controller.setSpeed(speed.clamp(.25, 2));
+    return true;
+  }
+
+  Future<void> _endHoldSpeed() async {
+    final previous = _speedBeforeHold;
+    if (previous == null) return;
+    _speedBeforeHold = null;
+    try {
+      await _betterPlayerController?.setSpeed(previous);
+    } catch (_) {
+      // The player was torn down mid-hold; there is nothing left to restore.
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -960,6 +992,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
 
   @override
   void dispose() {
+    _endHoldSpeed();
     _disposeController();
     BetterPlayerBrightnessManager.restoreOriginalBrightness();
     super.dispose();
