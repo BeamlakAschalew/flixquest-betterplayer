@@ -131,6 +131,27 @@ class BetterPlayerController {
   BetterPlayerSubtitlesConfiguration? _subtitlesConfiguration;
   BetterPlayerSubtitlesConfiguration? get betterPlayerSubtitlesConfiguration => _subtitlesConfiguration;
 
+  final ValueNotifier<Widget?> _sidePanelNotifier = ValueNotifier<Widget?>(null);
+
+  /// Listenable for the current right-side panel overlay.
+  ValueListenable<Widget?> get sidePanelListenable => _sidePanelNotifier;
+
+  /// The widget currently displayed in the right-side panel.
+  Widget? get sidePanel => _sidePanelNotifier.value;
+
+  /// Whether the right-side panel is currently open.
+  bool get isSidePanelOpen => _sidePanelNotifier.value != null;
+
+  /// Opens a right-side panel and smoothly resizes the video width.
+  void openSidePanel(Widget panel) {
+    _sidePanelNotifier.value = panel;
+  }
+
+  /// Closes the right-side panel and smoothly expands the video back to full width.
+  void closeSidePanel() {
+    _sidePanelNotifier.value = null;
+  }
+
   ///Updates subtitle configuration in real-time.
   void setBetterPlayerSubtitlesConfiguration(BetterPlayerSubtitlesConfiguration configuration) {
     _subtitlesConfiguration = configuration;
@@ -2048,6 +2069,7 @@ class BetterPlayerController {
       _controlsVisibilityStreamController.close();
       _subtitleOffsetNotifier.dispose();
       _preRollActiveNotifier.dispose();
+      _sidePanelNotifier.dispose();
       _videoEventStreamSubscription?.cancel();
       _disposed = true;
       _controllerEventStreamController.close();

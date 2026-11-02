@@ -19,7 +19,8 @@ class BetterPlayerWithControls extends StatefulWidget {
   State<BetterPlayerWithControls> createState() => _BetterPlayerWithControlsState();
 }
 
-class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
+class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls>
+    with SingleTickerProviderStateMixin {
   BetterPlayerSubtitlesConfiguration get subtitlesConfiguration =>
       widget.controller!.betterPlayerSubtitlesConfiguration ??
       widget.controller!.betterPlayerConfiguration.subtitlesConfiguration;
@@ -32,16 +33,56 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
   bool _initialized = false;
   StreamSubscription? _controllerEventSubscription;
 
+  late final AnimationController _sidePanelAnimationController;
+  late final Animation<double> _sidePanelAnimation;
+  Widget? _lastSidePanelWidget;
+
   @override
   void initState() {
     playerVisibilityStreamController.add(true);
     _controllerEventSubscription = widget.controller!.controllerEventStream.listen(_onControllerChanged);
+
+    _sidePanelAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _sidePanelAnimation = CurvedAnimation(
+      parent: _sidePanelAnimationController,
+      curve: Curves.easeInOutCubic,
+      reverseCurve: Curves.easeInOutCubic,
+    );
+
+    widget.controller?.sidePanelListenable.addListener(_onSidePanelChanged);
+    if (widget.controller?.isSidePanelOpen ?? false) {
+      _lastSidePanelWidget = widget.controller?.sidePanel;
+      _sidePanelAnimationController.value = 1.0;
+    }
+
     super.initState();
+  }
+
+  void _onSidePanelChanged() {
+    final panel = widget.controller?.sidePanel;
+    if (panel != null) {
+      _lastSidePanelWidget = panel;
+      _sidePanelAnimationController.forward();
+    } else {
+      _sidePanelAnimationController.reverse().then((_) {
+        if (mounted && widget.controller?.sidePanel == null) {
+          setState(() {
+            _lastSidePanelWidget = null;
+          });
+        }
+      });
+    }
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(BetterPlayerWithControls oldWidget) {
     if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.sidePanelListenable.removeListener(_onSidePanelChanged);
+      widget.controller?.sidePanelListenable.addListener(_onSidePanelChanged);
       _controllerEventSubscription?.cancel();
       _controllerEventSubscription = widget.controller!.controllerEventStream.listen(_onControllerChanged);
     }
@@ -50,6 +91,8 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
 
   @override
   void dispose() {
+    widget.controller?.sidePanelListenable.removeListener(_onSidePanelChanged);
+    _sidePanelAnimationController.dispose();
     playerVisibilityStreamController.close();
     _controllerEventSubscription?.cancel();
     super.dispose();
@@ -104,7 +147,7 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     return Stack(fit: StackFit.expand, children: <Widget>[_BetterPlayerAmbientGlow(betterPlayerController), player]);
   }
 
-  Container _buildPlayerWithControls(BetterPlayerController betterPlayerController, BuildContext context) {
+  Widget _buildPlayerWithControls(BetterPlayerController betterPlayerController, BuildContext context) {
     final configuration = betterPlayerController.betterPlayerConfiguration;
     var rotation = configuration.rotation;
 
@@ -118,44 +161,94 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
     _initialized = true;
 
     final bool placeholderOnTop = betterPlayerController.betterPlayerConfiguration.placeholderOnTop;
-    // ignore: avoid_unnecessary_containers
-    return Container(
-      child: Stack(
-        fit: StackFit.passthrough,
-        children: <Widget>[
-          if (placeholderOnTop) _buildPlaceholder(betterPlayerController),
-          Transform.rotate(
-            angle: rotation * pi / 180,
-            child: _BetterPlayerVideoFitWidget(betterPlayerController, betterPlayerController.getFit()),
-          ),
-          if (!configuration.overlayOnTop) configuration.overlay ?? Container(),
-          // Subtitle cues are timed to the content. A pre-roll's positions
-          // would show them at the wrong moments, so they wait for the content.
-          ValueListenableBuilder<bool>(
-            valueListenable: betterPlayerController.preRollActiveListenable,
-            builder: (context, preRoll, _) => preRoll
-                ? const SizedBox.shrink()
-                : BetterPlayerSubtitlesDrawer(
-                    betterPlayerController: betterPlayerController,
-                    betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
-                    subtitles: betterPlayerController.subtitlesLines,
-                    playerVisibilityStream: playerVisibilityStreamController.stream,
-                    isFullScreen: betterPlayerController.isFullScreen,
+    final videoStack = Stack(
+      fit: StackFit.passthrough,
+      children: <Widget>[
+        if (placeholderOnTop) _buildPlaceholder(betterPlayerController),
+        Transform.rotate(
+          angle: rotation * pi / 180,
+          child: _BetterPlayerVideoFitWidget(betterPlayerController, betterPlayerController.getFit()),
+        ),
+        if (!configuration.overlayOnTop) configuration.overlay ?? Container(),
+        // Subtitle cues are timed to the content. A pre-roll's positions
+        // would show them at the wrong moments, so they wait for the content.
+        ValueListenableBuilder<bool>(
+          valueListenable: betterPlayerController.preRollActiveListenable,
+          builder: (context, preRoll, _) => preRoll
+              ? const SizedBox.shrink()
+              : BetterPlayerSubtitlesDrawer(
+                  betterPlayerController: betterPlayerController,
+                  betterPlayerSubtitlesConfiguration: subtitlesConfiguration,
+                  subtitles: betterPlayerController.subtitlesLines,
+                  playerVisibilityStream: playerVisibilityStreamController.stream,
+                  isFullScreen: betterPlayerController.isFullScreen,
+                ),
+        ),
+        if (!placeholderOnTop) _buildPlaceholder(betterPlayerController),
+        ValueListenableBuilder<bool>(
+          valueListenable: betterPlayerController.preRollActiveListenable,
+          builder: (context, preRoll, _) {
+            final overlay = preRoll
+                ? controlsConfiguration.preRollOverlayBuilder?.call(context, betterPlayerController)
+                : null;
+            return overlay ?? _buildControls(context, betterPlayerController);
+          },
+        ),
+        if (configuration.overlayOnTop) configuration.overlay ?? Container(),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return AnimatedBuilder(
+          animation: _sidePanelAnimation,
+          builder: (context, _) {
+            final animValue = _sidePanelAnimation.value;
+            final hasPanel = animValue > 0.0 || _lastSidePanelWidget != null;
+            final isLandscape = constraints.maxWidth > constraints.maxHeight;
+            final targetPanelWidth = isLandscape
+                ? (constraints.maxWidth * 0.38).clamp(320.0, 420.0)
+                : (constraints.maxWidth * 0.85).clamp(280.0, 360.0);
+
+            final currentPanelWidth = targetPanelWidth * animValue;
+            final videoWidth = constraints.maxWidth - currentPanelWidth;
+
+            return PopScope(
+              canPop: animValue == 0.0,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop && animValue > 0.0) {
+                  betterPlayerController.closeSidePanel();
+                }
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 1. Resizing video area (left)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: videoWidth,
+                    child: ClipRect(child: videoStack),
                   ),
-          ),
-          if (!placeholderOnTop) _buildPlaceholder(betterPlayerController),
-          ValueListenableBuilder<bool>(
-            valueListenable: betterPlayerController.preRollActiveListenable,
-            builder: (context, preRoll, _) {
-              final overlay = preRoll
-                  ? controlsConfiguration.preRollOverlayBuilder?.call(context, betterPlayerController)
-                  : null;
-              return overlay ?? _buildControls(context, betterPlayerController);
-            },
-          ),
-          if (configuration.overlayOnTop) configuration.overlay ?? Container(),
-        ],
-      ),
+
+                  // 2. Sliding side panel (right)
+                  if (hasPanel && _lastSidePanelWidget != null)
+                    Positioned(
+                      right: -(targetPanelWidth * (1.0 - animValue)),
+                      top: 0,
+                      bottom: 0,
+                      width: targetPanelWidth,
+                      child: ClipRect(
+                        child: _lastSidePanelWidget!,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
