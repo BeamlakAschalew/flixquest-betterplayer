@@ -51,7 +51,8 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
       _configuration = setupDefaultConfiguration();
     }
 
-    widget.betterPlayerController.videoPlayerController!.addListener(_updateState);
+    _latestValue = widget.betterPlayerController.videoPlayerController?.value;
+    widget.betterPlayerController.videoPlayerController?.addListener(_updateState);
     widget.betterPlayerController.subtitleOffsetListenable.addListener(_updateSubtitleOffset);
 
     _outerTextStyle = TextStyle(
@@ -81,7 +82,41 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
   }
 
   void _updateSubtitleOffset() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      final controller = widget.betterPlayerController.videoPlayerController;
+      if (controller != null) {
+        _latestValue = controller.value;
+      }
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(BetterPlayerSubtitlesDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.betterPlayerController != widget.betterPlayerController) {
+      oldWidget.betterPlayerController.videoPlayerController?.removeListener(_updateState);
+      oldWidget.betterPlayerController.subtitleOffsetListenable.removeListener(_updateSubtitleOffset);
+      widget.betterPlayerController.videoPlayerController?.addListener(_updateState);
+      widget.betterPlayerController.subtitleOffsetListenable.addListener(_updateSubtitleOffset);
+      _latestValue = widget.betterPlayerController.videoPlayerController?.value;
+    }
+    if (oldWidget.betterPlayerSubtitlesConfiguration != widget.betterPlayerSubtitlesConfiguration) {
+      _configuration = widget.betterPlayerSubtitlesConfiguration ?? setupDefaultConfiguration();
+      _outerTextStyle = TextStyle(
+        fontSize: _configuration!.fontSize,
+        fontFamily: _configuration!.fontFamily,
+        foreground: Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _configuration!.outlineSize
+          ..color = _configuration!.outlineColor,
+      );
+      _innerTextStyle = TextStyle(
+        fontFamily: _configuration!.fontFamily,
+        color: _configuration!.fontColor,
+        fontSize: _configuration!.fontSize,
+      );
+    }
   }
 
   ///Called when player state has changed, i.e. new player position, etc.
@@ -128,15 +163,20 @@ class _BetterPlayerSubtitlesDrawerState extends State<BetterPlayerSubtitlesDrawe
   }
 
   BetterPlayerSubtitle? _getSubtitleAtCurrentPosition() {
-    if (_latestValue == null) {
+    final controller = widget.betterPlayerController.videoPlayerController;
+    final value = controller?.value ?? _latestValue;
+    if (value == null) {
       return null;
     }
 
     // Moving the cue timeline backwards delays subtitles; moving it forwards
     // shows them earlier.
-    final Duration position = _latestValue!.position - widget.betterPlayerController.subtitleOffset;
+    final Duration position = value.position - widget.betterPlayerController.subtitleOffset;
     for (final BetterPlayerSubtitle subtitle in widget.betterPlayerController.subtitlesLines) {
-      if (subtitle.start! <= position && subtitle.end! >= position) {
+      if (subtitle.start != null &&
+          subtitle.end != null &&
+          subtitle.start! <= position &&
+          subtitle.end! >= position) {
         return subtitle;
       }
     }

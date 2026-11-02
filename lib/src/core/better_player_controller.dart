@@ -139,6 +139,12 @@ class BetterPlayerController {
     final nextOffset = Duration(milliseconds: clampedMilliseconds);
     if (_subtitleOffsetNotifier.value == nextOffset) return;
     _subtitleOffsetNotifier.value = nextOffset;
+    if (_betterPlayerSubtitlesSource?.asmsIsSegmented ?? false) {
+      final pos = videoPlayerController?.value.position;
+      if (pos != null) {
+        _loadAsmsSubtitlesSegments(pos);
+      }
+    }
   }
 
   ///Invalidates an older network subtitle request when the user selects a
@@ -800,12 +806,13 @@ class BetterPlayerController {
   ///is multiplied by 5 to increase window of duration.
   ///Segments are also cached, so same segment won't load twice. Only one
   ///pack of segments can be load at given time.
-  Future _loadAsmsSubtitlesSegments(Duration position) async {
+  Future _loadAsmsSubtitlesSegments(Duration rawPosition) async {
     try {
       if (_asmsSegmentsLoading) {
         return;
       }
       _asmsSegmentsLoading = true;
+      final position = rawPosition - subtitleOffset;
       final BetterPlayerSubtitlesSource? source = _betterPlayerSubtitlesSource;
       final Duration loadDurationEnd = Duration(
         milliseconds: position.inMilliseconds + 5 * (_betterPlayerSubtitlesSource?.asmsSegmentsTime ?? 5000),

@@ -94,10 +94,8 @@ class BetterPlayerSubtitlesFactory {
   }
 
   static List<BetterPlayerSubtitle> _parseString(String value) {
-    List<String> components = value.split('\r\n\r\n');
-    if (components.length == 1) {
-      components = value.split('\n\n');
-    }
+    final normalized = value.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    List<String> components = normalized.split(RegExp(r'\n{2,}'));
 
     // Skip parsing files with no cues
     if (components.length == 1) {
