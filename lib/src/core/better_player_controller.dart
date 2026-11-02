@@ -128,6 +128,15 @@ class BetterPlayerController {
 
   ValueListenable<Duration> get subtitleOffsetListenable => _subtitleOffsetNotifier;
 
+  BetterPlayerSubtitlesConfiguration? _subtitlesConfiguration;
+  BetterPlayerSubtitlesConfiguration? get betterPlayerSubtitlesConfiguration => _subtitlesConfiguration;
+
+  ///Updates subtitle configuration in real-time.
+  void setBetterPlayerSubtitlesConfiguration(BetterPlayerSubtitlesConfiguration configuration) {
+    _subtitlesConfiguration = configuration;
+    _postControllerEvent(BetterPlayerControllerEvent.changeSubtitles);
+  }
+
   ///Updates subtitle timing and notifies subtitle renderers immediately,
   ///including while playback is paused.
   void setSubtitleOffset(Duration offset) {
