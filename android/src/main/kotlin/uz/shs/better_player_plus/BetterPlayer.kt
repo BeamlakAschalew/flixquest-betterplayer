@@ -29,6 +29,8 @@ import androidx.media3.ui.PlayerNotificationManager.MediaDescriptionAdapter
 import androidx.media3.ui.PlayerNotificationManager.BitmapCallback
 import androidx.work.OneTimeWorkRequest
 import android.util.Log
+import android.hardware.display.DisplayManager
+import android.view.Display
 import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.lifecycle.Observer
@@ -67,6 +69,7 @@ import androidx.media3.exoplayer.drm.UnsupportedDrmException
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.smoothstreaming.DefaultSsChunkSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
 import androidx.media3.exoplayer.source.ClippingMediaSource
@@ -166,7 +169,7 @@ internal class BetterPlayer(
     private var completionSent = false
     private var liveSource = false
     private val liveWindowRecovery = LiveWindowRecovery()
-    private val liveLoadErrorHandlingPolicy = streamingPolicy(isLive = true)
+    private val liveLoadErrorHandlingPolicy = LiveLoadErrorPolicy()
     private var contentStartPositionMs = 0L
     private val shortSegmentLoadErrorHandlingPolicy =
         streamingPolicy(onBrokenSegment = ::requestBrokenSegmentSkip)
@@ -185,7 +188,10 @@ internal class BetterPlayer(
             .setLoadControl(loadControl)
             .setBandwidthMeter(networkUsageMeter)
             .build()
-        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter)
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        streamingDiagnostics = StreamingDiagnostics(exoPlayer, bandwidthMeter) {
+            displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.refreshRate
+        }
         exoPlayer.addAnalyticsListener(streamingDiagnostics)
         exoPlayer.addAnalyticsListener(object : AnalyticsListener {
             override fun onLoadCompleted(
@@ -247,6 +253,8 @@ internal class BetterPlayer(
         resetSegmentSkips()
         lastMediaLoadCompletedAtMs = 0L
         decoderRecoveries = 0
+        // Live and on-demand sources report connectivity differently.
+        sendConnectivity(NetworkConnectivity.isOnline)
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
@@ -670,9 +678,10 @@ internal class BetterPlayer(
                 .getMethod("getDownload", String::class.java)
                 .invoke(store, downloadId) as? Download
                 ?: throw IllegalArgumentException("Offline download not found: $downloadId")
+            // Each download reads from its own cache namespace, so pass its request.
             val cacheFactory = store.javaClass
-                .getMethod("readOnlyCacheFactory")
-                .invoke(store) as? CacheDataSource.Factory
+                .getMethod("readOnlyCacheFactory", DownloadRequest::class.java)
+                .invoke(store, download.request) as? CacheDataSource.Factory
                 ?: throw IllegalStateException("Offline cache is unavailable.")
             return DownloadHelper.createMediaSource(download.request, cacheFactory)
         } catch (error: ReflectiveOperationException) {
@@ -911,6 +920,7 @@ internal class BetterPlayer(
      * A decoder that failed or was reclaimed usually works again when the
      * player prepares afresh, so try that before reporting an error. A second
      * failure in a row is more likely the frames themselves; step past them.
+     * Live errors go straight to the app, whose live player recovers them.
      */
     private fun recoverDecoderError(player: ExoPlayer, error: PlaybackException): Boolean {
         val decoderFailure = error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
@@ -918,14 +928,14 @@ internal class BetterPlayer(
             error.errorCode == PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED ||
             error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
             error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
-        if (!decoderFailure) return false
+        if (!decoderFailure || liveSource) return false
         val now = SystemClock.elapsedRealtime()
         if (now - lastDecoderRecoveryMs > DECODER_RECOVERY_WINDOW_MS) decoderRecoveries = 0
         if (decoderRecoveries >= MAX_DECODER_RECOVERIES) return false
         decoderRecoveries++
         lastDecoderRecoveryMs = now
         Log.w(TAG, "Recovering from decoder error ${error.errorCode}")
-        if (decoderRecoveries > 1 && !liveSource) {
+        if (decoderRecoveries > 1) {
             val durationMs = player.duration
             val targetMs = player.currentPosition + 2_000L
             if (durationMs == C.TIME_UNSET || targetMs < durationMs) player.seekTo(targetMs)
@@ -937,7 +947,9 @@ internal class BetterPlayer(
     private fun sendConnectivity(online: Boolean) {
         val event: MutableMap<String, Any?> = HashMap()
         event["event"] = "connectivityChanged"
-        event["online"] = online
+        // Live streams never report offline: Android's validation can fail
+        // while the internet works, and the live player must keep recovering.
+        event["online"] = online || liveSource
         eventSink.success(event)
     }
 
@@ -1300,6 +1312,7 @@ internal class BetterPlayer(
         positionSnapshotHandler?.removeCallbacksAndMessages(null)
         positionSnapshotHandler = null
         positionSnapshotRunnable = null
+        streamingDiagnostics.release()
         if (isInitialized) {
             exoPlayer?.stop()
         }

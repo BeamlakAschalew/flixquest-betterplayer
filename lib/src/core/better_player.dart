@@ -87,7 +87,11 @@ class _BetterPlayerState extends State<BetterPlayer> with WidgetsBindingObserver
     ///full screen is on, then full screen route must be pop and return to normal
     ///state.
     if (_isFullScreen) {
-      WakelockPlus.disable();
+      // Only the hold this widget took for fullscreen; with screen sleep
+      // allowed the app owns the flag and may still need it.
+      if (!_betterPlayerConfiguration.allowedScreenSleep) {
+        WakelockPlus.disable();
+      }
       _navigatorState.maybePop();
       SystemChrome.setEnabledSystemUIMode(
         SystemUiMode.manual,
@@ -213,8 +217,11 @@ class _BetterPlayerState extends State<BetterPlayer> with WidgetsBindingObserver
     }
 
     // The wakelock plugins checks whether it needs to perform an action internally,
-    // so we do not need to check Wakelock.isEnabled.
-    WakelockPlus.disable();
+    // so we do not need to check Wakelock.isEnabled. Only the hold taken above
+    // is released: with screen sleep allowed the app owns the flag.
+    if (!_betterPlayerConfiguration.allowedScreenSleep) {
+      WakelockPlus.disable();
+    }
 
     await SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,

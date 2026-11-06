@@ -66,7 +66,24 @@ adb logcat -s BetterPlayerStreaming
 The log includes first-frame time, buffer duration, bandwidth estimate, selected
 bitrate, sampled media-load durations and error counts. It excludes source URLs
 and headers. Buffering state transitions include startup and seeks, so their
-count is not a rebuffer count. Disable with:
+count is not a rebuffer count.
+
+While playing, it also logs video smoothness every five seconds:
+
+```
+videoFormat=1920x1080 contentFps=23.976 codec=video/avc displayHz=60.0
+renderedFps=23.9 contentFps=23.976 displayHz=60.0 dropped=0 skipped=0 speed=1.0
+```
+
+`renderedFps` counts frames the decoder released to the Flutter texture. It
+should match `contentFps` at 1x speed. A lower value, or growing `dropped`
+counts, means the device cannot decode or release frames in time. A matching
+value with visible stutter points past the decoder: the Flutter frame rate or
+the display refresh rate. Content at 23.976 or 25 fps shown at `displayHz=60`
+repeats frames unevenly, which reads as judder on slow pans. Check the Flutter
+side with the performance overlay or `adb shell dumpsys gfxinfo <package>`.
+
+Disable with:
 
 ```sh
 adb shell setprop log.tag.BetterPlayerStreaming INFO

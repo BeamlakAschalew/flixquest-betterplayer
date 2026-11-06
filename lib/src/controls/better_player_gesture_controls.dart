@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_player_plus/src/controls/better_player_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 /// Configuration for gesture-based controls
@@ -19,6 +20,8 @@ class BetterPlayerGestureConfiguration {
     this.swipeAreaWidthPercentage = 0.2, // Reduced from 0.35 to 0.2 (20% each side)
     this.doubleTapSeekAreaWidthPercentage = 0.35,
     this.doubleTapSeekAreaWidthPercentageNonFullscreen = 0.2,
+    this.fastHoldSpeed,
+    this.slowHoldSpeed,
   });
 
   /// Enable volume control via vertical swipe on right side
@@ -59,10 +62,20 @@ class BetterPlayerGestureConfiguration {
   /// Inline players are much smaller than the fullscreen surface, so a smaller
   /// zone avoids accidentally triggering seeks across most of the player width.
   final double doubleTapSeekAreaWidthPercentageNonFullscreen;
+
+  /// Speed played while the right edge is held down, the edge a double tap
+  /// seeks forward on. Null turns the hold off there.
+  final double? fastHoldSpeed;
+
+  /// Speed played while the left edge is held down, the edge a double tap
+  /// seeks back on. Null turns the hold off there.
+  final double? slowHoldSpeed;
+
+  bool get enableHoldSpeed => fastHoldSpeed != null || slowHoldSpeed != null;
 }
 
 /// Types of gesture feedback
-enum GestureFeedbackType { volume, brightness, seekForward, seekBackward }
+enum GestureFeedbackType { volume, brightness, seekForward, seekBackward, holdSpeed }
 
 /// Widget that handles gesture-based controls for video player
 class BetterPlayerGestureHandler extends StatefulWidget {
@@ -78,6 +91,8 @@ class BetterPlayerGestureHandler extends StatefulWidget {
     this.forwardDoubleTapSeek = const Duration(seconds: 10),
     this.controlsVisible = true, // Whether controls are currently visible
     this.isFullScreen = false, // Whether the player is in fullscreen mode
+    this.onHoldSpeedStart,
+    this.onHoldSpeedEnd,
     super.key,
   });
 
@@ -92,6 +107,13 @@ class BetterPlayerGestureHandler extends StatefulWidget {
   final Duration forwardDoubleTapSeek;
   final bool controlsVisible;
   final bool isFullScreen;
+
+  /// Plays at the given speed for as long as an edge is held. Returns whether
+  /// it did, so a paused or live player shows no feedback.
+  final bool Function(double speed)? onHoldSpeedStart;
+
+  /// Puts the speed back once the hold ends.
+  final VoidCallback? onHoldSpeedEnd;
 
   @override
   State<BetterPlayerGestureHandler> createState() => _BetterPlayerGestureHandlerState();
@@ -110,9 +132,12 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
   // Track if we've moved enough to be considered a drag (not a tap)
   bool _hasMovedEnough = false;
 
+  bool _holding = false;
+
   @override
   void dispose() {
     _feedbackTimer?.cancel();
+    if (_holding) widget.onHoldSpeedEnd?.call();
     super.dispose();
   }
 
@@ -262,12 +287,12 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     });
   }
 
-  void _onDoubleTapSeek() {
-    if (!widget.configuration.enableDoubleTapSeek) return;
-
-    final position = _lastPointerPosition;
+  /// Whether [position] is on the right edge (true) or the left (false), the
+  /// zones a double tap seeks and a hold changes the speed on. Null outside
+  /// both, and over the top and bottom bars.
+  bool? _edgeAt(Offset position) {
     final size = _viewportSize;
-    if (position == null || size.isEmpty) return;
+    if (size.isEmpty) return null;
 
     final edgeFraction = (widget.isFullScreen
             ? widget.configuration.doubleTapSeekAreaWidthPercentage
@@ -275,14 +300,24 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
         .clamp(0.15, 0.5);
     final backward = position.dx <= size.width * edgeFraction;
     final forward = position.dx >= size.width * (1 - edgeFraction);
-    if (!backward && !forward) return;
+    if (!backward && !forward) return null;
 
     const topSafeZone = 80.0;
     const bottomSafeZone = 100.0;
     if (size.height > topSafeZone + bottomSafeZone &&
         (position.dy < topSafeZone || position.dy > size.height - bottomSafeZone)) {
-      return;
+      return null;
     }
+    return forward;
+  }
+
+  void _onDoubleTapSeek() {
+    if (!widget.configuration.enableDoubleTapSeek) return;
+
+    final position = _lastPointerPosition;
+    if (position == null) return;
+    final forward = _edgeAt(position);
+    if (forward == null) return;
 
     final seekDuration = forward ? widget.forwardDoubleTapSeek : widget.backwardDoubleTapSeek;
     if (seekDuration <= Duration.zero) return;
@@ -294,6 +329,32 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
     });
     widget.onSeek(forward ? seekDuration : -seekDuration);
     _hideFeedbackAfterDelay();
+  }
+
+  void _onHoldStart(LongPressStartDetails details) {
+    final fast = _edgeAt(details.localPosition);
+    if (fast == null) return;
+    final speed = fast ? widget.configuration.fastHoldSpeed : widget.configuration.slowHoldSpeed;
+    if (speed == null || widget.onHoldSpeedStart?.call(speed) != true) return;
+
+    _holding = true;
+    HapticFeedback.selectionClick();
+    _feedbackTimer?.cancel();
+    setState(() {
+      _isGestureActive = true;
+      _currentGesture = GestureFeedbackType.holdSpeed;
+      _gestureValue = speed;
+    });
+  }
+
+  void _onHoldEnd() {
+    if (!_holding) return;
+    _holding = false;
+    widget.onHoldSpeedEnd?.call();
+    setState(() {
+      _isGestureActive = false;
+      _currentGesture = null;
+    });
   }
 
   @override
@@ -368,14 +429,19 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
       ],
     );
 
-    if (!widget.configuration.enableDoubleTapSeek) return content;
+    final config = widget.configuration;
+    if (!config.enableDoubleTapSeek && !config.enableHoldSpeed) return content;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         _viewportSize = constraints.biggest;
         return GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onDoubleTap: _onDoubleTapSeek,
+          // A double-tap recogniser holds back single taps, so only when seeking.
+          onDoubleTap: config.enableDoubleTapSeek ? _onDoubleTapSeek : null,
+          onLongPressStart: config.enableHoldSpeed ? _onHoldStart : null,
+          onLongPressEnd: config.enableHoldSpeed ? (_) => _onHoldEnd() : null,
+          onLongPressCancel: config.enableHoldSpeed ? _onHoldEnd : null,
           child: Listener(
             onPointerDown: (event) {
               _lastPointerPosition = event.localPosition;
@@ -389,6 +455,12 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
 
   Widget _buildFeedbackOverlay() {
     final gesture = _currentGesture;
+    if (gesture == GestureFeedbackType.holdSpeed) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: Padding(padding: const EdgeInsets.only(top: 24), child: _buildFeedbackContent()),
+      );
+    }
     final alignment = gesture == GestureFeedbackType.seekForward
         ? const Alignment(.66, 0)
         : gesture == GestureFeedbackType.seekBackward
@@ -418,6 +490,11 @@ class _BetterPlayerGestureHandlerState extends State<BetterPlayerGestureHandler>
         return BetterPlayerGesturePill(
           icon: forward ? PhosphorIcons.fastForward() : PhosphorIcons.rewind(),
           label: '${forward ? '+' : '-'}${_gestureValue.abs().round()}s',
+        );
+      case GestureFeedbackType.holdSpeed:
+        return BetterPlayerGesturePill(
+          icon: _gestureValue > 1 ? PhosphorIcons.personSimpleRun() : PhosphorIcons.personSimpleWalk(),
+          label: BetterPlayerSpeedSelector.format(_gestureValue),
         );
     }
   }
