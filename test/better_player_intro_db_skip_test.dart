@@ -148,7 +148,7 @@ void main() {
     expect(videoController.playbackOperations, isEmpty, reason: 'select must not double as play/pause here');
     expect(controlsController.controlsVisible, isFalse, reason: 'skipping does not wake the overlay');
 
-    // Once the skip window closes, select goes back to waking the controls.
+    // Once the skip window closes, select goes back to only waking the controls.
     available = false;
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -156,7 +156,7 @@ void main() {
 
     expect(skips, 1);
     expect(controlsController.controlsVisible, isTrue);
-    expect(videoController.playbackOperations, <String>['pause']);
+    expect(videoController.playbackOperations, isEmpty, reason: 'pausing takes a second press on the Play button');
   });
 
   testWidgets('TV media play/pause key keeps toggling playback while a skip is offered', (tester) async {
