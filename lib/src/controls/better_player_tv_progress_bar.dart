@@ -18,6 +18,7 @@ class BetterPlayerTvProgressBar extends StatefulWidget {
     required this.onEditingChanged,
     this.focusNode,
     this.strings = const BetterPlayerControlsStrings(),
+    this.showRemainingTime = true,
     this.seekStep = const Duration(seconds: 10),
     this.commitDelay = const Duration(milliseconds: 900),
     this.playedColor = Colors.deepOrange,
@@ -33,6 +34,9 @@ class BetterPlayerTvProgressBar extends StatefulWidget {
   final ValueChanged<bool> onEditingChanged;
   final FocusNode? focusNode;
   final BetterPlayerControlsStrings strings;
+
+  /// Shows the time left after the bar, or the full length when false.
+  final bool showRemainingTime;
   final Duration seekStep;
 
   /// How long the remote must rest before a scrub is applied.
@@ -146,6 +150,8 @@ class BetterPlayerTvProgressBarState extends State<BetterPlayerTvProgressBar> {
           height: 44,
           child: Row(
             children: <Widget>[
+              Text(_format(_effectivePosition), style: timeStyle),
+              const SizedBox(width: 18),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -219,8 +225,12 @@ class BetterPlayerTvProgressBarState extends State<BetterPlayerTvProgressBar> {
                 ),
               ),
               const SizedBox(width: 18),
-              // What is left, counted down, as Netflix shows it.
-              Text('-${_format(remaining.isNegative ? Duration.zero : remaining)}', style: timeStyle),
+              Text(
+                widget.showRemainingTime
+                    ? '-${_format(remaining.isNegative ? Duration.zero : remaining)}'
+                    : _format(widget.duration),
+                style: timeStyle,
+              ),
             ],
           ),
         ),

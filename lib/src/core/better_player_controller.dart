@@ -236,6 +236,8 @@ class BetterPlayerController {
   ///Overridden fit which will be used instead of fit passed in configuration.
   BoxFit? _overriddenFit;
 
+  int? _overriddenPlayerTimeMode;
+
   ///Was Picture in Picture opened.
   bool _wasInPipMode = false;
 
@@ -1539,6 +1541,19 @@ class BetterPlayerController {
   ///BetterPlayerConfiguration will be used. Otherwise [_overriddenFit] will be
   ///used.
   BoxFit getFit() => _overriddenFit ?? betterPlayerConfiguration.fit;
+
+  ///What the time after the seek bar shows. See
+  ///[BetterPlayerControlsConfiguration.playerTimeMode].
+  int? get playerTimeMode => _overriddenPlayerTimeMode ?? betterPlayerControlsConfiguration.playerTimeMode;
+
+  ///Switches the time after the seek bar between time left and full length.
+  void togglePlayerTimeMode() {
+    final next = playerTimeMode == BetterPlayerControlsConfiguration.timeModeRemaining
+        ? BetterPlayerControlsConfiguration.timeModeTotal
+        : BetterPlayerControlsConfiguration.timeModeRemaining;
+    _overriddenPlayerTimeMode = next;
+    betterPlayerControlsConfiguration.onPlayerTimeModeChanged?.call(next);
+  }
 
   ///Enable or disable the Android ambient glow without rebuilding playback.
   void setAmbientGlowEnabled(bool enabled) {

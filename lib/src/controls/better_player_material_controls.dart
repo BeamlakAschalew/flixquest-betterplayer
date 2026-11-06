@@ -482,26 +482,41 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
 
   Widget _timelineRow({Widget? trailing}) {
     final position = _latestValue?.position ?? Duration.zero;
-    final mode = _configuration.playerTimeMode;
-    final showPosition = mode != 1 && mode != 2;
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Row(
         children: [
-          if (_configuration.enableProgressText && showPosition) ...[
+          if (_configuration.enableProgressText) ...[
             Text(BetterPlayerUtils.formatDuration(position), style: _timeStyle),
             const SizedBox(width: 12),
           ],
           Expanded(child: SizedBox(height: 36, child: _progressBar())),
-          if (_configuration.enableProgressText) ...[
-            const SizedBox(width: 12),
-            Text(_durationLabel(), key: const Key('better_player_time_label'), style: _timeStyle),
-          ],
+          if (_configuration.enableProgressText) _timeToggle(),
           if (trailing != null) ...[const SizedBox(width: 4), trailing],
         ],
       ),
     );
   }
+
+  Widget _timeToggle() => Semantics(
+    button: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        cancelAndRestartTimer();
+        setState(_betterPlayerController!.togglePlayerTimeMode);
+      },
+      child: SizedBox(
+        height: 36,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: Text(_durationLabel(), key: const Key('better_player_time_label'), style: _timeStyle),
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _fullscreenButton(bool compact) {
     final fullscreen = _betterPlayerController!.isFullScreen;
@@ -617,15 +632,11 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
   String _durationLabel() {
     final duration = _latestValue?.duration ?? Duration.zero;
     final position = _latestValue?.position ?? Duration.zero;
-    switch (_configuration.playerTimeMode) {
-      case 1:
-        final remaining = duration - position;
-        return '-${BetterPlayerUtils.formatDuration(remaining.isNegative ? Duration.zero : remaining)}';
-      case 2:
-        return '${BetterPlayerUtils.formatDuration(position)} / ${BetterPlayerUtils.formatDuration(duration)}';
-      default:
-        return BetterPlayerUtils.formatDuration(duration);
+    if (_betterPlayerController!.playerTimeMode != BetterPlayerControlsConfiguration.timeModeRemaining) {
+      return BetterPlayerUtils.formatDuration(duration);
     }
+    final remaining = duration - position;
+    return '-${BetterPlayerUtils.formatDuration(remaining.isNegative ? Duration.zero : remaining)}';
   }
 
   Widget _muteButton(double size) {

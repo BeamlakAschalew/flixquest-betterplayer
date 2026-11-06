@@ -275,6 +275,7 @@ void main() {
     bool live = false,
     String name = '',
     String? subtitle,
+    int? timeMode,
   }) async {
     tester.view.physicalSize = const Size(960, 540);
     tester.view.devicePixelRatio = 1;
@@ -288,6 +289,7 @@ void main() {
           controlsHideTime: const Duration(seconds: 4),
           name: name,
           subtitle: subtitle,
+          playerTimeMode: timeMode,
         ),
       ),
     );
@@ -322,14 +324,24 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'BetterPlayer TV timeline');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    // The landing time shows while scrubbing; nothing has seeked yet.
-    expect(find.text('10:20'), findsOneWidget);
+    // The landing time shows over the knob and as the elapsed time; nothing
+    // has seeked yet.
+    expect(find.text('10:20'), findsNWidgets(2));
     expect(video.playbackOperations.where((op) => op.startsWith('seek')), isEmpty);
 
     await tester.pump(const Duration(seconds: 1));
     expect(video.lastSeekPosition, const Duration(minutes: 10, seconds: 20));
-    // Time left is counted down.
+    // Elapsed time sits before the bar, and time left is counted down after it.
+    expect(find.text('10:20'), findsOneWidget);
     expect(find.text('-29:40'), findsOneWidget);
+  });
+
+  testWidgets('the timeline shows the full length when the time setting asks for it', (tester) async {
+    await pumpControls(tester, timeMode: BetterPlayerControlsConfiguration.timeModeTotal);
+
+    expect(find.text('10:00'), findsOneWidget);
+    expect(find.text('40:00'), findsOneWidget);
+    expect(find.text('-30:00'), findsNothing);
   });
 
   testWidgets('Back while scrubbing cancels without seeking', (tester) async {
