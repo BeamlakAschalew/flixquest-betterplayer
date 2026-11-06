@@ -97,12 +97,12 @@ final List<BetterPlayerTranslations> translations;
 ///on aspect ratio of the video. If aspect ratio of the video is < 1 then
 ///video will played in full screen in portrait mode. If aspect ratio is >= 1
 ///then video will be played horizontally. If this parameter is true, then
-///[deviceOrientationsOnFullScreen] and [fullScreenAspectRatio] value will be
-/// ignored.
+///[deviceOrientationsOnFullScreen] value will be ignored.
 final bool autoDetectFullscreenDeviceOrientation;
 
-///Defines if player should auto detect full screen aspect ration of the video.
-///If [deviceOrientationsOnFullScreen] is true this is done automaticaly also.
+///Defines if the full screen player box should take the aspect ratio of the
+///video instead of filling the screen. The controls and subtitles are laid out
+///in that box, so their position then changes with the shape of the video.
 final bool autoDetectFullscreenAspectRatio;
 
 ///Defines flag which enables/disables lifecycle handling (pause on app closed,

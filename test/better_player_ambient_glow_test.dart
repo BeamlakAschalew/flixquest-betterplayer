@@ -9,6 +9,16 @@ void main() {
     expect(configuration.copyWith(enableAmbientGlow: true).enableAmbientGlow, isTrue);
   });
 
+  test('copyWith keeps autoDetectFullscreenAspectRatio', () {
+    const configuration = BetterPlayerConfiguration(autoDetectFullscreenAspectRatio: true);
+
+    expect(configuration.copyWith().autoDetectFullscreenAspectRatio, isTrue);
+    expect(
+      configuration.copyWith(autoDetectFullscreenAspectRatio: false).autoDetectFullscreenAspectRatio,
+      isFalse,
+    );
+  });
+
   test('ambient glow can be toggled without rebuilding the controller', () {
     final controller = BetterPlayerController(const BetterPlayerConfiguration(enableAmbientGlow: true));
     addTearDown(controller.dispose);

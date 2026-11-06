@@ -68,13 +68,14 @@ class _BetterPlayerWithControlsState extends State<BetterPlayerWithControls> {
 
     double? aspectRatio;
     if (betterPlayerController.isFullScreen) {
-      if (betterPlayerController.betterPlayerConfiguration.autoDetectFullscreenDeviceOrientation ||
-          betterPlayerController.betterPlayerConfiguration.autoDetectFullscreenAspectRatio) {
+      // The controls and subtitles share this box, so it follows the screen
+      // rather than the video. The video letterboxes itself inside it.
+      if (betterPlayerController.betterPlayerConfiguration.autoDetectFullscreenAspectRatio) {
         aspectRatio = betterPlayerController.videoPlayerController?.value.aspectRatio ?? 1.0;
       } else {
         aspectRatio =
             betterPlayerController.betterPlayerConfiguration.fullScreenAspectRatio ??
-            BetterPlayerUtils.calculateAspectRatio(context);
+            MediaQuery.sizeOf(context).aspectRatio;
       }
     } else {
       aspectRatio = betterPlayerController.getAspectRatio();
