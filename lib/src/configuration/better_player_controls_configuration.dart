@@ -72,6 +72,7 @@ class BetterPlayerControlsConfiguration {
     this.onFullScreenChange,
     this.watchingText,
     this.playerTimeMode,
+    this.onPlayerTimeModeChanged,
     this.enableThumbnailPreview = true,
     this.onEpisodeListTap,
     this.enableEpisodeSelection = false,
@@ -304,8 +305,20 @@ class BetterPlayerControlsConfiguration {
   ///Database function
   final Function? onFullScreenChange;
 
-  /// Player timer mode
+  /// [playerTimeMode] for showing the time left next to the seek bar.
+  static const int timeModeRemaining = 1;
+
+  /// [playerTimeMode] for showing the full length next to the seek bar.
+  static const int timeModeTotal = 2;
+
+  /// What the time after the seek bar shows: [timeModeRemaining] or
+  /// [timeModeTotal], with the full length when null. Elapsed time always sits
+  /// before the bar.
   final int? playerTimeMode;
+
+  /// Called with the new mode when the viewer taps the time to switch it, so the
+  /// app can keep the choice for the next video.
+  final ValueChanged<int>? onPlayerTimeModeChanged;
 
   ///Flag used to enable/disable thumbnail preview when seeking
   final bool enableThumbnailPreview;

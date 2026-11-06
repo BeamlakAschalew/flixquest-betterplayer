@@ -864,6 +864,8 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                           key: _timeline,
                           strings: _strings,
                           focusNode: _timelineFocus,
+                          showRemainingTime:
+                              widget.controller.playerTimeMode != BetterPlayerControlsConfiguration.timeModeTotal,
                           position: _value.position,
                           duration: _value.duration ?? Duration.zero,
                           buffered: _bufferedEnd,
