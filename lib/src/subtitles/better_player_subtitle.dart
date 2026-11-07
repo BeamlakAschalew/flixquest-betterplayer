@@ -3,7 +3,7 @@ import 'package:better_player_plus/src/core/better_player_utils.dart';
 class BetterPlayerSubtitle {
   factory BetterPlayerSubtitle(String value, bool isWebVTT) {
     try {
-      final scanner = value.split('\n');
+      final scanner = value.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim().split('\n');
       if (scanner.length == 2) {
         return _handle2LinesSubtitles(scanner);
       }
@@ -66,14 +66,9 @@ class BetterPlayerSubtitle {
 
   static Duration _stringToDuration(String value) {
     try {
-      final valueSplit = value.split(' ');
-      String componentValue;
-
-      if (valueSplit.length > 1) {
-        componentValue = valueSplit[0];
-      } else {
-        componentValue = value;
-      }
+      final trimmed = value.trim();
+      final valueSplit = trimmed.split(' ');
+      String componentValue = valueSplit.isNotEmpty ? valueSplit[0].trim() : trimmed;
 
       final component = componentValue.split(':');
       // Interpret a missing hour component to mean 00 hours
@@ -89,10 +84,17 @@ class BetterPlayerSubtitle {
         return const Duration();
       }
 
-      final hours = int.tryParse(component[0]);
-      final minutes = int.tryParse(component[1]);
-      final seconds = int.tryParse(secsAndMillsSplit[0]);
-      final milliseconds = int.tryParse(secsAndMillsSplit[1]);
+      final hours = int.tryParse(component[0].trim());
+      final minutes = int.tryParse(component[1].trim());
+      final seconds = int.tryParse(secsAndMillsSplit[0].trim());
+
+      String millisStr = secsAndMillsSplit[1].trim();
+      if (millisStr.length > 3) {
+        millisStr = millisStr.substring(0, 3);
+      } else if (millisStr.length < 3) {
+        millisStr = millisStr.padRight(3, '0');
+      }
+      final milliseconds = int.tryParse(millisStr);
       if (hours == null ||
           minutes == null ||
           seconds == null ||

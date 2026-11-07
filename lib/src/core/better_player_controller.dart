@@ -128,6 +128,36 @@ class BetterPlayerController {
 
   ValueListenable<Duration> get subtitleOffsetListenable => _subtitleOffsetNotifier;
 
+  BetterPlayerSubtitlesConfiguration? _subtitlesConfiguration;
+  BetterPlayerSubtitlesConfiguration? get betterPlayerSubtitlesConfiguration => _subtitlesConfiguration;
+
+  final ValueNotifier<Widget?> _sidePanelNotifier = ValueNotifier<Widget?>(null);
+
+  /// Listenable for the current right-side panel overlay.
+  ValueListenable<Widget?> get sidePanelListenable => _sidePanelNotifier;
+
+  /// The widget currently displayed in the right-side panel.
+  Widget? get sidePanel => _sidePanelNotifier.value;
+
+  /// Whether the right-side panel is currently open.
+  bool get isSidePanelOpen => _sidePanelNotifier.value != null;
+
+  /// Opens a right-side panel and smoothly resizes the video width.
+  void openSidePanel(Widget panel) {
+    _sidePanelNotifier.value = panel;
+  }
+
+  /// Closes the right-side panel and smoothly expands the video back to full width.
+  void closeSidePanel() {
+    _sidePanelNotifier.value = null;
+  }
+
+  ///Updates subtitle configuration in real-time.
+  void setBetterPlayerSubtitlesConfiguration(BetterPlayerSubtitlesConfiguration configuration) {
+    _subtitlesConfiguration = configuration;
+    _postControllerEvent(BetterPlayerControllerEvent.changeSubtitles);
+  }
+
   ///Updates subtitle timing and notifies subtitle renderers immediately,
   ///including while playback is paused.
   void setSubtitleOffset(Duration offset) {
@@ -139,6 +169,12 @@ class BetterPlayerController {
     final nextOffset = Duration(milliseconds: clampedMilliseconds);
     if (_subtitleOffsetNotifier.value == nextOffset) return;
     _subtitleOffsetNotifier.value = nextOffset;
+    if (_betterPlayerSubtitlesSource?.asmsIsSegmented ?? false) {
+      final pos = videoPlayerController?.value.position;
+      if (pos != null) {
+        _loadAsmsSubtitlesSegments(pos);
+      }
+    }
   }
 
   ///Invalidates an older network subtitle request when the user selects a
@@ -802,12 +838,13 @@ class BetterPlayerController {
   ///is multiplied by 5 to increase window of duration.
   ///Segments are also cached, so same segment won't load twice. Only one
   ///pack of segments can be load at given time.
-  Future _loadAsmsSubtitlesSegments(Duration position) async {
+  Future _loadAsmsSubtitlesSegments(Duration rawPosition) async {
     try {
       if (_asmsSegmentsLoading) {
         return;
       }
       _asmsSegmentsLoading = true;
+      final position = rawPosition - subtitleOffset;
       final BetterPlayerSubtitlesSource? source = _betterPlayerSubtitlesSource;
       final Duration loadDurationEnd = Duration(
         milliseconds: position.inMilliseconds + 5 * (_betterPlayerSubtitlesSource?.asmsSegmentsTime ?? 5000),
@@ -2047,6 +2084,7 @@ class BetterPlayerController {
       _controlsVisibilityStreamController.close();
       _subtitleOffsetNotifier.dispose();
       _preRollActiveNotifier.dispose();
+      _sidePanelNotifier.dispose();
       _videoEventStreamSubscription?.cancel();
       _disposed = true;
       _controllerEventStreamController.close();
