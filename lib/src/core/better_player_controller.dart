@@ -181,6 +181,42 @@ class BetterPlayerController {
   ///Selected named resolution for non-adaptive sources.
   String? get betterPlayerResolutionName => _betterPlayerResolutionName;
 
+  ///True when several named resolutions play the current HLS / DASH url, each
+  ///pinning one of its variants. Providers that only hand out a master
+  ///playlist get their resolutions this way, and the stream's own track list
+  ///then repeats those entries.
+  bool get hasResolutionVariantsForCurrentStream {
+    final source = _betterPlayerDataSource;
+    final resolutions = source?.resolutions;
+    if (source == null || resolutions == null || !_isDataSourceAsms(source)) return false;
+    return resolutions.values.where((url) => url == source.url).length > 1;
+  }
+
+  ///The variant track that resolution [name] stands for, when it is one of the
+  ///[hasResolutionVariantsForCurrentStream] entries. An "Auto" entry, or one
+  ///without a height, is the adaptive track. A height the stream lacks falls
+  ///back to the closest variant below it, or the lowest one.
+  BetterPlayerAsmsTrack? _variantTrackForResolution(String? name) {
+    final source = _betterPlayerDataSource;
+    if (name == null || source == null || !hasResolutionVariantsForCurrentStream) return null;
+    if (source.resolutions![name] != source.url) return null;
+    final label = source.resolutionDisplayNames?[name] ?? name;
+    final height = BetterPlayerUtils.isAutomaticQualityLabel(label)
+        ? null
+        : BetterPlayerUtils.resolutionHeightFromLabel(label);
+    if (height == null) return BetterPlayerAsmsTrack.defaultTrack();
+
+    final variants = _betterPlayerAsmsTracks.where((track) => (track.height ?? 0) > 0).toList();
+    if (variants.isEmpty) return BetterPlayerAsmsTrack.defaultTrack();
+    BetterPlayerAsmsTrack best(Iterable<BetterPlayerAsmsTrack> tracks, int Function(BetterPlayerAsmsTrack) score) =>
+        tracks.reduce((a, b) => score(b) > score(a) ? b : a);
+    final exact = variants.where((track) => track.height == height);
+    if (exact.isNotEmpty) return best(exact, (track) => track.bitrate ?? 0);
+    final below = variants.where((track) => track.height! < height);
+    if (below.isNotEmpty) return best(below, (track) => track.height! * 100000000 + (track.bitrate ?? 0));
+    return best(variants, (track) => -(track.height! * 100000000) + (track.bitrate ?? 0));
+  }
+
   ///Timer for next video. Used in playlist.
   Timer? _nextVideoTimer;
 
@@ -500,7 +536,12 @@ class BetterPlayerController {
     if (subtitlesSourceToRestore != null) {
       await _setupSubtitleSourceSafely(subtitlesSourceToRestore, sourceInitialize: false);
     }
-    setTrack(BetterPlayerAsmsTrack.defaultTrack());
+    // Keep the named source selected: clearing it left a provider "Auto"
+    // source unchecked beside a second, checked Auto row from the stream.
+    _selectTrack(
+      _variantTrackForResolution(_betterPlayerResolutionName) ?? BetterPlayerAsmsTrack.defaultTrack(),
+      keepResolution: true,
+    );
   }
 
   ///Configure subtitles based on subtitles source.
@@ -1363,28 +1404,34 @@ class BetterPlayerController {
 
   ///Setup track parameters for currently played video. Can be only used for HLS or DASH
   ///data source.
-  void setTrack(BetterPlayerAsmsTrack track) {
+  void setTrack(BetterPlayerAsmsTrack track) => _selectTrack(track, keepResolution: false);
+
+  ///[keepResolution] leaves the named resolution selected, for a track that a
+  ///resolution entry itself chose. [notify] posts [BetterPlayerEventType.changedTrack].
+  void _selectTrack(BetterPlayerAsmsTrack track, {required bool keepResolution, bool notify = true}) {
     if (videoPlayerController == null) {
       throw StateError('The data source has not been initialized');
     }
-    _postEvent(
-      BetterPlayerEvent(
-        BetterPlayerEventType.changedTrack,
-        parameters: <String, dynamic>{
-          'id': track.id,
-          'width': track.width,
-          'height': track.height,
-          'bitrate': track.bitrate,
-          'frameRate': track.frameRate,
-          'codecs': track.codecs,
-          'mimeType': track.mimeType,
-        },
-      ),
-    );
+    if (notify) {
+      _postEvent(
+        BetterPlayerEvent(
+          BetterPlayerEventType.changedTrack,
+          parameters: <String, dynamic>{
+            'id': track.id,
+            'width': track.width,
+            'height': track.height,
+            'bitrate': track.bitrate,
+            'frameRate': track.frameRate,
+            'codecs': track.codecs,
+            'mimeType': track.mimeType,
+          },
+        ),
+      );
+    }
 
     videoPlayerController!.setTrackParameters(track.width, track.height, track.bitrate);
     _betterPlayerAsmsTrack = track;
-    if (_betterPlayerAsmsTracks.isNotEmpty) {
+    if (!keepResolution && _betterPlayerAsmsTracks.isNotEmpty) {
       _betterPlayerResolutionName = null;
     }
   }
@@ -1427,16 +1474,33 @@ class BetterPlayerController {
     if (videoPlayerController == null) {
       throw StateError('The data source has not been initialized');
     }
-    final position = await videoPlayerController!.position;
-    final wasPlayingBeforeChange = isPlaying()!;
-    final subtitlesSourceToRestore = _betterPlayerSubtitlesSource;
-    pause();
     final resolutionName =
         name ??
         betterPlayerDataSource!.resolutions?.entries
             .where((entry) => entry.value == url)
             .map((entry) => entry.key)
             .singleOrNull;
+
+    // Resolutions of the stream that is already playing only need a different
+    // variant, not a reload of the same playlist.
+    final variantTrack = url == betterPlayerDataSource!.url ? _variantTrackForResolution(resolutionName) : null;
+    if (variantTrack != null) {
+      _selectTrack(variantTrack, keepResolution: true, notify: false);
+      _betterPlayerDataSource = betterPlayerDataSource!.copyWith(selectedResolution: resolutionName);
+      _betterPlayerResolutionName = resolutionName;
+      _postEvent(
+        BetterPlayerEvent(
+          BetterPlayerEventType.changedResolution,
+          parameters: <String, dynamic>{'url': url, 'name': resolutionName},
+        ),
+      );
+      return;
+    }
+
+    final position = await videoPlayerController!.position;
+    final wasPlayingBeforeChange = isPlaying()!;
+    final subtitlesSourceToRestore = _betterPlayerSubtitlesSource;
+    pause();
     final resolutionFormats = betterPlayerDataSource!.resolutionVideoFormats;
     final hasResolutionFormat = resolutionName != null && resolutionFormats?.containsKey(resolutionName) == true;
     final resolutionHeaders = betterPlayerDataSource!.resolutionHeaders;

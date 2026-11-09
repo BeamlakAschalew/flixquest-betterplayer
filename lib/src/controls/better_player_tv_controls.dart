@@ -528,10 +528,25 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   void _openQualityMenu({bool nested = false}) {
     final items = <BetterPlayerTvMenuItem>[];
-    final tracks = widget.controller.betterPlayerAsmsTracks;
-    final selectedTrack = widget.controller.betterPlayerAsmsTrack;
+    final controller = widget.controller;
+    // Sources that pin this stream's variants already list every row it has.
+    final tracks = controller.hasResolutionVariantsForCurrentStream
+        ? const <BetterPlayerAsmsTrack>[]
+        : controller.betterPlayerAsmsTracks;
+    final selectedTrack = controller.betterPlayerAsmsTrack;
+    final listedSource = _listedSourceName;
+    final listedSourceIsAuto =
+        listedSource != null &&
+        BetterPlayerUtils.isAutomaticQualityLabel(
+          controller.betterPlayerDataSource?.resolutionDisplayNames?[listedSource] ?? listedSource,
+        );
     for (final track in tracks) {
       final automatic = (track.width ?? 0) == 0 && (track.height ?? 0) == 0 && (track.bitrate ?? 0) == 0;
+      // A listed "Auto" source already stands for adaptive playback.
+      if (automatic && listedSourceIsAuto) continue;
+      final selected =
+          listedSource == null &&
+          (automatic ? selectedTrack == null || selectedTrack == track : selectedTrack == track);
       items.add(
         BetterPlayerTvMenuItem(
           label: automatic
@@ -543,7 +558,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               ? null
               : '${((track.bitrate ?? 0) / 1000000).toStringAsFixed(1)} Mbps',
           icon: automatic ? PhosphorIcons.magicWand() : PhosphorIcons.monitorPlay(),
-          selected: track == selectedTrack,
+          selected: selected,
           onSelected: () {
             widget.controller.setTrack(track);
             _closeMenu();
@@ -639,9 +654,20 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
         : track?.language?.toUpperCase() ?? _strings.defaultLabel;
   }
 
+  /// The selected provider source, when it is one of the listed sources. A
+  /// lone source is not listed, so the stream's own rows stand in for it.
+  String? get _listedSourceName {
+    final name = widget.controller.betterPlayerResolutionName;
+    if (name == null || name.trim().isEmpty) return null;
+    return widget.controller.betterPlayerDataSource?.resolutions?.containsKey(name) == true ? name : null;
+  }
+
   String _qualityLabel() {
     final detectedHeight = BetterPlayerUtils.detectedVideoHeight(widget.controller.videoPlayerController?.value.size);
-    final resolutionName = widget.controller.betterPlayerResolutionName;
+    // A lone adaptive source is described by its stream rows, not its name.
+    final resolutionName =
+        _listedSourceName ??
+        (widget.controller.betterPlayerAsmsTracks.isEmpty ? widget.controller.betterPlayerResolutionName : null);
     if (resolutionName?.trim().isNotEmpty == true) {
       final displayName =
           widget.controller.betterPlayerDataSource?.resolutionDisplayNames?[resolutionName] ?? resolutionName!;

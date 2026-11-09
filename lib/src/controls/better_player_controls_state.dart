@@ -353,21 +353,28 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
   bool _isAutomaticTrack(BetterPlayerAsmsTrack track) => track.height == 0 && track.width == 0 && track.bitrate == 0;
 
-  static final RegExp _autoSourceName = RegExp(r'^\s*auto(?:matic)?\b', caseSensitive: false);
-
-  /// A provider source that is itself an adaptive playlist ("Auto ...").
-  bool get _providerAutoActive {
+  /// The selected provider source, when it is one of the listed sources. A
+  /// lone source is not listed, so the stream's own rows stand in for it.
+  String? get _listedSourceName {
     final controller = betterPlayerController!;
     final name = controller.betterPlayerResolutionName;
-    if (name == null || name.trim().isEmpty) return false;
+    if (name == null || name.trim().isEmpty) return null;
+    return controller.betterPlayerDataSource?.resolutions?.containsKey(name) == true ? name : null;
+  }
+
+  /// A listed provider source that is itself an adaptive playlist ("Auto ...").
+  bool get _providerAutoActive {
+    final controller = betterPlayerController!;
+    final name = _listedSourceName;
+    if (name == null) return false;
     final displayName = controller.betterPlayerDataSource?.resolutionDisplayNames?[name] ?? name;
-    return _autoSourceName.hasMatch(displayName);
+    return BetterPlayerUtils.isAutomaticQualityLabel(displayName);
   }
 
   bool get _autoQualityActive {
     final controller = betterPlayerController!;
     if (_providerAutoActive) return true;
-    if (controller.betterPlayerResolutionName?.trim().isNotEmpty == true) return false;
+    if (_listedSourceName != null) return false;
     final track = controller.betterPlayerAsmsTrack;
     return track == null || _isAutomaticTrack(track);
   }
@@ -375,10 +382,12 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
   List<Widget> _qualityItems() {
     final controller = betterPlayerController!;
     final names = controller.betterPlayerDataSource?.asmsTrackNames ?? const <String>[];
-    final tracks = controller.betterPlayerAsmsTracks;
-    final sourceSelected = controller.betterPlayerResolutionName?.trim().isNotEmpty == true;
+    // Sources that pin this stream's variants already list every row it has.
+    final tracks = controller.hasResolutionVariantsForCurrentStream
+        ? const <BetterPlayerAsmsTrack>[]
+        : controller.betterPlayerAsmsTracks;
+    final sourceSelected = _listedSourceName != null;
     final autoActive = _autoQualityActive;
-    final hasAutoTrack = tracks.any(_isAutomaticTrack);
 
     final streamItems = <Widget>[];
     for (var index = 0; index < tracks.length; index++) {
@@ -387,7 +396,6 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       // A provider "Auto" source already stands for adaptive playback, so the
       // stream's own Auto row would be a second, identical choice.
       if (automatic && _providerAutoActive) continue;
-      if (!automatic && autoActive && hasAutoTrack) continue;
       final detectedHeight = BetterPlayerUtils.detectedVideoHeight(controller.videoPlayerController?.value.size);
       final label = automatic
           ? controller.translations.qualityAuto
@@ -458,7 +466,12 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
     final detectedHeight = BetterPlayerUtils.detectedVideoHeight(
       betterPlayerController!.videoPlayerController?.value.size,
     );
-    final resolutionName = betterPlayerController!.betterPlayerResolutionName;
+    // A lone adaptive source is described by its stream rows, not its name.
+    final resolutionName =
+        _listedSourceName ??
+        (betterPlayerController!.betterPlayerAsmsTracks.isEmpty
+            ? betterPlayerController!.betterPlayerResolutionName
+            : null);
     if (resolutionName?.trim().isNotEmpty == true) {
       final displayName =
           betterPlayerController!.betterPlayerDataSource?.resolutionDisplayNames?[resolutionName] ?? resolutionName!;

@@ -53,6 +53,17 @@ class MockVideoPlayerController extends VideoPlayerController {
   @override
   Future<Duration?> get position async => value.position;
 
+  /// Every (width, height, bitrate) cap the controller asked for.
+  final List<(int?, int?, int?)> trackParameters = <(int?, int?, int?)>[];
+
+  /// Network sources the controller loaded, in order.
+  final List<String> networkDataSources = <String>[];
+
+  @override
+  Future<void> setTrackParameters(int? width, int? height, int? bitrate) async {
+    trackParameters.add((width, height, bitrate));
+  }
+
   @override
   Future<void> setVolume(double volume) async {
     this.volume = volume;
@@ -88,6 +99,7 @@ class MockVideoPlayerController extends VideoPlayerController {
     DataSource? preRollDataSource,
     Duration? contentStartPosition,
   }) async {
+    networkDataSources.add(dataSource);
     lastContentStartPosition = contentStartPosition;
   }
 }
