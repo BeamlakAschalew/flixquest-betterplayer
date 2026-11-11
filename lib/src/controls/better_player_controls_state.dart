@@ -36,7 +36,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       (latestValue!.position - Duration(milliseconds: betterPlayerControlsConfiguration.backwardSkipTimeInMilliseconds))
           .inMilliseconds,
     );
-    betterPlayerController!.seekTo(Duration(milliseconds: target));
+    betterPlayerController!.requestSeekTo(Duration(milliseconds: target));
   }
 
   void skipForward() {
@@ -47,7 +47,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
       (latestValue!.position + Duration(milliseconds: betterPlayerControlsConfiguration.forwardSkipTimeInMilliseconds))
           .inMilliseconds,
     );
-    betterPlayerController!.seekTo(Duration(milliseconds: target));
+    betterPlayerController!.requestSeekTo(Duration(milliseconds: target));
   }
 
   /// The More panel. With [includeBarActions] it also carries what the
@@ -195,7 +195,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
                 normalLabel: strings.normalSpeed,
                 // The panel stays open while the stops are dragged through.
                 onSelected: (speed) {
-                  betterPlayerController!.setSpeed(speed);
+                  betterPlayerController!.requestSetSpeed(speed);
                 },
               ),
       ),

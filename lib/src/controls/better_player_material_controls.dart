@@ -145,7 +145,7 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
           final duration = _controller?.value.duration;
           if (position == null || duration == null) return;
           final target = position + offset;
-          await _betterPlayerController?.seekTo(
+          await _betterPlayerController?.requestSeekTo(
             target < Duration.zero
                 ? Duration.zero
                 : target > duration
@@ -165,6 +165,10 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     final controller = _betterPlayerController;
     final value = _controller?.value;
     if (controller == null || value == null || !value.isPlaying || _live) return false;
+    // A room that owns the speed refuses the hold; the pill must not show.
+    if (controller.playbackInterceptor?.onSpeedRequested(controller, speed.clamp(.25, 2).toDouble()) == true) {
+      return false;
+    }
     _speedBeforeHold ??= value.speed;
     // The controls would cover the speed pill and the picture.
     if (!controlsNotVisible) changePlayerControlsNotVisible(true);
@@ -891,12 +895,12 @@ class _BetterPlayerMaterialControlsState extends BetterPlayerControlsState<Bette
     if (_controller?.value.isPlaying == true) {
       _hideTimer?.cancel();
       changePlayerControlsNotVisible(false);
-      _betterPlayerController?.pause();
+      _betterPlayerController?.requestPause();
       return;
     }
     cancelAndRestartTimer();
-    if (finished) _betterPlayerController?.seekTo(Duration.zero);
-    _betterPlayerController?.play();
+    if (finished) _betterPlayerController?.requestSeekTo(Duration.zero);
+    _betterPlayerController?.requestPlay();
     _betterPlayerController?.cancelNextVideoTimer();
   }
 

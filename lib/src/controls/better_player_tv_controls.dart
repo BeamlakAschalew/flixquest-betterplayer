@@ -303,9 +303,9 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
 
   Future<void> _togglePlayback() async {
     if (_value.isPlaying) {
-      await widget.controller.pause();
+      await widget.controller.requestPause();
     } else {
-      await widget.controller.play();
+      await widget.controller.requestPlay();
     }
     _restartHideTimer();
   }
@@ -314,7 +314,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
     final duration = _value.duration;
     if (duration == null) return;
     final targetMs = (_value.position + delta).inMilliseconds.clamp(0, duration.inMilliseconds);
-    await widget.controller.seekTo(Duration(milliseconds: targetMs));
+    await widget.controller.requestSeekTo(Duration(milliseconds: targetMs));
     _restartHideTimer();
   }
 
@@ -426,7 +426,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
               icon: speed == 1 ? PhosphorIcons.play() : PhosphorIcons.gauge(),
               selected: speed == current,
               onSelected: () {
-                widget.controller.setSpeed(speed);
+                widget.controller.requestSetSpeed(speed);
                 _closeMenu();
               },
             ),
@@ -901,7 +901,7 @@ class _BetterPlayerTvControlsState extends State<BetterPlayerTvControls> {
                           playedColor: _accent,
                           bufferedColor: const Color(0x4dffffff),
                           backgroundColor: const Color(0x33ffffff),
-                          onSeek: widget.controller.seekTo,
+                          onSeek: widget.controller.requestSeekTo,
                           onEditingChanged: (editing) {
                             _timelineEditing = editing;
                             if (editing) {

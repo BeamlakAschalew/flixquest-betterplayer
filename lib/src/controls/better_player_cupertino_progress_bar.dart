@@ -86,7 +86,9 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
             if (!controller!.value.initialized || !enableProgressBarDrag) {
               return;
             }
-            _controllerWasPlaying = controller!.value.isPlaying;
+            // An intercepted bar previews the position and asks for one seek
+            // when the finger lifts; it never pauses or seeks on its own.
+            _controllerWasPlaying = !_intercepted && controller!.value.isPlaying;
             if (_controllerWasPlaying) {
               controller!.pause();
             }
@@ -108,7 +110,11 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
             if (!controller!.value.initialized || !enableProgressBarDrag) {
               return;
             }
-            seekToRelativePosition(details.globalPosition);
+            if (_intercepted) {
+              _previewRelativePosition(details.globalPosition);
+            } else {
+              seekToRelativePosition(details.globalPosition);
+            }
 
             if (widget.showThumbnailPreview) {
               setState(() {
@@ -126,7 +132,10 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
             if (!enableProgressBarDrag) {
               return;
             }
-            if (_controllerWasPlaying) {
+            if (_intercepted) {
+              final target = lastSeek;
+              if (target != null) betterPlayerController?.requestSeekTo(target);
+            } else if (_controllerWasPlaying) {
               betterPlayerController?.play();
               shouldPlayAfterDragEnd = true;
             }
@@ -150,7 +159,12 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
               return;
             }
 
-            seekToRelativePosition(details.globalPosition);
+            if (_intercepted) {
+              final target = _previewRelativePosition(details.globalPosition);
+              if (target != null) betterPlayerController?.requestSeekTo(target);
+            } else {
+              seekToRelativePosition(details.globalPosition);
+            }
             _setupUpdateBlockTimer();
             if (widget.onTapDown != null) {
               widget.onTapDown!();
@@ -189,6 +203,20 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
     } else {
       return controller!.value;
     }
+  }
+
+  bool get _intercepted => betterPlayerController?.playbackInterceptor != null;
+
+  /// Shows [globalPosition]'s time on the bar without seeking, and returns it.
+  Duration? _previewRelativePosition(Offset globalPosition) {
+    final RenderObject? renderObject = context.findRenderObject();
+    final duration = controller?.value.duration;
+    if (renderObject == null || duration == null) return null;
+    final box = renderObject as RenderBox;
+    final double relative = (box.globalToLocal(globalPosition).dx / box.size.width).clamp(0.0, 1.0);
+    final Duration position = duration * relative;
+    setState(() => lastSeek = position);
+    return position;
   }
 
   Future<void> seekToRelativePosition(Offset globalPosition) async {
@@ -273,7 +301,8 @@ class _VideoProgressBarState extends State<BetterPlayerCupertinoVideoProgressBar
 
   /// Load a preview frame by temporarily seeking to that position
   Future<void> _loadPreviewFrame(Duration position) async {
-    if (controller == null || !controller!.value.initialized) {
+    // Its seek-and-return would move an intercepted player behind its owner's back.
+    if (controller == null || !controller!.value.initialized || _intercepted) {
       return;
     }
 

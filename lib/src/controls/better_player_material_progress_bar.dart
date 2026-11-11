@@ -106,7 +106,7 @@ class _VideoProgressBarState extends State<BetterPlayerMaterialVideoProgressBar>
     _pendingSeekTimer = Timer(const Duration(milliseconds: 1000), () {
       if (mounted) setState(() => _pendingSeek = null);
     });
-    await widget.betterPlayerController?.seekTo(target);
+    await widget.betterPlayerController?.requestSeekTo(target);
   }
 
   @override

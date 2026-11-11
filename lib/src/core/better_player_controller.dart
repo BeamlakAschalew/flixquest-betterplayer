@@ -1186,6 +1186,34 @@ class BetterPlayerController {
     );
   }
 
+  /// Takes over play, pause, seek and speed requests from the player's own
+  /// controls when set. See [BetterPlayerPlaybackInterceptor].
+  BetterPlayerPlaybackInterceptor? playbackInterceptor;
+
+  /// A play request from a control: the [playbackInterceptor] decides first.
+  Future<void> requestPlay() async {
+    if (playbackInterceptor?.onPlayRequested(this) == true) return;
+    await play();
+  }
+
+  /// A pause request from a control: the [playbackInterceptor] decides first.
+  Future<void> requestPause() async {
+    if (playbackInterceptor?.onPauseRequested(this) == true) return;
+    await pause();
+  }
+
+  /// A seek request from a control: the [playbackInterceptor] decides first.
+  Future<void> requestSeekTo(Duration moment) async {
+    if (playbackInterceptor?.onSeekRequested(this, moment) == true) return;
+    await seekTo(moment);
+  }
+
+  /// A speed request from a control: the [playbackInterceptor] decides first.
+  Future<void> requestSetSpeed(double speed) async {
+    if (playbackInterceptor?.onSpeedRequested(this, speed) == true) return;
+    await setSpeed(speed);
+  }
+
   ///Flag which determines whenever player is playing or not.
   bool? isPlaying() {
     if (videoPlayerController == null) {
