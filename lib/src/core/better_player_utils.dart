@@ -5,6 +5,12 @@ import 'package:flutter/material.dart';
 class BetterPlayerUtils {
   static const Set<int> _commonVideoHeights = {144, 240, 360, 480, 540, 576, 720, 1080, 1440, 2160, 4320};
 
+  static final RegExp _automaticQualityLabel = RegExp(r'^\s*(?:auto(?:matic)?|adaptive)\b', caseSensitive: false);
+
+  ///Whether a provider label ("Auto", "Automatic", "Adaptive ...") stands for
+  ///adaptive playback rather than one fixed quality.
+  static bool isAutomaticQualityLabel(String? label) => label != null && _automaticQualityLabel.hasMatch(label);
+
   ///Returns the resolution encoded in a provider label, if it has one.
   static int? resolutionHeightFromLabel(String? label) {
     if (label == null || label.trim().isEmpty) return null;

@@ -36,6 +36,7 @@ export 'src/core/better_player_brightness_manager.dart';
 export 'src/core/better_player_volume_manager.dart';
 export 'src/core/better_player_controller.dart';
 export 'src/core/better_player_controller_provider.dart';
+export 'src/core/better_player_playback_interceptor.dart';
 export 'src/list/better_player_list_video_player.dart';
 export 'src/list/better_player_list_video_player_controller.dart';
 export 'src/playlist/better_player_playlist.dart';
