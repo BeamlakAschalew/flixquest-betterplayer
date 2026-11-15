@@ -21,7 +21,10 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget> extends State
 
   BetterPlayerControlsStrings get strings => betterPlayerControlsConfiguration.strings;
 
+  // A live HLS window has a finite duration that moves as segments arrive.
+  // Reaching its current edge does not mean the stream has ended.
   bool isVideoFinished(VideoPlayerValue? value) =>
+      betterPlayerController?.isLiveStream() != true &&
       value?.position != null &&
       value?.duration != null &&
       value!.position.inMilliseconds != 0 &&
